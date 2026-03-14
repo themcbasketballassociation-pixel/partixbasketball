@@ -14,7 +14,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const { data: rows, error } = await supabase
     .from("game_stats")
-    .select(`mc_uuid, points, rebounds_off, rebounds_def, assists, steals, blocks, turnovers, minutes_played, fg_made, fg_attempted, game_id, players(mc_uuid, mc_username), games!inner(id, league)`)
+    .select(`mc_uuid, points, rebounds_off, rebounds_def, assists, steals, blocks, turnovers, minutes_played, fg_made, fg_attempted, three_pt_made, three_pt_attempted, game_id, players(mc_uuid, mc_username), games!inner(id, league)`)
     .eq("games.league", league as string);
   if (error) return res.status(500).json({ error: error.message });
 
@@ -24,12 +24,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (row.mc_uuid && row.teams) teamMap[row.mc_uuid] = row.teams;
   }
 
-  const playerMap: Record<string, { mc_uuid: string; mc_username: string; games: number; points: number; rebounds_off: number; rebounds_def: number; assists: number; steals: number; blocks: number; turnovers: number; minutes_played: number; fg_made: number; fg_attempted: number }> = {};
+  const playerMap: Record<string, { mc_uuid: string; mc_username: string; games: number; points: number; rebounds_off: number; rebounds_def: number; assists: number; steals: number; blocks: number; turnovers: number; minutes_played: number; fg_made: number; fg_attempted: number; three_pt_made: number; three_pt_attempted: number }> = {};
   for (const row of rows ?? []) {
     const key = row.mc_uuid;
     const username = (row.players as { mc_username?: string } | null)?.mc_username ?? key;
     if (!playerMap[key]) {
-      playerMap[key] = { mc_uuid: key, mc_username: username, games: 0, points: 0, rebounds_off: 0, rebounds_def: 0, assists: 0, steals: 0, blocks: 0, turnovers: 0, minutes_played: 0, fg_made: 0, fg_attempted: 0 };
+      playerMap[key] = { mc_uuid: key, mc_username: username, games: 0, points: 0, rebounds_off: 0, rebounds_def: 0, assists: 0, steals: 0, blocks: 0, turnovers: 0, minutes_played: 0, fg_made: 0, fg_attempted: 0, three_pt_made: 0, three_pt_attempted: 0 };
     }
     const p = playerMap[key];
     p.games++;
@@ -43,6 +43,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     p.minutes_played += row.minutes_played ?? 0;
     p.fg_made += row.fg_made ?? 0;
     p.fg_attempted += row.fg_attempted ?? 0;
+    p.three_pt_made += row.three_pt_made ?? 0;
+    p.three_pt_attempted += row.three_pt_attempted ?? 0;
   }
 
   const round1 = (n: number) => Math.round(n * 10) / 10;
@@ -62,6 +64,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     bpg: round1(p.games > 0 ? p.blocks / p.games : 0),
     tpg: round1(p.games > 0 ? p.turnovers / p.games : 0),
     fg_pct: p.fg_attempted > 0 ? Math.round(p.fg_made / p.fg_attempted * 1000) / 10 : 0,
+    three_pt_made: p.three_pt_made,
+    tppg: round1(p.games > 0 ? p.three_pt_made / p.games : 0),
+    three_pt_pct: p.three_pt_attempted > 0 ? Math.round(p.three_pt_made / p.three_pt_attempted * 1000) / 10 : 0,
   }));
 
   stats.sort((a, b) => b.ppg - a.ppg);
