@@ -152,8 +152,8 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
                       className={`px-3 py-3 text-right tabular-nums ${sortKey === key ? "text-blue-300 font-semibold" : "text-slate-300"}`}
                     >
                       {key === "fg_pct" || key === "three_pt_pct"
-                        ? na(row[key]) === "—" ? "—" : `${na(row[key])}%`
-                        : na(row[key])}
+                        ? na(row[key] as number | null) === "—" ? "—" : `${na(row[key] as number | null)}%`
+                        : na(row[key] as number | null)}
                     </td>
                   ))}
                 </tr>
