@@ -354,7 +354,7 @@ function PlayersTab({ league, season: initialSeason }: { league: string; season:
             <select
               className="rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none"
               value={season}
-              onChange={(e) => setSeason(e.target.value)}
+              onChange={(e) => { setSeason(e.target.value); setTimeout(refresh, 0); }}
             >
               {SEASONS.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
