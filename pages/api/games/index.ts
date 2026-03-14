@@ -1,0 +1,33 @@
+import type { NextApiRequest, NextApiResponse } from "next";
+import { supabase } from "../../../lib/supabase";
+import { requireAdmin } from "../../../lib/adminAuth";
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method === "GET") {
+    const { league } = req.query;
+    let query = supabase
+      .from("games")
+      .select("*, home_team:home_team_id(id,name,abbreviation,logo_url), away_team:away_team_id(id,name,abbreviation,logo_url)")
+      .order("scheduled_at", { ascending: true });
+    if (league) query = query.eq("league", league as string);
+    const { data, error } = await query;
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json(data);
+  }
+
+  if (req.method === "POST") {
+    const admin = await requireAdmin(req, res);
+    if (!admin) return;
+    const { league, scheduled_at, home_team_id, away_team_id } = req.body;
+    if (!league || !scheduled_at || !home_team_id || !away_team_id) return res.status(400).json({ error: "league, scheduled_at, home_team_id, away_team_id required" });
+    const { data, error } = await supabase
+      .from("games")
+      .insert([{ league, scheduled_at, home_team_id, away_team_id, status: "scheduled" }])
+      .select("*, home_team:home_team_id(id,name,abbreviation,logo_url), away_team:away_team_id(id,name,abbreviation,logo_url)")
+      .single();
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json(data);
+  }
+
+  return res.status(405).json({ error: "Method not allowed" });
+}
