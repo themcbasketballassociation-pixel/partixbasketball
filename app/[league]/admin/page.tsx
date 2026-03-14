@@ -85,15 +85,18 @@ function PlayersTab({ league, season: initialSeason }: { league: string; season:
   const [bulkResults, setBulkResults] = useState<{ uuid: string; status: "ok" | "error"; msg: string }[]>([]);
 
   const refresh = useCallback(async () => {
-    const safe = (promise: Promise<any>) => promise.catch(() => null);
-    const [p, pt, t] = await Promise.all([
-      safe(fetch("/api/players").then((r) => r.json())),
-      safe(fetch(`/api/teams/players?league=${league}&season=${encodeURIComponent(season)}`).then((r) => r.json())),
-      safe(fetch(`/api/teams?league=${league}`).then((r) => r.json())),
-    ]);
-    setPlayers(Array.isArray(p) ? p : []);
-    setPlayerTeams(Array.isArray(pt) ? pt : []);
-    setTeams(Array.isArray(t) ? t : []);
+    fetch("/api/players")
+      .then((r) => r.json())
+      .then((p) => setPlayers(Array.isArray(p) ? p : []))
+      .catch(() => setPlayers([]));
+    fetch(`/api/teams/players?league=${league}&season=${encodeURIComponent(season)}`)
+      .then((r) => r.json())
+      .then((pt) => setPlayerTeams(Array.isArray(pt) ? pt : []))
+      .catch(() => setPlayerTeams([]));
+    fetch(`/api/teams?league=${league}`)
+      .then((r) => r.json())
+      .then((t) => setTeams(Array.isArray(t) ? t : []))
+      .catch(() => setTeams([]));
   }, [league, season]);
 
   useEffect(() => { refresh(); }, [refresh]);
