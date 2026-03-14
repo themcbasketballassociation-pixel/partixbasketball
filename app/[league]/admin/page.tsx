@@ -93,7 +93,7 @@ function PlayersTab({ league, season: initialSeason }: { league: string; season:
       .then((r) => r.json())
       .then((pt) => setPlayerTeams(Array.isArray(pt) ? pt : []))
       .catch(() => setPlayerTeams([]));
-    fetch(`/api/teams?league=${league}`)
+    fetch(`/api/teams?league=${league}&season=${encodeURIComponent(season)}`)
       .then((r) => r.json())
       .then((t) => setTeams(Array.isArray(t) ? t : []))
       .catch(() => setTeams([]));
@@ -403,7 +403,9 @@ function TeamLogoAdmin({ team }: { team: Team }) {
   );
 }
 
-function TeamsTab({ league }: { league: string }) {
+function TeamsTab({ league, season: initialSeason }: { league: string; season: string }) {
+  const SEASONS = ["Season 1","Season 1 Playoffs","Season 2","Season 2 Playoffs","Season 3","Season 3 Playoffs","Season 4","Season 4 Playoffs","Season 5","Season 5 Playoffs","Season 6","Season 6 Playoffs","Season 7","Season 7 Playoffs"];
+  const [season, setSeason] = useState(initialSeason);
   const [teams, setTeams] = useState<Team[]>([]);
   const [newName, setNewName] = useState("");
   const [newAbbr, setNewAbbr] = useState("");
@@ -420,9 +422,11 @@ function TeamsTab({ league }: { league: string }) {
   const [err, setErr] = useState("");
 
   const refresh = useCallback(async () => {
-    const data = await fetch(`/api/teams?league=${league}`).then((r) => r.json());
-    setTeams(Array.isArray(data) ? data : []);
-  }, [league]);
+    fetch(`/api/teams?league=${league}&season=${encodeURIComponent(season)}`)
+      .then((r) => r.json())
+      .then((data) => setTeams(Array.isArray(data) ? data : []))
+      .catch(() => setTeams([]));
+  }, [league, season]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -432,7 +436,7 @@ function TeamsTab({ league }: { league: string }) {
     const r = await fetch("/api/teams", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ league, name: newName.trim(), abbreviation: newAbbr.trim().toUpperCase(), division: newDivision || null }),
+      body: JSON.stringify({ league, name: newName.trim(), abbreviation: newAbbr.trim().toUpperCase(), division: newDivision || null, season }),
     });
     const data = await r.json();
     if (!r.ok) { setErr(data.error ?? "Failed to add team"); return; }
@@ -501,7 +505,7 @@ function TeamsTab({ league }: { league: string }) {
       const r = await fetch("/api/teams", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ league, name: t.name, abbreviation: t.abbr, division: t.division || null }),
+        body: JSON.stringify({ league, name: t.name, abbreviation: t.abbr, division: t.division || null, season }),
       });
       if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Import failed"); setBulkImporting(false); return; }
     }
@@ -565,7 +569,19 @@ function TeamsTab({ league }: { league: string }) {
 
       {/* Teams List */}
       <div className={card}>
-        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Teams ({teams.length})</h3>
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Teams ({teams.length}) — {season}</h3>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-slate-500">Season:</label>
+            <select
+              className="rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none"
+              value={season}
+              onChange={(e) => setSeason(e.target.value)}
+            >
+              {SEASONS.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+        </div>
         {teams.length === 0 ? (
           <p className="text-slate-600 text-sm">No teams yet.</p>
         ) : (
@@ -1634,7 +1650,7 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
 
       <div className="p-6">
         {activeTab === "Players" && <PlayersTab league={league} season={season} />}
-        {activeTab === "Teams" && <TeamsTab league={league} />}
+        {activeTab === "Teams" && <TeamsTab league={league} season={season} />}
         {activeTab === "Schedule" && <ScheduleTab league={league} season={season} />}
         {activeTab === "Box Scores" && <BoxScoresTab league={league} season={season} />}
         {activeTab === "Accolades" && <AccoladesTab league={league} season={season} />}
