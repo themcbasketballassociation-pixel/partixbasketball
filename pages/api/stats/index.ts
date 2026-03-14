@@ -38,6 +38,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json(data ? [data] : []);
   }
 
+  // GET with season only — load all players' manual stats for that season
+  if (season) {
+    const { data, error } = await supabase
+      .from("stats")
+      .select("*, players(mc_uuid, mc_username)")
+      .eq("league", league as string)
+      .eq("season", season as string);
+    if (error) return res.status(500).json({ error: error.message });
+    const { data: teamRows } = await supabase.from("player_teams").select("mc_uuid, teams(id, name, abbreviation)").eq("league", league as string);
+    const teamMap: Record<string, unknown> = {};
+    for (const row of teamRows ?? []) {
+      if (row.mc_uuid && row.teams) teamMap[row.mc_uuid] = row.teams;
+    }
+    const result = (data ?? []).map((row, i) => ({
+      rank: i + 1,
+      mc_uuid: row.mc_uuid,
+      mc_username: (row.players as { mc_username?: string } | null)?.mc_username ?? row.mc_uuid,
+      team: teamMap[row.mc_uuid] ?? null,
+      gp: row.gp, ppg: row.ppg, rpg: row.rpg, apg: row.apg, spg: row.spg, bpg: row.bpg,
+      fg_pct: row.fg_pct, three_pt_made: row.three_pt_made, three_pt_pct: row.three_pt_pct,
+      tppg: row.gp && row.three_pt_made ? Math.round(row.three_pt_made / row.gp * 10) / 10 : null,
+    }));
+    result.sort((a, b) => (b.ppg ?? 0) - (a.ppg ?? 0));
+    result.forEach((s, i) => { s.rank = i + 1; });
+    return res.status(200).json(result);
+  }
+
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
 
   const { data: rows, error } = await supabase

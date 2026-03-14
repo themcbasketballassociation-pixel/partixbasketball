@@ -1477,7 +1477,7 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
     const [tpMade, tpAtt] = parseSlash(fields.three_fg);
     const three_pt_pct = tpMade !== null && tpAtt !== null && tpAtt > 0 ? Math.round(tpMade / tpAtt * 1000) / 10 : null;
     const three_pt_made = fields.three_pt_made ? parseInt(fields.three_pt_made) || null : null;
-    const r = await fetch("/api/stats", {
+    const r = await fetch(`/api/stats?league=${encodeURIComponent(league)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
