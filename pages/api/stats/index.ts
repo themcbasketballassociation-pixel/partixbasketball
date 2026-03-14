@@ -38,14 +38,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json(data ? [data] : []);
   }
 
+  // DELETE — remove a player's stats for a season
+  if (req.method === "DELETE") {
+    const { mc_uuid: delUuid, season: delSeason } = req.query;
+    if (!delUuid || !delSeason) return res.status(400).json({ error: "mc_uuid, season required" });
+    const { error } = await supabase
+      .from("stats")
+      .delete()
+      .eq("mc_uuid", delUuid as string)
+      .eq("league", league as string)
+      .eq("season", delSeason as string);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json({ success: true });
+  }
+
   // GET with season only — load all players' manual stats for that season
   if (season) {
     const { data, error } = await supabase
       .from("stats")
-      .select("*, players(mc_uuid, mc_username)")
+      .select("*")
       .eq("league", league as string)
       .eq("season", season as string);
     if (error) return res.status(500).json({ error: error.message });
+    // Fetch player usernames separately (no FK on stats table)
+    const uuids = (data ?? []).map((r) => r.mc_uuid);
+    const { data: playerRows } = uuids.length
+      ? await supabase.from("players").select("mc_uuid, mc_username").in("mc_uuid", uuids)
+      : { data: [] };
+    const playerMap: Record<string, string> = {};
+    for (const p of playerRows ?? []) playerMap[p.mc_uuid] = p.mc_username;
     const { data: teamRows } = await supabase.from("player_teams").select("mc_uuid, teams(id, name, abbreviation)").eq("league", league as string);
     const teamMap: Record<string, unknown> = {};
     for (const row of teamRows ?? []) {
@@ -54,7 +75,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const result = (data ?? []).map((row, i) => ({
       rank: i + 1,
       mc_uuid: row.mc_uuid,
-      mc_username: (row.players as { mc_username?: string } | null)?.mc_username ?? row.mc_uuid,
+      mc_username: playerMap[row.mc_uuid] ?? row.mc_uuid,
       team: teamMap[row.mc_uuid] ?? null,
       gp: row.gp, ppg: row.ppg, rpg: row.rpg, apg: row.apg, spg: row.spg, bpg: row.bpg,
       fg_pct: row.fg_pct, three_pt_made: row.three_pt_made, three_pt_pct: row.three_pt_pct,

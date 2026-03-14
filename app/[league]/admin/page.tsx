@@ -1420,6 +1420,8 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
   const [savedPlayers, setSavedPlayers] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [hasExisting, setHasExisting] = useState(false);
   const [err, setErr] = useState("");
   const [saved, setSaved] = useState(false);
 
@@ -1435,11 +1437,13 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
   useEffect(() => {
     if (!selectedUuid) return;
     setFields({});
+    setHasExisting(false);
     fetch(`/api/stats?league=${league}&season=${encodeURIComponent(initialSeason)}&mc_uuid=${selectedUuid}`)
       .then((r) => r.json())
       .then((data) => {
         const row = Array.isArray(data) ? data[0] : data;
         if (row && row.mc_uuid) {
+          setHasExisting(true);
           const fgPct = row.fg_pct != null ? String(row.fg_pct) : "";
           const threePct = row.three_pt_pct != null ? String(row.three_pt_pct) : "";
           setFields({
@@ -1457,6 +1461,17 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
       })
       .catch(() => {});
   }, [selectedUuid, league, initialSeason]);
+
+  const deletePlayer = async () => {
+    if (!selectedUuid) return;
+    setDeleting(true); setErr("");
+    const r = await fetch(`/api/stats?league=${encodeURIComponent(league)}&mc_uuid=${selectedUuid}&season=${encodeURIComponent(initialSeason)}`, { method: "DELETE" });
+    setDeleting(false);
+    if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Delete failed"); return; }
+    setFields({});
+    setHasExisting(false);
+    setSavedPlayers((prev) => { const s = new Set(prev); s.delete(selectedUuid); return s; });
+  };
 
   const parseSlash = (s: string): [number | null, number | null] => {
     if (!s || !s.trim()) return [null, null];
@@ -1562,13 +1577,18 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
             ))}
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <button className={btnPrimary} onClick={savePlayer} disabled={saving}>
               {saving ? "Saving..." : saved ? "✓ Saved" : `Save ${selectedPlayer.mc_username}'s Stats`}
             </button>
             <button className={btnSecondary} onClick={() => { setFields({}); setSaved(false); }}>
               Clear
             </button>
+            {hasExisting && (
+              <button className={btnDanger} onClick={deletePlayer} disabled={deleting}>
+                {deleting ? "Deleting..." : "Delete Stats"}
+              </button>
+            )}
           </div>
           <ErrMsg msg={err} />
         </div>
