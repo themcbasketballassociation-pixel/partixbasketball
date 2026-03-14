@@ -8,9 +8,37 @@ function fmtMPG(seconds: number) {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
   const { league } = req.query;
   if (!league) return res.status(400).json({ error: "league required" });
+
+  // POST — save manual season-level stats for a player
+  if (req.method === "POST") {
+    const { mc_uuid, season, gp, ppg, rpg, apg, spg, bpg, fg_pct, three_pt_made, three_pt_pct } = req.body;
+    if (!mc_uuid || !season) return res.status(400).json({ error: "mc_uuid, season required" });
+    const { data, error } = await supabase
+      .from("stats")
+      .upsert([{ mc_uuid, league, season, gp: gp ?? null, ppg: ppg ?? null, rpg: rpg ?? null, apg: apg ?? null, spg: spg ?? null, bpg: bpg ?? null, fg_pct: fg_pct ?? null, three_pt_made: three_pt_made ?? null, three_pt_pct: three_pt_pct ?? null }], { onConflict: "mc_uuid,league,season" })
+      .select()
+      .single();
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json(data);
+  }
+
+  // GET with mc_uuid + season — load a single player's manual stats
+  const { mc_uuid, season } = req.query;
+  if (mc_uuid && season) {
+    const { data, error } = await supabase
+      .from("stats")
+      .select("*")
+      .eq("mc_uuid", mc_uuid as string)
+      .eq("league", league as string)
+      .eq("season", season as string)
+      .maybeSingle();
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json(data ? [data] : []);
+  }
+
+  if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
 
   const { data: rows, error } = await supabase
     .from("game_stats")

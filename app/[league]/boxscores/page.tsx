@@ -15,9 +15,10 @@ type Game = {
 };
 type GameStat = {
   id: string; mc_uuid: string;
-  points: number; rebounds_off: number; rebounds_def: number;
-  assists: number; steals: number; blocks: number; turnovers: number;
-  minutes_played: number; fg_made: number; fg_attempted: number;
+  points: number | null; rebounds_off: number | null; rebounds_def: number | null;
+  assists: number | null; steals: number | null; blocks: number | null; turnovers: number | null;
+  minutes_played: number | null; fg_made: number | null; fg_attempted: number | null;
+  three_pt_made: number | null; three_pt_attempted: number | null;
   players: { mc_uuid: string; mc_username: string };
 };
 
@@ -55,16 +56,18 @@ export default function BoxScoresPage({ params }: { params?: Promise<{ league?: 
     }
   };
 
-  const statCols = [
-    { key: "minutes_played", label: "MIN", fmt: (v: number) => fmtMins(v) },
-    { key: "points", label: "PTS", fmt: (v: number) => v },
-    { key: "rebounds_off", label: "ORB", fmt: (v: number) => v },
-    { key: "rebounds_def", label: "DRB", fmt: (v: number) => v },
-    { key: "assists", label: "AST", fmt: (v: number) => v },
-    { key: "steals", label: "STL", fmt: (v: number) => v },
-    { key: "blocks", label: "BLK", fmt: (v: number) => v },
-    { key: "turnovers", label: "TO", fmt: (v: number) => v },
-    { key: "fg", label: "FG", fmt: (_: number, row: GameStat) => `${row.fg_made}/${row.fg_attempted}` },
+  const na = (v: number | null) => v === null ? "N/A" : v;
+  const statCols: { key: string; label: string; render: (s: GameStat) => React.ReactNode }[] = [
+    { key: "minutes_played", label: "MIN", render: (s) => s.minutes_played === null ? "N/A" : fmtMins(s.minutes_played) },
+    { key: "points",         label: "PTS", render: (s) => na(s.points) },
+    { key: "rebounds_off",   label: "ORB", render: (s) => na(s.rebounds_off) },
+    { key: "rebounds_def",   label: "DRB", render: (s) => na(s.rebounds_def) },
+    { key: "assists",        label: "AST", render: (s) => na(s.assists) },
+    { key: "steals",         label: "STL", render: (s) => na(s.steals) },
+    { key: "blocks",         label: "BLK", render: (s) => na(s.blocks) },
+    { key: "turnovers",      label: "TO",  render: (s) => na(s.turnovers) },
+    { key: "fg",             label: "FG",  render: (s) => s.fg_made === null && s.fg_attempted === null ? "N/A" : `${s.fg_made ?? 0}/${s.fg_attempted ?? 0}` },
+    { key: "three_fg",       label: "3FG", render: (s) => s.three_pt_made === null && s.three_pt_attempted === null ? "N/A" : `${s.three_pt_made ?? 0}/${s.three_pt_attempted ?? 0}` },
   ];
 
   return (
@@ -139,7 +142,7 @@ export default function BoxScoresPage({ params }: { params?: Promise<{ league?: 
                               </td>
                               {statCols.map((c) => (
                                 <td key={c.key} className="px-3 py-2.5 text-center text-slate-300">
-                                  {c.key === "fg" ? `${s.fg_made}/${s.fg_attempted}` : (c.fmt as any)((s as any)[c.key], s)}
+                                  {c.render(s)}
                                 </td>
                               ))}
                             </tr>

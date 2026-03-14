@@ -1318,13 +1318,15 @@ function ArticlesTab({ league }: { league: string }) {
 
 function StatsViewTab({ league, season: initialSeason }: { league: string; season: string }) {
   const STAT_FIELDS = [
-    { key: "gp",     label: "GP",   hint: "Games Played",      decimal: false },
-    { key: "ppg",    label: "PPG",  hint: "Points Per Game",    decimal: true  },
-    { key: "rpg",    label: "RPG",  hint: "Rebounds Per Game",  decimal: true  },
-    { key: "apg",    label: "APG",  hint: "Assists Per Game",   decimal: true  },
-    { key: "spg",    label: "SPG",  hint: "Steals Per Game",    decimal: true  },
-    { key: "bpg",    label: "BPG",  hint: "Blocks Per Game",    decimal: true  },
-    { key: "fg_pct", label: "FG%",  hint: "Field Goal %",       decimal: true  },
+    { key: "gp",            label: "GP",    hint: "Games Played",         slash: false },
+    { key: "ppg",           label: "PPG",   hint: "Points Per Game",      slash: false },
+    { key: "rpg",           label: "RPG",   hint: "Rebounds Per Game",    slash: false },
+    { key: "apg",           label: "APG",   hint: "Assists Per Game",     slash: false },
+    { key: "spg",           label: "SPG",   hint: "Steals Per Game",      slash: false },
+    { key: "bpg",           label: "BPG",   hint: "Blocks Per Game",      slash: false },
+    { key: "fg",            label: "FG",    hint: "Field Goals (m/a)",    slash: true  },
+    { key: "three_fg",      label: "3FG",   hint: "3-Pointers (m/a)",     slash: true  },
+    { key: "three_pt_made", label: "3s",    hint: "Total 3-Pointers Made", slash: false },
   ];
 
   const [players, setPlayers] = useState<Player[]>([]);
@@ -1353,35 +1355,57 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
       .then((data) => {
         const row = Array.isArray(data) ? data[0] : data;
         if (row && row.mc_uuid) {
+          const fgPct = row.fg_pct != null ? String(row.fg_pct) : "";
+          const threePct = row.three_pt_pct != null ? String(row.three_pt_pct) : "";
           setFields({
-            gp: String(row.gp ?? ""),
-            ppg: String(row.ppg ?? ""),
-            rpg: String(row.rpg ?? ""),
-            apg: String(row.apg ?? ""),
-            spg: String(row.spg ?? ""),
-            bpg: String(row.bpg ?? ""),
-            fg_pct: String(row.fg_pct ?? ""),
+            gp:            String(row.gp ?? ""),
+            ppg:           String(row.ppg ?? ""),
+            rpg:           String(row.rpg ?? ""),
+            apg:           String(row.apg ?? ""),
+            spg:           String(row.spg ?? ""),
+            bpg:           String(row.bpg ?? ""),
+            fg:            fgPct ? `${fgPct}%` : "",
+            three_fg:      threePct ? `${threePct}%` : "",
+            three_pt_made: String(row.three_pt_made ?? ""),
           });
         }
       })
       .catch(() => {});
   }, [selectedUuid, league, initialSeason]);
 
+  const parseSlash = (s: string): [number | null, number | null] => {
+    if (!s || !s.trim()) return [null, null];
+    const parts = s.split("/").map((x) => x.trim());
+    if (parts.length === 2) {
+      const m = parseFloat(parts[0]);
+      const a = parseFloat(parts[1]);
+      return [isNaN(m) ? null : m, isNaN(a) ? null : a];
+    }
+    return [null, null];
+  };
+
   const savePlayer = async () => {
     if (!selectedUuid) return;
     setSaving(true); setErr("");
+    const [fgMade, fgAtt] = parseSlash(fields.fg);
+    const fg_pct = fgMade !== null && fgAtt !== null && fgAtt > 0 ? Math.round(fgMade / fgAtt * 1000) / 10 : null;
+    const [tpMade, tpAtt] = parseSlash(fields.three_fg);
+    const three_pt_pct = tpMade !== null && tpAtt !== null && tpAtt > 0 ? Math.round(tpMade / tpAtt * 1000) / 10 : null;
+    const three_pt_made = fields.three_pt_made ? parseInt(fields.three_pt_made) || null : null;
     const r = await fetch("/api/stats", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         league, season: initialSeason, mc_uuid: selectedUuid,
-        gp:     parseInt(fields.gp)     || 0,
-        ppg:    parseFloat(fields.ppg)  || 0,
-        rpg:    parseFloat(fields.rpg)  || 0,
-        apg:    parseFloat(fields.apg)  || 0,
-        spg:    parseFloat(fields.spg)  || 0,
-        bpg:    parseFloat(fields.bpg)  || 0,
-        fg_pct: parseFloat(fields.fg_pct) || 0,
+        gp:            fields.gp ? parseInt(fields.gp) || null : null,
+        ppg:           fields.ppg ? parseFloat(fields.ppg) || null : null,
+        rpg:           fields.rpg ? parseFloat(fields.rpg) || null : null,
+        apg:           fields.apg ? parseFloat(fields.apg) || null : null,
+        spg:           fields.spg ? parseFloat(fields.spg) || null : null,
+        bpg:           fields.bpg ? parseFloat(fields.bpg) || null : null,
+        fg_pct,
+        three_pt_made,
+        three_pt_pct,
       }),
     });
     setSaving(false);
@@ -1438,14 +1462,14 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 mb-5">
-            {STAT_FIELDS.map(({ key, label, hint }) => (
+            {STAT_FIELDS.map(({ key, label, hint, slash }) => (
               <div key={key}>
                 <label className="block text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1">
                   {label} <span className="text-slate-600 normal-case font-normal">— {hint}</span>
                 </label>
                 <input
                   className={input}
-                  placeholder="0"
+                  placeholder={slash ? "0/0" : "0"}
                   value={fields[key] ?? ""}
                   onChange={(e) => setFields((prev) => ({ ...prev, [key]: e.target.value }))}
                 />
