@@ -976,10 +976,8 @@ function parseStatBlock(text: string, players: Player[]): ParsedStat[] {
       fields = {
         minutes_played: ext(/\bMIN\s+(\d+:\d+)/i),
         points: ext(/\bPTS\s+(\d+)/i),
-        fg_made: fgM?.[1] ?? "",
-        fg_attempted: fgM?.[2] ?? "",
-        three_pt_made: tfgM?.[1] ?? "",
-        three_pt_attempted: tfgM?.[2] ?? "",
+        fg: fgM ? `${fgM[1]}/${fgM[2]}` : "",
+        three_fg: tfgM ? `${tfgM[1]}/${tfgM[2]}` : "",
         assists: ext(/\bAST(?:\/PASS)?\s+(\d+)/i),
         rebounds_off: ext(/\bOREB\s+(\d+)/i),
         rebounds_def: ext(/\bDREB\s+(\d+)/i),
@@ -989,16 +987,13 @@ function parseStatBlock(text: string, players: Player[]): ParsedStat[] {
       };
     } else {
       // Positional format: "Name | Min | PTS | FGM/FGA | 3PM/3PA | ORB | DRB | AST | STL | BLK | TOV"
-      const fgParts = (parts[3] ?? "").split("/");
-      const tfgParts = parts.length > 10 ? (parts[4] ?? "").split("/") : ["",""];
-      const offset = parts.length > 10 ? 1 : 0;
+      const hasTwoShotCols = parts.length > 10;
+      const offset = hasTwoShotCols ? 1 : 0;
       fields = {
         minutes_played: parts[1] ?? "",
         points: parts[2] ?? "",
-        fg_made: fgParts[0] ?? "",
-        fg_attempted: fgParts[1] ?? "",
-        three_pt_made: tfgParts[0] ?? "",
-        three_pt_attempted: tfgParts[1] ?? "",
+        fg: parts[3] ?? "",
+        three_fg: hasTwoShotCols ? (parts[4] ?? "") : "",
         rebounds_off: parts[4 + offset] ?? "",
         rebounds_def: parts[5 + offset] ?? "",
         assists: parts[6 + offset] ?? "",
@@ -1051,14 +1046,20 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
       .then((r) => r.json())
       .then((data) => {
         const form: Record<string, Record<string, string>> = {};
-        const ns = (v: number | null) => v === null || v === undefined ? "" : String(v);
+        const fmtSlash = (m: number | null, a: number | null) =>
+          m === null && a === null ? "" : `${m ?? 0}/${a ?? 0}`;
         for (const s of (Array.isArray(data) ? data : []) as GameStat[]) {
           form[s.mc_uuid] = {
-            points: ns(s.points), rebounds_off: ns(s.rebounds_off), rebounds_def: ns(s.rebounds_def),
-            assists: ns(s.assists), steals: ns(s.steals), blocks: ns(s.blocks),
-            turnovers: ns(s.turnovers), minutes_played: s.minutes_played === null ? "" : fmtMins(s.minutes_played),
-            fg_made: ns(s.fg_made), fg_attempted: ns(s.fg_attempted),
-            three_pt_made: ns(s.three_pt_made), three_pt_attempted: ns(s.three_pt_attempted),
+            points: s.points === null ? "" : String(s.points),
+            rebounds_off: s.rebounds_off === null ? "" : String(s.rebounds_off),
+            rebounds_def: s.rebounds_def === null ? "" : String(s.rebounds_def),
+            assists: s.assists === null ? "" : String(s.assists),
+            steals: s.steals === null ? "" : String(s.steals),
+            blocks: s.blocks === null ? "" : String(s.blocks),
+            turnovers: s.turnovers === null ? "" : String(s.turnovers),
+            minutes_played: s.minutes_played === null ? "" : fmtMins(s.minutes_played),
+            fg: fmtSlash(s.fg_made, s.fg_attempted),
+            three_fg: fmtSlash(s.three_pt_made, s.three_pt_attempted),
           };
         }
         setStatForm(form);
@@ -1072,7 +1073,15 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
     setSaving(true); setErr("");
     const ni = (s: string | undefined) => (s === undefined || s.trim() === "") ? null : (parseInt(s) || 0);
     const nm = (s: string | undefined) => (s === undefined || s.trim() === "") ? null : parseMins(s);
+    const parseSlash = (s: string | undefined): [number | null, number | null] => {
+      if (!s || s.trim() === "") return [null, null];
+      const [m, a] = s.split("/");
+      const mi = parseInt(m); const ai = parseInt(a);
+      return [isNaN(mi) ? null : mi, isNaN(ai) ? null : ai];
+    };
     for (const [uuid, fields] of Object.entries(statForm)) {
+      const [fgMade, fgAtt] = parseSlash(fields.fg);
+      const [tpMade, tpAtt] = parseSlash(fields.three_fg);
       const r = await fetch("/api/game-stats", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1082,8 +1091,8 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
           rebounds_def: ni(fields.rebounds_def), assists: ni(fields.assists),
           steals: ni(fields.steals), blocks: ni(fields.blocks),
           turnovers: ni(fields.turnovers), minutes_played: nm(fields.minutes_played),
-          fg_made: ni(fields.fg_made), fg_attempted: ni(fields.fg_attempted),
-          three_pt_made: ni(fields.three_pt_made), three_pt_attempted: ni(fields.three_pt_attempted),
+          fg_made: fgMade, fg_attempted: fgAtt,
+          three_pt_made: tpMade, three_pt_attempted: tpAtt,
         }),
       });
       if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Save failed"); setSaving(false); return; }
@@ -1092,8 +1101,8 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
     alert("Box scores saved!");
   };
 
-  const statCols = ["points","rebounds_off","rebounds_def","assists","steals","blocks","turnovers","minutes_played","fg_made","fg_attempted","three_pt_made","three_pt_attempted"] as const;
-  const colLabels: Record<string, string> = { points:"PTS", rebounds_off:"ORB", rebounds_def:"DRB", assists:"AST", steals:"STL", blocks:"BLK", turnovers:"TO", minutes_played:"MIN", fg_made:"FGM", fg_attempted:"FGA", three_pt_made:"3PM", three_pt_attempted:"3PA" };
+  const statCols = ["points","rebounds_off","rebounds_def","assists","steals","blocks","turnovers","minutes_played","fg","three_fg"] as const;
+  const colLabels: Record<string, string> = { points:"PTS", rebounds_off:"ORB", rebounds_def:"DRB", assists:"AST", steals:"STL", blocks:"BLK", turnovers:"TO", minutes_played:"MIN", fg:"FG", three_fg:"3FG" };
 
   const applyPastePreview = () => {
     if (!pastePreview) return;
@@ -1176,7 +1185,7 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
                           <span className="text-red-400 font-semibold">⚠ {entry.name} — no match found</span>
                         )}
                         <span className="ml-auto text-xs text-slate-600 font-mono">
-                          {entry.fields.points || "—"}pts {entry.fields.fg_made || "—"}/{entry.fields.fg_attempted || "—"}fg {entry.fields.three_pt_made || "—"}/{entry.fields.three_pt_attempted || "—"}3fg {entry.fields.minutes_played || "—"}min
+                          {entry.fields.points || "—"}pts {entry.fields.fg || "—"}fg {entry.fields.three_fg || "—"}3fg {entry.fields.minutes_played || "—"}min
                         </span>
                       </div>
                     ))}
@@ -1206,7 +1215,12 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
                       <td className="px-3 py-2 whitespace-nowrap"><Avatar uuid={p.mc_uuid} username={p.mc_username} /></td>
                       {statCols.map((c) => (
                         <td key={c} className="px-1 py-1">
-                          <input className="rounded border border-slate-700 bg-slate-800 px-1.5 py-1 text-sm text-white focus:border-blue-500 focus:outline-none w-14 text-center" placeholder={c === "minutes_played" ? "0:00" : "0"} value={statForm[p.mc_uuid]?.[c] ?? ""} onChange={(e) => setField(p.mc_uuid, c, e.target.value)} />
+                          <input
+                            className={`rounded border border-slate-700 bg-slate-800 px-1.5 py-1 text-sm text-white focus:border-blue-500 focus:outline-none text-center ${c === "fg" || c === "three_fg" ? "w-16" : c === "minutes_played" ? "w-14" : "w-12"}`}
+                            placeholder={c === "minutes_played" ? "0:00" : c === "fg" || c === "three_fg" ? "0/0" : ""}
+                            value={statForm[p.mc_uuid]?.[c] ?? ""}
+                            onChange={(e) => setField(p.mc_uuid, c, e.target.value)}
+                          />
                         </td>
                       ))}
                     </tr>
