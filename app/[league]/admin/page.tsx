@@ -66,6 +66,105 @@ function parseMins(str: string): number {
   return (parseInt(m) || 0) * 60 + (parseInt(s) || 0);
 }
 
+// ─── PlayerSearchSelect ────────────────────────────────────────────────────────
+
+function PlayerSearchSelect({
+  players,
+  value,
+  onChange,
+  placeholder = "Search for a player...",
+  renderSuffix,
+}: {
+  players: Player[];
+  value: string;
+  onChange: (uuid: string) => void;
+  placeholder?: string;
+  renderSuffix?: (p: Player) => React.ReactNode;
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  const selected = players.find((p) => p.mc_uuid === value);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const filtered = query.trim()
+    ? players.filter((p) => p.mc_username.toLowerCase().includes(query.toLowerCase()))
+    : players;
+
+  return (
+    <div ref={ref} className="relative">
+      {selected && !open ? (
+        <button
+          type="button"
+          className={`${input} flex items-center gap-2 text-left`}
+          onClick={() => { setQuery(""); setOpen(true); }}
+        >
+          <img
+            src={`https://crafatar.com/avatars/${selected.mc_uuid}?size=24&default=MHF_Steve&overlay`}
+            className="w-5 h-5 rounded flex-shrink-0"
+            alt=""
+            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+          />
+          <span className="flex-1">{selected.mc_username}</span>
+          {renderSuffix && renderSuffix(selected)}
+          <span className="text-slate-500 text-xs ml-auto">▼</span>
+        </button>
+      ) : (
+        <input
+          autoFocus={open}
+          className={input}
+          placeholder={placeholder}
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+        />
+      )}
+      {open && (
+        <div className="absolute z-50 mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 shadow-xl max-h-60 overflow-y-auto">
+          {value && (
+            <button
+              type="button"
+              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-slate-500 hover:bg-slate-800 transition border-b border-slate-800"
+              onClick={() => { onChange(""); setQuery(""); setOpen(false); }}
+            >
+              Clear selection
+            </button>
+          )}
+          {filtered.length === 0 ? (
+            <div className="px-3 py-2 text-sm text-slate-500">No players found</div>
+          ) : (
+            filtered.map((p) => (
+              <button
+                key={p.mc_uuid}
+                type="button"
+                className={`flex items-center gap-2 w-full px-3 py-2 text-sm text-left hover:bg-slate-800 transition ${p.mc_uuid === value ? "bg-slate-800" : ""}`}
+                onClick={() => { onChange(p.mc_uuid); setQuery(""); setOpen(false); }}
+              >
+                <img
+                  src={`https://crafatar.com/avatars/${p.mc_uuid}?size=24&default=MHF_Steve&overlay`}
+                  className="w-5 h-5 rounded flex-shrink-0"
+                  alt=""
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                />
+                <span className="text-white flex-1">{p.mc_username}</span>
+                {renderSuffix && renderSuffix(p)}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Tab: Players ─────────────────────────────────────────────────────────────
 
 function PlayersTab({ league, season: initialSeason }: { league: string; season: string }) {
@@ -234,6 +333,23 @@ function PlayersTab({ league, season: initialSeason }: { league: string; season:
 
   const teamForPlayer = (uuid: string) => playerTeams.find((pt) => pt.mc_uuid === uuid)?.team_id ?? "";
 
+  const [refreshingNames, setRefreshingNames] = useState(false);
+  const [refreshResult, setRefreshResult] = useState<{ updated: number; failed: number; total: number } | null>(null);
+
+  const refreshUsernames = async () => {
+    setRefreshingNames(true);
+    setRefreshResult(null);
+    try {
+      const r = await fetch("/api/cron/refresh-usernames", { method: "POST" });
+      const data = await r.json();
+      setRefreshResult(data);
+      if (data.updated > 0) refresh();
+    } catch {
+      setRefreshResult({ updated: 0, failed: -1, total: 0 });
+    }
+    setRefreshingNames(false);
+  };
+
   return (
     <div className="space-y-5">
       <div className={card}>
@@ -359,11 +475,22 @@ function PlayersTab({ league, season: initialSeason }: { league: string; season:
             >
               {SEASONS.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
+            <button className={btnSecondary} onClick={refreshUsernames} disabled={refreshingNames} title="Re-fetch MC usernames for all players from Mojang">
+              {refreshingNames ? "Refreshing..." : "Refresh Usernames"}
+            </button>
             {players.length > 0 && (
               <button className={btnDanger} onClick={deleteAllPlayers}>Delete All</button>
             )}
           </div>
         </div>
+        {refreshResult && (
+          <p className={`text-xs mb-3 ${refreshResult.failed === -1 ? "text-red-400" : "text-slate-400"}`}>
+            {refreshResult.failed === -1
+              ? "Failed to refresh usernames."
+              : `Refreshed ${refreshResult.total} players — ${refreshResult.updated} name${refreshResult.updated !== 1 ? "s" : ""} updated${refreshResult.failed > 0 ? `, ${refreshResult.failed} failed` : ""}.`
+            }
+          </p>
+        )}
         {players.length === 0 ? (
           <p className="text-slate-600 text-sm">No players yet.</p>
         ) : (
@@ -1283,10 +1410,7 @@ function AccoladesTab({ league, season: initialSeason }: { league: string; seaso
         <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Add Accolade</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
           <div><label className="block text-xs text-slate-500 mb-1">Player</label>
-            <select className={input} value={newPlayer} onChange={(e) => { setNewPlayer(e.target.value); setErr(""); }}>
-              <option value="">Select...</option>
-              {players.map((p) => <option key={p.mc_uuid} value={p.mc_uuid}>{p.mc_username}</option>)}
-            </select></div>
+            <PlayerSearchSelect players={players} value={newPlayer} onChange={(uuid) => { setNewPlayer(uuid); setErr(""); }} /></div>
           <div><label className="block text-xs text-slate-500 mb-1">Award Type</label>
             <input className={input} placeholder="MVP, All-Star, etc." value={newType} onChange={(e) => { setNewType(e.target.value); setErr(""); }} /></div>
           <div><label className="block text-xs text-slate-500 mb-1">Season</label>
@@ -1529,18 +1653,13 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
         <div className="flex gap-3 flex-wrap items-end">
           <div className="flex-1 min-w-[200px]">
             <label className="block text-xs text-slate-500 mb-1">Select Player</label>
-            <select
-              className={input}
+            <PlayerSearchSelect
+              players={players}
               value={selectedUuid}
-              onChange={(e) => { setSelectedUuid(e.target.value); setErr(""); setSaved(false); }}
-            >
-              <option value="">Choose a player...</option>
-              {players.map((p) => (
-                <option key={p.mc_uuid} value={p.mc_uuid}>
-                  {p.mc_username}{savedPlayers.has(p.mc_uuid) ? " ✓" : ""}
-                </option>
-              ))}
-            </select>
+              onChange={(uuid) => { setSelectedUuid(uuid); setErr(""); setSaved(false); }}
+              placeholder="Search for a player..."
+              renderSuffix={(p) => savedPlayers.has(p.mc_uuid) ? <span className="text-green-400 text-xs">✓</span> : null}
+            />
           </div>
         </div>
       </div>

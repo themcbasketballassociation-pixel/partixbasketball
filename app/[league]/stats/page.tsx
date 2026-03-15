@@ -135,9 +135,9 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <img
-                        src={`https://crafatar.com/avatars/${row.mc_uuid}?size=24&default=MHF_Steve&overlay`}
+                        src={`https://crafatar.com/avatars/${row.mc_uuid}?size=32&default=MHF_Steve&overlay`}
                         alt={row.mc_username}
-                        className="w-6 h-6 rounded"
+                        className="w-8 h-8 rounded"
                         onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                       />
                       <span className="font-medium text-white">{row.mc_username}</span>
