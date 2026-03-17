@@ -19,6 +19,7 @@ const tabs = [
   { label: "Stats", path: "/stats" },
   { label: "Players", path: "/players" },
   { label: "Accolades", path: "/accolades" },
+  { label: "Games", path: "/games" },
   { label: "Admin", path: "/admin" },
 ];
 
@@ -38,7 +39,7 @@ export default function Header() {
 
   const currentLeague = leagues.find((l) => l.slug === selected) ?? leagues[0];
 
-  // Determine active tab path segment
+  // Determine active tab path segment (use first sub-path so /games/wordle highlights /games)
   const parts = pathname.split("/");
   const section = parts.length >= 3 ? `/${parts[2]}` : "";
 
