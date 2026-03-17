@@ -81,7 +81,9 @@ function generateGrid(
   allAccolades: Accolade[],
 ): { rows: Category[]; cols: Category[] } | null {
 
-  // ── Row pool: teams (deduplicated by name) + divisions ───────────────────
+  // ── Build every possible category from available data ────────────────────
+
+  // Teams (deduplicated by name across seasons)
   const byName: Record<string, string[]> = {};
   for (const t of allTeams) {
     const n = t.name.trim();
@@ -92,57 +94,81 @@ function generateGrid(
     .filter(([, ids]) => uuids.some(u => (ptMap[u] ?? []).some(pt => ids.includes(pt.team_id))))
     .map(([name, ids]) => ({ type: "team" as const, teamName: name, teamIds: ids, label: name }));
 
+  // Divisions
   const divCats: Category[] = [];
   if (uuids.some(u => (ptMap[u] ?? []).some(pt => pt.teams?.division === "East")))
     divCats.push({ type: "division", division: "East", label: "East Division" });
   if (uuids.some(u => (ptMap[u] ?? []).some(pt => pt.teams?.division === "West")))
     divCats.push({ type: "division", division: "West", label: "West Division" });
 
-  const rowPool: Category[] = [...teamCats, ...divCats];
-
-  // ── Column pool: stats, GP, rings, specific award types ─────────────────
-  const maybeColCats: Category[] = [
+  // Stats — broad range of thresholds so something always qualifies
+  const statCandidates: Category[] = [
+    { type: "ppg", min: 5,  label: "PPG ≥ 5"  },
     { type: "ppg", min: 10, label: "PPG ≥ 10" },
     { type: "ppg", min: 15, label: "PPG ≥ 15" },
     { type: "ppg", min: 20, label: "PPG ≥ 20" },
+    { type: "rpg", min: 3,  label: "RPG ≥ 3"  },
     { type: "rpg", min: 5,  label: "RPG ≥ 5"  },
     { type: "rpg", min: 7,  label: "RPG ≥ 7"  },
+    { type: "apg", min: 2,  label: "APG ≥ 2"  },
     { type: "apg", min: 3,  label: "APG ≥ 3"  },
     { type: "apg", min: 5,  label: "APG ≥ 5"  },
+    { type: "gp",  min: 5,  label: "GP ≥ 5"   },
     { type: "gp",  min: 10, label: "GP ≥ 10"  },
     { type: "gp",  min: 20, label: "GP ≥ 20"  },
     { type: "gp",  min: 30, label: "GP ≥ 30"  },
     { type: "gp",  min: 50, label: "GP ≥ 50"  },
   ];
-  const colPool: Category[] = maybeColCats.filter(c =>
+  const statCats = statCandidates.filter(c =>
     uuids.some(u => playerFits(u, c, ptMap, statsMap, ringMap, accoladeMap))
   );
 
-  // "Won Finals" (rings)
+  // Rings
+  const ringCats: Category[] = [];
   if (uuids.some(u => (ringMap[u] ?? 0) >= 1))
-    colPool.push({ type: "rings", label: "Won Finals 🏆" });
+    ringCats.push({ type: "rings", label: "Won Finals 🏆" });
 
-  // Specific accolade types (exclude Finals Champion — covered by rings)
+  // Accolades (require ≥2 players so cells aren't unsolvable)
   const accoladeTypeCounts: Record<string, number> = {};
   for (const a of allAccolades) {
-    if (a.type !== "Finals Champion") {
+    if (a.type !== "Finals Champion")
       accoladeTypeCounts[a.type] = (accoladeTypeCounts[a.type] ?? 0) + 1;
-    }
   }
-  for (const [type, count] of Object.entries(accoladeTypeCounts)) {
-    if (count >= 2) { // require at least 2 players with this award so cells aren't unsolvable
-      colPool.push({ type: "accolade", accoladeType: type, label: type });
-    }
-  }
+  const accoladeCats: Category[] = Object.entries(accoladeTypeCounts)
+    .filter(([, count]) => count >= 2)
+    .map(([type]) => ({ type: "accolade" as const, accoladeType: type, label: type }));
 
-  if (rowPool.length < 3 || colPool.length < 3) return null;
+  // Unified pool — rows and cols can be any category type
+  const allCats: Category[] = [
+    ...teamCats, ...divCats, ...statCats, ...ringCats, ...accoladeCats,
+  ];
 
-  for (let attempt = 0; attempt < 100; attempt++) {
-    const rng  = seededRng(dayNum * 137 + attempt);
-    const rows = shuffled(rowPool, rng).slice(0, 3);
-    const cols = shuffled(colPool, rng).slice(0, 3);
+  if (allCats.length < 6) return null;
 
-    // No duplicate labels
+  // ── Pre-filter: only keep categories that form a valid pair with ≥2 others ─
+  // (so every selected category can actually appear in a solvable grid)
+  const pairCount = allCats.map((a, i) =>
+    allCats.reduce((n, b, j) => {
+      if (i === j || a.label === b.label) return n;
+      const ok = uuids.some(u =>
+        playerFits(u, a, ptMap, statsMap, ringMap, accoladeMap) &&
+        playerFits(u, b, ptMap, statsMap, ringMap, accoladeMap)
+      );
+      return n + (ok ? 1 : 0);
+    }, 0)
+  );
+  const usable = allCats.filter((_, i) => pairCount[i] >= 2);
+
+  if (usable.length < 6) return null;
+
+  // ── Search for a valid 3×3 grid ──────────────────────────────────────────
+  for (let attempt = 0; attempt < 500; attempt++) {
+    const rng     = seededRng(dayNum * 137 + attempt);
+    const picked  = shuffled(usable, rng);
+    const rows    = picked.slice(0, 3);
+    const cols    = picked.slice(3, 6);
+
+    // No duplicate labels across rows + cols
     const labels = [...rows, ...cols].map(c => c.label);
     if (new Set(labels).size < 6) continue;
 
