@@ -532,8 +532,10 @@ function TeamLogoAdmin({ team }: { team: Team }) {
 }
 
 function TeamsTab({ league, season: initialSeason }: { league: string; season: string }) {
-  const SEASONS = ["Season 1","Season 1 Playoffs","Season 2","Season 2 Playoffs","Season 3","Season 3 Playoffs","Season 4","Season 4 Playoffs","Season 5","Season 5 Playoffs","Season 6","Season 6 Playoffs","Season 7","Season 7 Playoffs"];
-  const [season, setSeason] = useState(initialSeason);
+  const SEASONS = ["Season 1","Season 2","Season 3","Season 4","Season 5","Season 6","Season 7"];
+  const [season, setSeason] = useState(
+    SEASONS.includes(initialSeason) ? initialSeason : SEASONS[SEASONS.length - 1]
+  );
   const [teams, setTeams] = useState<Team[]>([]);
   const [newName, setNewName] = useState("");
   const [newAbbr, setNewAbbr] = useState("");
