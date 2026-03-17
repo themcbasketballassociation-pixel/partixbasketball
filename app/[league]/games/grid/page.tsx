@@ -190,6 +190,35 @@ function generateGrid(
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
+/** Shown in place of an unsolved cell when the player reveals answers */
+function AnswerCell({ validPlayers }: { validPlayers: Player[] }) {
+  const show = validPlayers.slice(0, 7);
+  const more = validPlayers.length - show.length;
+  return (
+    <div className="rounded-xl border-2 border-slate-700 bg-slate-950 p-2 min-h-[90px] max-h-44 overflow-y-auto">
+      {show.length === 0 ? (
+        <p className="text-slate-600 text-[10px] text-center mt-4">No valid players</p>
+      ) : (
+        <div className="space-y-1">
+          {show.map(p => (
+            <div key={p.mc_uuid} className="flex items-center gap-1.5">
+              <img
+                src={`https://minotar.net/avatar/${p.mc_username}/20`}
+                className="w-5 h-5 rounded flex-shrink-0"
+                onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/20"; }}
+              />
+              <span className="text-[11px] text-slate-300 truncate leading-tight">{p.mc_username}</span>
+            </div>
+          ))}
+          {more > 0 && (
+            <p className="text-slate-600 text-[10px] text-center pt-0.5">+{more} more</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function GridCell({
   cell, onClick, flash, disabled,
 }: {
@@ -338,11 +367,12 @@ export default function GridPage({ params }: { params?: Promise<{ league?: strin
   const [loading, setLoading] = useState(true);
   const [noGrid,  setNoGrid]  = useState(false);
 
-  const [cells,       setCells]       = useState<CellState[]>(Array(9).fill({ status: "empty" }));
-  const [guessesLeft, setGuessesLeft] = useState(TOTAL_GUESSES);
-  const [usedUuids,   setUsedUuids]   = useState<Set<string>>(new Set());
-  const [activeCell,  setActiveCell]  = useState<number | null>(null);
-  const [flashCell,   setFlashCell]   = useState<number | null>(null);
+  const [cells,        setCells]        = useState<CellState[]>(Array(9).fill({ status: "empty" }));
+  const [guessesLeft,  setGuessesLeft]  = useState(TOTAL_GUESSES);
+  const [usedUuids,    setUsedUuids]    = useState<Set<string>>(new Set());
+  const [activeCell,   setActiveCell]   = useState<number | null>(null);
+  const [flashCell,    setFlashCell]    = useState<number | null>(null);
+  const [showAnswers,  setShowAnswers]  = useState(false);
 
   useEffect(() => {
     if (!slug) return;
@@ -494,8 +524,16 @@ export default function GridPage({ params }: { params?: Promise<{ league?: strin
                   <CategoryHeader cat={row} />
 
                   {/* 3 cells */}
-                  {cols.map((_, ci) => {
+                  {cols.map((col, ci) => {
                     const idx = ri * 3 + ci;
+                    // Show valid-player list when answers are revealed for unsolved cells
+                    if (isDone && showAnswers && cells[idx].status !== "correct") {
+                      const valid = allPlayers.filter(p =>
+                        playerFits(p.mc_uuid, rows[ri], ptMap, statsMap, ringMap, accoladeMap) &&
+                        playerFits(p.mc_uuid, col,      ptMap, statsMap, ringMap, accoladeMap)
+                      );
+                      return <AnswerCell key={ci} validPlayers={valid} />;
+                    }
                     return (
                       <GridCell
                         key={ci}
@@ -512,17 +550,27 @@ export default function GridPage({ params }: { params?: Promise<{ league?: strin
 
             {/* Game over */}
             {isDone && (
-              <div className={`mt-4 rounded-xl border p-4 text-center ${solved === 9 ? "border-green-800 bg-green-950" : "border-slate-700 bg-slate-950"}`}>
-                {solved === 9 ? (
-                  <div className="text-xl font-bold text-green-300">
-                    🎉 Perfect Grid! Used {TOTAL_GUESSES - guessesLeft} guess{TOTAL_GUESSES - guessesLeft !== 1 ? "es" : ""}
-                  </div>
-                ) : (
-                  <div>
-                    <div className="text-xl font-bold text-white mb-1">{solved}/9 cells complete</div>
-                    <div className="text-slate-400 text-sm">Come back tomorrow for a new grid!</div>
-                  </div>
-                )}
+              <div className={`mt-4 rounded-xl border p-4 ${solved === 9 ? "border-green-800 bg-green-950" : "border-slate-700 bg-slate-950"}`}>
+                <div className="text-center mb-3">
+                  {solved === 9 ? (
+                    <div className="text-xl font-bold text-green-300">
+                      🎉 Perfect Grid! Used {TOTAL_GUESSES - guessesLeft} guess{TOTAL_GUESSES - guessesLeft !== 1 ? "es" : ""}
+                    </div>
+                  ) : (
+                    <>
+                      <div className="text-xl font-bold text-white mb-1">{solved}/9 cells complete</div>
+                      <div className="text-slate-400 text-sm">Come back tomorrow for a new grid!</div>
+                    </>
+                  )}
+                </div>
+                <div className="flex justify-center">
+                  <button
+                    onClick={() => setShowAnswers(v => !v)}
+                    className="rounded-lg border border-slate-600 bg-slate-800 hover:bg-slate-700 text-white text-sm font-medium px-4 py-2 transition"
+                  >
+                    {showAnswers ? "🙈 Hide Answers" : "👁 See Who Fits Each Cell"}
+                  </button>
+                </div>
               </div>
             )}
 
