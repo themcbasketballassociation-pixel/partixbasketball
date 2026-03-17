@@ -17,6 +17,7 @@ const tabs = [
   { label: "Schedule", path: "/schedule" },
   { label: "Box Scores", path: "/boxscores" },
   { label: "Stats", path: "/stats" },
+  { label: "Players", path: "/players" },
   { label: "Accolades", path: "/accolades" },
   { label: "Admin", path: "/admin" },
 ];

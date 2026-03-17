@@ -1416,7 +1416,7 @@ function AccoladesTab({ league, season: initialSeason }: { league: string; seaso
           <div><label className="block text-xs text-slate-500 mb-1">Season</label>
             <select className={input} value={newSeason} onChange={(e) => { setNewSeason(e.target.value); setErr(""); }}>
               <option value="">Select season...</option>
-              {["Season 1","Season 1 Playoffs","Season 2","Season 2 Playoffs","Season 3","Season 3 Playoffs","Season 4","Season 4 Playoffs","Season 5","Season 5 Playoffs","Season 6","Season 6 Playoffs","Season 7","Season 7 Playoffs"].map((s) => (
+              {["Season 1","Season 2","Season 3","Season 4","Season 5","Season 6","Season 7"].map((s) => (
                 <option key={s} value={s}>{s}</option>
               ))}
             </select></div>
@@ -1441,6 +1441,122 @@ function AccoladesTab({ league, season: initialSeason }: { league: string; seaso
                   </div>
                 </div>
                 <button className={btnDanger} onClick={() => deleteAccolade(a.id)}>Delete</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Tab: Champions ───────────────────────────────────────────────────────────
+
+const REGULAR_SEASONS = ["Season 1","Season 2","Season 3","Season 4","Season 5","Season 6","Season 7"];
+
+function ChampionsTab({ league, season: initialSeason }: { league: string; season: string }) {
+  const [season, setSeason] = useState(
+    REGULAR_SEASONS.includes(initialSeason) ? initialSeason : REGULAR_SEASONS[REGULAR_SEASONS.length - 1]
+  );
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [selectedTeam, setSelectedTeam] = useState("");
+  const [champions, setChampions] = useState<Accolade[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+
+  const refreshTeams = useCallback(() => {
+    fetch(`/api/teams?league=${league}&season=${encodeURIComponent(season)}`)
+      .then((r) => r.json())
+      .then((d) => { setTeams(Array.isArray(d) ? d : []); setSelectedTeam(""); });
+  }, [league, season]);
+
+  const refreshChampions = useCallback(() => {
+    fetch(`/api/accolades/champion?league=${league}`)
+      .then((r) => r.json())
+      .then((d) => setChampions(Array.isArray(d) ? d : []));
+  }, [league]);
+
+  useEffect(() => { refreshTeams(); }, [refreshTeams]);
+  useEffect(() => { refreshChampions(); }, [refreshChampions]);
+
+  const setChampion = async () => {
+    if (!selectedTeam) { setErr("Select a team first."); return; }
+    setSaving(true); setErr("");
+    const r = await fetch("/api/accolades/champion", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ league, season, team_id: selectedTeam }),
+    });
+    const data = await r.json();
+    setSaving(false);
+    if (!r.ok) { setErr(data.error ?? "Failed"); return; }
+    refreshChampions();
+  };
+
+  const removeChampions = async (s: string) => {
+    if (!confirm(`Remove all Finals Champion rings for ${s}?`)) return;
+    const r = await fetch(`/api/accolades/champion?league=${league}&season=${encodeURIComponent(s)}`, { method: "DELETE" });
+    if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Delete failed"); return; }
+    refreshChampions();
+  };
+
+  // Group champions by season
+  const bySeason: Record<string, Accolade[]> = {};
+  for (const c of champions) {
+    if (!bySeason[c.season]) bySeason[c.season] = [];
+    bySeason[c.season].push(c);
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className={card}>
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Set Finals Champions</h3>
+        <p className="text-slate-500 text-sm mb-3">Select the season and winning team. All players on that team will receive a Finals Champion ring visible on their player card.</p>
+        <div className="flex flex-wrap gap-3 items-end">
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Season</label>
+            <select className={input} style={{ width: "auto" }} value={season} onChange={(e) => setSeason(e.target.value)}>
+              {REGULAR_SEASONS.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div className="flex-1 min-w-[200px]">
+            <label className="block text-xs text-slate-500 mb-1">Champion Team</label>
+            <select className={input} value={selectedTeam} onChange={(e) => setSelectedTeam(e.target.value)}>
+              <option value="">Select team...</option>
+              {teams.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.abbreviation})</option>)}
+            </select>
+          </div>
+          <button className={btnPrimary} onClick={setChampion} disabled={saving}>
+            {saving ? "Saving..." : "🏆 Set Champions"}
+          </button>
+        </div>
+        <ErrMsg msg={err} />
+      </div>
+
+      <div className={card}>
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Finals Champions by Season</h3>
+        {Object.keys(bySeason).length === 0 ? (
+          <p className="text-slate-600 text-sm">No champions set yet.</p>
+        ) : (
+          <div className="space-y-4">
+            {Object.entries(bySeason).sort(([a], [b]) => b.localeCompare(a)).map(([s, players]) => (
+              <div key={s}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-semibold text-yellow-400">🏆 {s} Champions</span>
+                  <button className={btnDanger} onClick={() => removeChampions(s)}>Remove</button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {players.map((p) => (
+                    <div key={p.id} className="flex items-center gap-1.5 rounded-full bg-yellow-950 border border-yellow-800 px-3 py-1 text-xs text-yellow-300">
+                      <img
+                        src={`https://crafatar.com/avatars/${p.mc_uuid}?size=16&default=MHF_Steve&overlay`}
+                        className="w-4 h-4 rounded-full"
+                        alt=""
+                      />
+                      <span>{(p as any).players?.mc_username ?? p.mc_uuid}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
@@ -1736,7 +1852,7 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
 
 // ─── Main Admin Page ──────────────────────────────────────────────────────────
 
-const TABS = ["Players", "Teams", "Schedule", "Box Scores", "Accolades", "Articles", "Stats"] as const;
+const TABS = ["Players", "Teams", "Schedule", "Box Scores", "Accolades", "Champions", "Articles", "Stats"] as const;
 type Tab = typeof TABS[number];
 const SEASONS = ["Season 1","Season 1 Playoffs","Season 2","Season 2 Playoffs","Season 3","Season 3 Playoffs","Season 4","Season 4 Playoffs","Season 5","Season 5 Playoffs","Season 6","Season 6 Playoffs","Season 7","Season 7 Playoffs"];
 
@@ -1844,6 +1960,7 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
         {activeTab === "Schedule" && <ScheduleTab league={league} season={season} />}
         {activeTab === "Box Scores" && <BoxScoresTab league={league} season={season} />}
         {activeTab === "Accolades" && <AccoladesTab league={league} season={season} />}
+        {activeTab === "Champions" && <ChampionsTab league={league} season={season} />}
         {activeTab === "Articles" && <ArticlesTab league={league} />}
         {activeTab === "Stats" && <StatsViewTab league={league} season={season} />}
       </div>
