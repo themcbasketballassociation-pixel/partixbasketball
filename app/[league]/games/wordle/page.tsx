@@ -25,18 +25,17 @@ type Profile = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Pick the team from the most-recent season the player was on */
+/** Pick the team from the most-recent season the player was on.
+ *  Entries with a season number sort ahead of null-season entries. */
 function getMostRecentTeam(uuid: string, ptArr: PlayerTeamEntry[]): Team | null {
   const mine = ptArr.filter(pt => pt.mc_uuid === uuid);
   if (!mine.length) return null;
-  const withSeason = [...mine]
-    .filter(pt => pt.season)
-    .sort((a, b) => {
-      const na = parseInt(a.season!.replace(/\D/g, "") || "0");
-      const nb = parseInt(b.season!.replace(/\D/g, "") || "0");
-      return nb - na; // descending — most recent first
-    });
-  return (withSeason[0] ?? mine[0]).teams ?? null;
+  const sorted = [...mine].sort((a, b) => {
+    const na = a.season ? parseInt(a.season.replace(/\D/g, "") || "0") : -1;
+    const nb = b.season ? parseInt(b.season.replace(/\D/g, "") || "0") : -1;
+    return nb - na; // descending — most recent first
+  });
+  return sorted[0].teams ?? null;
 }
 
 /** Shuffle array with seeded RNG so daily order is stable but not alphabetical */
@@ -90,7 +89,7 @@ const colorCls: Record<Color, string> = {
 
 function GuessRow({ result, reveal }: { result: GuessResult; reveal: boolean }) {
   const cols: { key: keyof Omit<GuessResult, "profile">; label: string; val: string }[] = [
-    { key: "team",     label: "Team",  val: result.profile.team?.abbreviation ?? "—" },
+    { key: "team",     label: "Team",  val: result.profile.team?.abbreviation ?? ""  },
     { key: "division", label: "Div",   val: result.profile.division ?? "—"            },
     { key: "ppg",      label: "PPG",   val: result.profile.ppg.toFixed(1)             },
     { key: "rpg",      label: "RPG",   val: result.profile.rpg.toFixed(1)             },
@@ -184,22 +183,31 @@ export default function WordlePage({ params }: { params?: Promise<{ league?: str
         if (a.type === "Finals Champion") ringMap[a.mc_uuid] = (ringMap[a.mc_uuid] ?? 0) + 1;
       }
 
-      // Build a Profile for EVERY player — those without stats default to 0
-      const all: Profile[] = playersArr.map(p => {
-        const s    = statsMap[p.mc_uuid];
-        const team = getMostRecentTeam(p.mc_uuid, ptArr);
-        return {
-          mc_uuid:     p.mc_uuid,
-          mc_username: p.mc_username,
-          team,
-          division:    team?.division ?? null,
-          ppg:         s?.ppg  ?? 0,
-          rpg:         s?.rpg  ?? 0,
-          apg:         s?.apg  ?? 0,
-          rings:       ringMap[p.mc_uuid] ?? 0,
-          hasStats:    (s?.gp  ?? 0) > 0,
-        };
-      });
+      // Only include players who have any connection to this league
+      // (either a team entry or recorded stats in this league)
+      const leagueUuids = new Set([
+        ...ptArr.map(pt => pt.mc_uuid),
+        ...statsArr.map(s => s.mc_uuid),
+      ]);
+
+      // Build a Profile for every league-relevant player
+      const all: Profile[] = playersArr
+        .filter(p => leagueUuids.has(p.mc_uuid))
+        .map(p => {
+          const s    = statsMap[p.mc_uuid];
+          const team = getMostRecentTeam(p.mc_uuid, ptArr);
+          return {
+            mc_uuid:     p.mc_uuid,
+            mc_username: p.mc_username,
+            team,
+            division:    team?.division ?? null,
+            ppg:         s?.ppg  ?? 0,
+            rpg:         s?.rpg  ?? 0,
+            apg:         s?.apg  ?? 0,
+            rings:       ringMap[p.mc_uuid] ?? 0,
+            hasStats:    (s?.gp  ?? 0) > 0,
+          };
+        });
 
       // Secret pool: only players with actual recorded stats, stable-shuffled
       const pool    = seededShuffle(all.filter(p => p.hasStats), 1337);
@@ -342,7 +350,7 @@ export default function WordlePage({ params }: { params?: Promise<{ league?: str
                   {filtered.length === 0 ? (
                     <div className="px-3 py-3 text-sm text-slate-500">No players found</div>
                   ) : (
-                    filtered.slice(0, 40).map(p => (
+                    filtered.map(p => (
                       <button
                         key={p.mc_uuid}
                         className="flex items-center gap-2 w-full px-3 py-2 text-sm text-left hover:bg-slate-800 transition"

@@ -265,7 +265,7 @@ function PlayerModal({
           {filtered.length === 0 ? (
             <div className="px-4 py-4 text-sm text-slate-500">No players found</div>
           ) : (
-            filtered.slice(0, 40).map(p => (
+            filtered.map(p => (
               <button
                 key={p.mc_uuid}
                 className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-left hover:bg-slate-800 transition"
@@ -355,8 +355,12 @@ export default function GridPage({ params }: { params?: Promise<{ league?: strin
       setPtMap(pm);
       setAllAccolades(accsArr);
 
-      // All players (not just stats-holders) are guessable
-      setAllPlayers(playersArr);
+      // Only include players connected to this league (have a team entry or stats)
+      const leagueUuids = new Set([
+        ...ptArr.map(pt => pt.mc_uuid),
+        ...statsArr.map(s => s.mc_uuid),
+      ]);
+      setAllPlayers(playersArr.filter(p => leagueUuids.has(p.mc_uuid)));
 
       const uuids  = playersArr.map(p => p.mc_uuid);
       const grid   = generateGrid(dayNum, teamsArr, pm, sm, rm, am, uuids, accsArr);
