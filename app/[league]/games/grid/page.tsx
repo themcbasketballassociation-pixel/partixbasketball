@@ -360,9 +360,10 @@ export default function GridPage({ params }: { params?: Promise<{ league?: strin
         ...ptArr.map(pt => pt.mc_uuid),
         ...statsArr.map(s => s.mc_uuid),
       ]);
-      setAllPlayers(playersArr.filter(p => leagueUuids.has(p.mc_uuid)));
+      const leaguePlayers = playersArr.filter(p => leagueUuids.has(p.mc_uuid));
+      setAllPlayers(leaguePlayers);
 
-      const uuids  = playersArr.map(p => p.mc_uuid);
+      const uuids  = leaguePlayers.map(p => p.mc_uuid);
       const grid   = generateGrid(dayNum, teamsArr, pm, sm, rm, am, uuids, accsArr);
 
       if (!grid) {
