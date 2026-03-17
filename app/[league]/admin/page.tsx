@@ -1733,8 +1733,9 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
     { key: "ast",      label: "AST", hint: "Total Assists",               slash: false },
     { key: "stl",      label: "STL", hint: "Total Steals",                slash: false },
     { key: "blk",      label: "BLK", hint: "Total Blocks",                slash: false },
-    { key: "fg",       label: "FG",  hint: "FG Made / Attempted (14/25)", slash: true  },
-    { key: "three_fg", label: "3PT", hint: "3PT Made / Attempted (5/12)", slash: true  },
+    { key: "fg",          label: "FG",   hint: "FG Made / Attempted (14/25)", slash: true  },
+    { key: "three_made",  label: "3s",   hint: "Total 3-pointers made",       slash: false },
+    { key: "three_pct",   label: "3FG%", hint: "3-point % (e.g. 41.7)",       slash: false },
   ];
 
   const [players, setPlayers] = useState<Player[]>([]);
@@ -1783,8 +1784,9 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
             ast: gp ? String(round((row.apg ?? 0) * gp)) : "",
             stl: gp ? String(round((row.spg ?? 0) * gp)) : "",
             blk: gp ? String(round((row.bpg ?? 0) * gp)) : "",
-            fg:       "",
-            three_fg: "",
+            fg:           "",
+            three_made:   row.three_pt_made  != null ? String(row.three_pt_made)  : "",
+            three_pct:    row.three_pt_pct   != null ? String(row.three_pt_pct)   : "",
           });
         }
       })
@@ -1831,10 +1833,8 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
     const [fgMade, fgAtt] = parseSlash(fields.fg);
     const fg_pct = fgMade !== null && fgAtt !== null && fgAtt > 0
       ? Math.round(fgMade / fgAtt * 1000) / 10 : loadedFgPct;
-    const [tpMade, tpAtt] = parseSlash(fields.three_fg);
-    const three_pt_pct = tpMade !== null && tpAtt !== null && tpAtt > 0
-      ? Math.round(tpMade / tpAtt * 1000) / 10 : loadedThreePct;
-    const three_pt_made = tpMade ?? loadedThreeMade;
+    const three_pt_made = fields.three_made?.trim() ? (parseFloat(fields.three_made) || null) : loadedThreeMade;
+    const three_pt_pct  = fields.three_pct?.trim()  ? (parseFloat(fields.three_pct)  || null) : loadedThreePct;
     const r = await fetch(`/api/stats?league=${encodeURIComponent(league)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
