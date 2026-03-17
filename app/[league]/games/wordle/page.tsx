@@ -226,7 +226,7 @@ function WordleContent({ slug, today }: { slug: string; today: number }) {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  const urlDay = parseInt(searchParams.get("day") ?? "") || today;
+  const urlDay = parseInt(searchParams?.get("day") ?? "") || today;
   const [viewDay, setViewDay] = useState<number>(Math.min(Math.max(1, urlDay), today));
 
   const [allProfiles, setAllProfiles] = useState<Profile[]>([]);
