@@ -8,9 +8,14 @@ const leagueNames: Record<string, string> = {
 };
 
 const SEASONS = [
-  "Season 1","Season 1 Playoffs","Season 2","Season 2 Playoffs","Season 3","Season 3 Playoffs",
-  "Season 4","Season 4 Playoffs","Season 5","Season 5 Playoffs","Season 6","Season 6 Playoffs",
-  "Season 7","Season 7 Playoffs",
+  "Season 1","Season 2","Season 3","Season 4","Season 5","Season 6","Season 7",
+];
+
+type TabType = "regular" | "playoffs" | "combined";
+const TABS: { key: TabType; label: string }[] = [
+  { key: "regular",  label: "Regular Season" },
+  { key: "playoffs", label: "Playoffs" },
+  { key: "combined", label: "Combined" },
 ];
 
 type Team = { id: string; name: string; abbreviation: string };
@@ -39,19 +44,23 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
   const leagueDisplay = leagueNames[slug] ?? slug.toUpperCase();
 
   const [season, setSeason] = React.useState(SEASONS[SEASONS.length - 1]);
+  const [tab, setTab] = React.useState<TabType>("regular");
   const [rows, setRows] = React.useState<StatRow[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [sortKey, setSortKey] = React.useState<keyof StatRow>("ppg");
   const [sortDir, setSortDir] = React.useState<"desc" | "asc">("desc");
 
+  // "all" sent to API when "All Time" selected
+  const apiSeason = season === "All Time" ? "all" : season;
+
   React.useEffect(() => {
     if (!slug) return;
     setLoading(true);
-    fetch(`/api/stats?league=${encodeURIComponent(slug)}&season=${encodeURIComponent(season)}`)
+    fetch(`/api/stats?league=${encodeURIComponent(slug)}&season=${encodeURIComponent(apiSeason)}&type=${tab}`)
       .then((r) => r.json())
       .then((d) => { setRows(Array.isArray(d) ? d : []); setLoading(false); })
       .catch(() => setLoading(false));
-  }, [slug, season]);
+  }, [slug, apiSeason, tab]);
 
   const handleSort = (key: keyof StatRow) => {
     if (sortKey === key) {
@@ -65,22 +74,24 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
   const sorted = [...rows].sort((a, b) => {
     const av = a[sortKey] as number | null;
     const bv = b[sortKey] as number | null;
-    const diff = ((bv ?? -Infinity) - (av ?? -Infinity));
+    const diff = (bv ?? -Infinity) - (av ?? -Infinity);
     return sortDir === "desc" ? diff : -diff;
   });
 
   const cols: { key: keyof StatRow; label: string; title: string }[] = [
-    { key: "gp",            label: "GP",    title: "Games Played" },
-    { key: "ppg",           label: "PPG",   title: "Points Per Game" },
-    { key: "rpg",           label: "RPG",   title: "Rebounds Per Game" },
-    { key: "apg",           label: "APG",   title: "Assists Per Game" },
-    { key: "spg",           label: "SPG",   title: "Steals Per Game" },
-    { key: "bpg",           label: "BPG",   title: "Blocks Per Game" },
-    { key: "fg_pct",        label: "FG%",   title: "Field Goal %" },
-    { key: "three_pt_made", label: "3s",    title: "Total 3-Pointers Made" },
-    { key: "tppg",          label: "3PPG",  title: "3-Pointers Per Game" },
-    { key: "three_pt_pct",  label: "3FG%",  title: "3-Point %" },
+    { key: "gp",            label: "GP",   title: "Games Played" },
+    { key: "ppg",           label: "PPG",  title: "Points Per Game" },
+    { key: "rpg",           label: "RPG",  title: "Rebounds Per Game" },
+    { key: "apg",           label: "APG",  title: "Assists Per Game" },
+    { key: "spg",           label: "SPG",  title: "Steals Per Game" },
+    { key: "bpg",           label: "BPG",  title: "Blocks Per Game" },
+    { key: "fg_pct",        label: "FG%",  title: "Field Goal %" },
+    { key: "three_pt_made", label: "3s",   title: "Total 3-Pointers Made" },
+    { key: "tppg",          label: "3PPG", title: "3-Pointers Per Game" },
+    { key: "three_pt_pct",  label: "3FG%", title: "3-Point %" },
   ];
+
+  const seasonOptions = ["All Time", ...SEASONS];
 
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
@@ -95,16 +106,35 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
           value={season}
           onChange={(e) => setSeason(e.target.value)}
         >
-          {SEASONS.map((s) => (
+          {seasonOptions.map((s) => (
             <option key={s} value={s}>{s}</option>
           ))}
         </select>
       </div>
 
+      {/* Tabs */}
+      <div className="flex border-b border-slate-800 px-6">
+        {TABS.map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            className={`px-4 py-3 text-sm font-medium transition-colors ${
+              tab === key
+                ? "border-b-2 border-blue-500 text-white"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {loading ? (
         <div className="p-10 text-center text-slate-500">Loading stats...</div>
       ) : rows.length === 0 ? (
-        <div className="p-10 text-center text-slate-500">No stats recorded for {season} yet.</div>
+        <div className="p-10 text-center text-slate-500">
+          No stats recorded for {season}{tab === "playoffs" ? " Playoffs" : tab === "combined" ? " (Regular + Playoffs)" : ""} yet.
+        </div>
       ) : (
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">

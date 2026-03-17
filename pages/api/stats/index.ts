@@ -1,10 +1,45 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { supabase } from "../../../lib/supabase";
 
-function fmtMPG(seconds: number) {
-  const m = Math.floor(seconds / 60);
-  const s = Math.round(seconds % 60);
-  return `${m}:${s.toString().padStart(2, "0")}`;
+const ALL_REGULAR_SEASONS = [
+  "Season 1","Season 2","Season 3","Season 4","Season 5","Season 6","Season 7",
+];
+
+function getQuerySeasons(season: string, type: string): string[] {
+  const base = season === "all" ? ALL_REGULAR_SEASONS : [season];
+  if (type === "playoffs") return base.map((s) => `${s} Playoffs`);
+  if (type === "combined") return [...base, ...base.map((s) => `${s} Playoffs`)];
+  return base; // regular (default)
+}
+
+function mergePlayerRows(rows: Record<string, unknown>[]) {
+  let gp = 0, wPts = 0, wReb = 0, wAst = 0, wStl = 0, wBlk = 0;
+  let wFg = 0, totalThree = 0, wThreePct = 0;
+  for (const r of rows) {
+    const g = (r.gp as number) ?? 0;
+    gp += g;
+    wPts += ((r.ppg as number) ?? 0) * g;
+    wReb += ((r.rpg as number) ?? 0) * g;
+    wAst += ((r.apg as number) ?? 0) * g;
+    wStl += ((r.spg as number) ?? 0) * g;
+    wBlk += ((r.bpg as number) ?? 0) * g;
+    wFg += ((r.fg_pct as number) ?? 0) * g;
+    totalThree += (r.three_pt_made as number) ?? 0;
+    wThreePct += ((r.three_pt_pct as number) ?? 0) * g;
+  }
+  const r1 = (n: number) => Math.round(n * 10) / 10;
+  return {
+    gp,
+    ppg: gp > 0 ? r1(wPts / gp) : null,
+    rpg: gp > 0 ? r1(wReb / gp) : null,
+    apg: gp > 0 ? r1(wAst / gp) : null,
+    spg: gp > 0 ? r1(wStl / gp) : null,
+    bpg: gp > 0 ? r1(wBlk / gp) : null,
+    fg_pct: gp > 0 ? r1(wFg / gp) : null,
+    three_pt_made: totalThree,
+    tppg: gp > 0 ? r1(totalThree / gp) : null,
+    three_pt_pct: gp > 0 ? r1(wThreePct / gp) : null,
+  };
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -24,20 +59,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json(data);
   }
 
-  // GET with mc_uuid + season — load a single player's manual stats
-  const { mc_uuid, season } = req.query;
-  if (mc_uuid && season) {
-    const { data, error } = await supabase
-      .from("stats")
-      .select("*")
-      .eq("mc_uuid", mc_uuid as string)
-      .eq("league", league as string)
-      .eq("season", season as string)
-      .maybeSingle();
-    if (error) return res.status(500).json({ error: error.message });
-    return res.status(200).json(data ? [data] : []);
-  }
-
   // DELETE — remove a player's stats for a season
   if (req.method === "DELETE") {
     const { mc_uuid: delUuid, season: delSeason } = req.query;
@@ -52,35 +73,67 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({ success: true });
   }
 
-  // GET with season only — load all players' manual stats for that season
+  const { mc_uuid, season, type } = req.query;
+
+  // GET with mc_uuid + season — load a single player's manual stats (used by admin)
+  if (mc_uuid && season) {
+    const { data, error } = await supabase
+      .from("stats")
+      .select("*")
+      .eq("mc_uuid", mc_uuid as string)
+      .eq("league", league as string)
+      .eq("season", season as string)
+      .maybeSingle();
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json(data ? [data] : []);
+  }
+
+  // GET with season (and optional type) — leaderboard
   if (season) {
+    const typeStr = (type as string) ?? "regular";
+    const querySeasons = getQuerySeasons(season as string, typeStr);
+
     const { data, error } = await supabase
       .from("stats")
       .select("*")
       .eq("league", league as string)
-      .eq("season", season as string);
+      .in("season", querySeasons);
     if (error) return res.status(500).json({ error: error.message });
-    // Fetch player usernames separately (no FK on stats table)
-    const uuids = (data ?? []).map((r) => r.mc_uuid);
+
+    // Group by mc_uuid and merge across seasons
+    const byPlayer: Record<string, Record<string, unknown>[]> = {};
+    for (const row of data ?? []) {
+      if (!byPlayer[row.mc_uuid]) byPlayer[row.mc_uuid] = [];
+      byPlayer[row.mc_uuid].push(row);
+    }
+
+    const uuids = Object.keys(byPlayer);
     const { data: playerRows } = uuids.length
       ? await supabase.from("players").select("mc_uuid, mc_username").in("mc_uuid", uuids)
       : { data: [] };
     const playerMap: Record<string, string> = {};
     for (const p of playerRows ?? []) playerMap[p.mc_uuid] = p.mc_username;
-    const { data: teamRows } = await supabase.from("player_teams").select("mc_uuid, teams(id, name, abbreviation)").eq("league", league as string);
+
+    const { data: teamRows } = await supabase
+      .from("player_teams")
+      .select("mc_uuid, teams(id, name, abbreviation)")
+      .eq("league", league as string);
     const teamMap: Record<string, unknown> = {};
     for (const row of teamRows ?? []) {
       if (row.mc_uuid && row.teams) teamMap[row.mc_uuid] = row.teams;
     }
-    const result = (data ?? []).map((row, i) => ({
-      rank: i + 1,
-      mc_uuid: row.mc_uuid,
-      mc_username: playerMap[row.mc_uuid] ?? row.mc_uuid,
-      team: teamMap[row.mc_uuid] ?? null,
-      gp: row.gp, ppg: row.ppg, rpg: row.rpg, apg: row.apg, spg: row.spg, bpg: row.bpg,
-      fg_pct: row.fg_pct, three_pt_made: row.three_pt_made, three_pt_pct: row.three_pt_pct,
-      tppg: row.gp && row.three_pt_made ? Math.round(row.three_pt_made / row.gp * 10) / 10 : null,
-    }));
+
+    const result = uuids.map((uuid) => {
+      const merged = mergePlayerRows(byPlayer[uuid]);
+      return {
+        rank: 0,
+        mc_uuid: uuid,
+        mc_username: playerMap[uuid] ?? uuid,
+        team: teamMap[uuid] ?? null,
+        ...merged,
+      };
+    });
+
     result.sort((a, b) => (b.ppg ?? 0) - (a.ppg ?? 0));
     result.forEach((s, i) => { s.rank = i + 1; });
     return res.status(200).json(result);
@@ -88,65 +141,5 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
 
-  const { data: rows, error } = await supabase
-    .from("game_stats")
-    .select(`mc_uuid, points, rebounds_off, rebounds_def, assists, steals, blocks, turnovers, minutes_played, fg_made, fg_attempted, three_pt_made, three_pt_attempted, game_id, players(mc_uuid, mc_username), games!inner(id, league)`)
-    .eq("games.league", league as string);
-  if (error) return res.status(500).json({ error: error.message });
-
-  const { data: teamRows } = await supabase.from("player_teams").select("mc_uuid, teams(id, name, abbreviation)").eq("league", league as string);
-  const teamMap: Record<string, unknown> = {};
-  for (const row of teamRows ?? []) {
-    if (row.mc_uuid && row.teams) teamMap[row.mc_uuid] = row.teams;
-  }
-
-  const playerMap: Record<string, { mc_uuid: string; mc_username: string; games: number; points: number; rebounds_off: number; rebounds_def: number; assists: number; steals: number; blocks: number; turnovers: number; minutes_played: number; fg_made: number; fg_attempted: number; three_pt_made: number; three_pt_attempted: number }> = {};
-  for (const row of rows ?? []) {
-    const key = row.mc_uuid;
-    const username = (row.players as { mc_username?: string } | null)?.mc_username ?? key;
-    if (!playerMap[key]) {
-      playerMap[key] = { mc_uuid: key, mc_username: username, games: 0, points: 0, rebounds_off: 0, rebounds_def: 0, assists: 0, steals: 0, blocks: 0, turnovers: 0, minutes_played: 0, fg_made: 0, fg_attempted: 0, three_pt_made: 0, three_pt_attempted: 0 };
-    }
-    const p = playerMap[key];
-    p.games++;
-    p.points += row.points ?? 0;
-    p.rebounds_off += row.rebounds_off ?? 0;
-    p.rebounds_def += row.rebounds_def ?? 0;
-    p.assists += row.assists ?? 0;
-    p.steals += row.steals ?? 0;
-    p.blocks += row.blocks ?? 0;
-    p.turnovers += row.turnovers ?? 0;
-    p.minutes_played += row.minutes_played ?? 0;
-    p.fg_made += row.fg_made ?? 0;
-    p.fg_attempted += row.fg_attempted ?? 0;
-    p.three_pt_made += row.three_pt_made ?? 0;
-    p.three_pt_attempted += row.three_pt_attempted ?? 0;
-  }
-
-  const round1 = (n: number) => Math.round(n * 10) / 10;
-  const stats = Object.values(playerMap).map((p, i) => ({
-    rank: i + 1,
-    mc_uuid: p.mc_uuid,
-    mc_username: p.mc_username,
-    team: teamMap[p.mc_uuid] ?? null,
-    gp: p.games,
-    mpg: fmtMPG(p.games > 0 ? p.minutes_played / p.games : 0),
-    ppg: round1(p.games > 0 ? p.points / p.games : 0),
-    orpg: round1(p.games > 0 ? p.rebounds_off / p.games : 0),
-    drpg: round1(p.games > 0 ? p.rebounds_def / p.games : 0),
-    rpg: round1(p.games > 0 ? (p.rebounds_off + p.rebounds_def) / p.games : 0),
-    apg: round1(p.games > 0 ? p.assists / p.games : 0),
-    spg: round1(p.games > 0 ? p.steals / p.games : 0),
-    bpg: round1(p.games > 0 ? p.blocks / p.games : 0),
-    tpg: round1(p.games > 0 ? p.turnovers / p.games : 0),
-    fg_pct: p.fg_attempted > 0 ? Math.round(p.fg_made / p.fg_attempted * 1000) / 10 : 0,
-    three_pt_made: p.three_pt_made,
-    tppg: round1(p.games > 0 ? p.three_pt_made / p.games : 0),
-    three_pt_pct: p.three_pt_attempted > 0 ? Math.round(p.three_pt_made / p.three_pt_attempted * 1000) / 10 : 0,
-  }));
-
-  stats.sort((a, b) => b.ppg - a.ppg);
-  stats.forEach((s, i) => { s.rank = i + 1; });
-
-  return res.status(200).json(stats);
+  return res.status(400).json({ error: "season param required" });
 }
