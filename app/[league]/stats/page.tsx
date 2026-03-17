@@ -165,10 +165,10 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <img
-                        src={`https://crafatar.com/avatars/${row.mc_uuid}?size=32&default=MHF_Steve&overlay`}
+                        src={`https://minotar.net/avatar/${row.mc_username}/32`}
                         alt={row.mc_username}
                         className="w-8 h-8 rounded"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                        onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/32"; }}
                       />
                       <span className="font-medium text-white">{row.mc_username}</span>
                     </div>

@@ -25,34 +25,26 @@ type StatRow = {
   three_pt_pct: number | null;
 };
 type Accolade = {
-  id: string;
-  type: string;
-  season: string;
-  description: string | null;
-  mc_uuid: string;
-  players: { mc_uuid: string; mc_username: string };
+  id: string; type: string; season: string; description: string | null;
+  mc_uuid: string; players: { mc_uuid: string; mc_username: string };
 };
+type PlayerTeam = { mc_uuid: string; team_id: string; season: string | null };
+type TeamRecord = { team_id: string; wins: number; losses: number };
 
 const na = (v: number | null | undefined, suffix = "") =>
   v == null ? "—" : `${v}${suffix}`;
-
-function RingIcon() {
-  return (
-    <span title="Finals Champion" className="inline-flex items-center justify-center w-5 h-5 text-sm">
-      🏆
-    </span>
-  );
-}
 
 function PlayerCard({
   player,
   stats,
   accolades,
+  allTimeRecord,
   onClose,
 }: {
   player: Player;
   stats: StatRow | null;
   accolades: Accolade[];
+  allTimeRecord: { wins: number; losses: number };
   onClose: () => void;
 }) {
   const rings = accolades.filter((a) => a.mc_uuid === player.mc_uuid && a.type === "Finals Champion");
@@ -74,9 +66,10 @@ function PlayerCard({
           </button>
           <div className="flex items-center gap-4">
             <img
-              src={`https://crafatar.com/avatars/${player.mc_uuid}?size=64&default=MHF_Steve&overlay`}
+              src={`https://minotar.net/avatar/${player.mc_username}/64`}
               alt={player.mc_username}
               className="w-16 h-16 rounded-xl ring-2 ring-slate-700 flex-shrink-0"
+              onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/64"; }}
             />
             <div className="min-w-0">
               <h2 className="text-xl font-bold text-white truncate">{player.mc_username}</h2>
@@ -102,6 +95,25 @@ function PlayerCard({
         </div>
 
         <div className="overflow-y-auto max-h-[60vh]">
+          {/* All-time record */}
+          <div className="px-6 py-4 border-b border-slate-800">
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">All-Time Record</h3>
+            {allTimeRecord.wins === 0 && allTimeRecord.losses === 0 ? (
+              <p className="text-slate-600 text-sm">No record data.</p>
+            ) : (
+              <div className="flex items-center gap-3">
+                <span className="text-2xl font-bold text-white tabular-nums">
+                  {allTimeRecord.wins}-{allTimeRecord.losses}
+                </span>
+                {allTimeRecord.wins + allTimeRecord.losses > 0 && (
+                  <span className="text-slate-400 text-sm">
+                    ({Math.round(allTimeRecord.wins / (allTimeRecord.wins + allTimeRecord.losses) * 1000) / 10}% win rate)
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* All-time stats */}
           <div className="px-6 py-4 border-b border-slate-800">
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">All-Time Stats</h3>
@@ -183,6 +195,8 @@ export default function PlayersPage({ params }: { params?: Promise<{ league?: st
   const [players, setPlayers] = React.useState<Player[]>([]);
   const [statsMap, setStatsMap] = React.useState<Record<string, StatRow>>({});
   const [accolades, setAccolades] = React.useState<Accolade[]>([]);
+  const [recordMap, setRecordMap] = React.useState<Record<string, { wins: number; losses: number }>>({});
+  const [playerTeams, setPlayerTeams] = React.useState<PlayerTeam[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [selected, setSelected] = React.useState<Player | null>(null);
   const [search, setSearch] = React.useState("");
@@ -193,21 +207,38 @@ export default function PlayersPage({ params }: { params?: Promise<{ league?: st
       fetch("/api/players").then((r) => r.json()),
       fetch(`/api/stats?league=${slug}&season=all&type=combined`).then((r) => r.json()),
       fetch(`/api/accolades?league=${slug}`).then((r) => r.json()),
-    ]).then(([p, s, a]) => {
+      fetch(`/api/teams/records?league=${slug}`).then((r) => r.json()),
+      fetch(`/api/teams/players?league=${slug}`).then((r) => r.json()),
+    ]).then(([p, s, a, rec, pt]) => {
       setPlayers(Array.isArray(p) ? p : []);
       const map: Record<string, StatRow> = {};
       if (Array.isArray(s)) s.forEach((row: StatRow) => { map[row.mc_uuid] = row; });
       setStatsMap(map);
       setAccolades(Array.isArray(a) ? a : []);
+      // Build record map keyed by team_id
+      const rmap: Record<string, { wins: number; losses: number }> = {};
+      if (Array.isArray(rec)) rec.forEach((r: TeamRecord) => { rmap[r.team_id] = { wins: r.wins, losses: r.losses }; });
+      setRecordMap(rmap);
+      setPlayerTeams(Array.isArray(pt) ? pt : []);
       setLoading(false);
     });
   }, [slug]);
+
+  // Compute all-time W/L for a player
+  const getRecord = (uuid: string) => {
+    const teams = playerTeams.filter((pt) => pt.mc_uuid === uuid);
+    let wins = 0, losses = 0;
+    for (const pt of teams) {
+      const rec = recordMap[pt.team_id];
+      if (rec) { wins += rec.wins; losses += rec.losses; }
+    }
+    return { wins, losses };
+  };
 
   const filtered = search.trim()
     ? players.filter((p) => p.mc_username.toLowerCase().includes(search.toLowerCase()))
     : players;
 
-  // Sort: players with stats first, then by ppg desc
   const sorted = [...filtered].sort((a, b) => {
     const as = statsMap[a.mc_uuid];
     const bs = statsMap[b.mc_uuid];
@@ -224,6 +255,7 @@ export default function PlayersPage({ params }: { params?: Promise<{ league?: st
           player={selected}
           stats={statsMap[selected.mc_uuid] ?? null}
           accolades={accolades}
+          allTimeRecord={getRecord(selected.mc_uuid)}
           onClose={() => setSelected(null)}
         />
       )}
@@ -251,6 +283,7 @@ export default function PlayersPage({ params }: { params?: Promise<{ league?: st
             {sorted.map((p) => {
               const st = statsMap[p.mc_uuid];
               const rings = accolades.filter((a) => a.mc_uuid === p.mc_uuid && a.type === "Finals Champion");
+              const rec = getRecord(p.mc_uuid);
               return (
                 <button
                   key={p.mc_uuid}
@@ -259,18 +292,22 @@ export default function PlayersPage({ params }: { params?: Promise<{ league?: st
                 >
                   <div className="flex items-center gap-3 mb-3">
                     <img
-                      src={`https://crafatar.com/avatars/${p.mc_uuid}?size=48&default=MHF_Steve&overlay`}
+                      src={`https://minotar.net/avatar/${p.mc_username}/48`}
                       alt={p.mc_username}
                       className="w-12 h-12 rounded-lg ring-1 ring-slate-700 flex-shrink-0 group-hover:ring-slate-500 transition"
+                      onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/48"; }}
                     />
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <div className="font-semibold text-white truncate">{p.mc_username}</div>
                       <div className="text-xs text-slate-500 truncate">{st?.team?.name ?? "—"}</div>
-                      {rings.length > 0 && (
-                        <div className="flex gap-0.5 mt-0.5">
-                          {rings.map((r) => <RingIcon key={r.id} />)}
-                        </div>
-                      )}
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {(rec.wins > 0 || rec.losses > 0) && (
+                          <span className="text-xs text-slate-400 tabular-nums">{rec.wins}-{rec.losses}</span>
+                        )}
+                        {rings.length > 0 && (
+                          <span className="text-sm">{rings.map(() => "🏆").join("")}</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                   {st ? (
