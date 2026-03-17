@@ -108,10 +108,10 @@ function PlayerSearchSelect({
           onClick={() => { setQuery(""); setOpen(true); }}
         >
           <img
-            src={`https://crafatar.com/avatars/${selected.mc_uuid}?size=24&default=MHF_Steve&overlay`}
+            src={`https://minotar.net/avatar/${selected.mc_username}/24`}
             className="w-5 h-5 rounded flex-shrink-0"
             alt=""
-            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+            onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/24"; }}
           />
           <span className="flex-1">{selected.mc_username}</span>
           {renderSuffix && renderSuffix(selected)}
@@ -149,10 +149,10 @@ function PlayerSearchSelect({
                 onClick={() => { onChange(p.mc_uuid); setQuery(""); setOpen(false); }}
               >
                 <img
-                  src={`https://crafatar.com/avatars/${p.mc_uuid}?size=24&default=MHF_Steve&overlay`}
+                  src={`https://minotar.net/avatar/${p.mc_username}/24`}
                   className="w-5 h-5 rounded flex-shrink-0"
                   alt=""
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                  onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/24"; }}
                 />
                 <span className="text-white flex-1">{p.mc_username}</span>
                 {renderSuffix && renderSuffix(p)}
@@ -167,13 +167,8 @@ function PlayerSearchSelect({
 
 // ─── Tab: Players ─────────────────────────────────────────────────────────────
 
-function PlayersTab({ league, season: initialSeason }: { league: string; season: string }) {
-  const SEASONS = ["Season 1","Season 1 Playoffs","Season 2","Season 2 Playoffs","Season 3","Season 3 Playoffs","Season 4","Season 4 Playoffs","Season 5","Season 5 Playoffs","Season 6","Season 6 Playoffs","Season 7","Season 7 Playoffs"];
+function PlayersTab({ league }: { league: string }) {
   const [players, setPlayers] = useState<Player[]>([]);
-  const [playerTeams, setPlayerTeams] = useState<PlayerTeam[]>([]);
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [season, setSeason] = useState(initialSeason);
-  const [newUuid, setNewUuid] = useState("");
   const [newDiscord, setNewDiscord] = useState("");
   const [adding, setAdding] = useState(false);
   const [err, setErr] = useState("");
@@ -189,15 +184,7 @@ function PlayersTab({ league, season: initialSeason }: { league: string; season:
       .then((r) => r.json())
       .then((p) => setPlayers(Array.isArray(p) ? p : []))
       .catch(() => setPlayers([]));
-    fetch(`/api/teams/players?league=${league}&season=${encodeURIComponent(season)}`)
-      .then((r) => r.json())
-      .then((pt) => setPlayerTeams(Array.isArray(pt) ? pt : []))
-      .catch(() => setPlayerTeams([]));
-    fetch(`/api/teams?league=${league}&season=${encodeURIComponent(season)}`)
-      .then((r) => r.json())
-      .then((t) => setTeams(Array.isArray(t) ? t : []))
-      .catch(() => setTeams([]));
-  }, [league, season]);
+  }, [league]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -317,22 +304,6 @@ function PlayersTab({ league, season: initialSeason }: { league: string; season:
     refresh();
   };
 
-  const assignTeam = async (mc_uuid: string, team_id: string) => {
-    if (!team_id) {
-      await fetch(`/api/teams/players?mc_uuid=${mc_uuid}&league=${league}&season=${encodeURIComponent(season)}`, { method: "DELETE" });
-    } else {
-      const r = await fetch("/api/teams/players", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mc_uuid, team_id, league, season }),
-      });
-      if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Assign failed"); return; }
-    }
-    refresh();
-  };
-
-  const teamForPlayer = (uuid: string) => playerTeams.find((pt) => pt.mc_uuid === uuid)?.team_id ?? "";
-
   const [refreshingNames, setRefreshingNames] = useState(false);
   const [refreshResult, setRefreshResult] = useState<{ updated: number; failed: number; total: number } | null>(null);
 
@@ -359,15 +330,16 @@ function PlayersTab({ league, season: initialSeason }: { league: string; season:
           <div className="flex-shrink-0 w-10 h-10 rounded ring-1 ring-slate-700 bg-slate-800 flex items-center justify-center overflow-hidden">
             {lookupState === "loading" ? (
               <span className="text-slate-500 text-xs animate-pulse">...</span>
-            ) : lookupState === "found" && lookedUpUuid ? (
+            ) : lookupState === "found" && newName.trim() ? (
               <img
-                src={`https://crafatar.com/avatars/${lookedUpUuid}?size=40&default=MHF_Steve&overlay`}
+                src={`https://minotar.net/avatar/${newName.trim()}/40`}
                 alt="skin"
                 className="w-10 h-10"
+                onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/40"; }}
               />
             ) : (
               <img
-                src="https://crafatar.com/avatars/MHF_Steve?size=40&overlay"
+                src="https://minotar.net/avatar/MHF_Steve/40"
                 alt="Steve"
                 className="w-10 h-10 opacity-40"
               />
@@ -467,14 +439,6 @@ function PlayersTab({ league, season: initialSeason }: { league: string; season:
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Players ({players.length})</h3>
           <div className="flex items-center gap-2">
-            <label className="text-xs text-slate-500">Season roster:</label>
-            <select
-              className="rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none"
-              value={season}
-              onChange={(e) => setSeason(e.target.value)}
-            >
-              {SEASONS.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
             <button className={btnSecondary} onClick={refreshUsernames} disabled={refreshingNames} title="Re-fetch MC usernames for all players from Mojang">
               {refreshingNames ? "Refreshing..." : "Refresh Usernames"}
             </button>
@@ -499,14 +463,6 @@ function PlayersTab({ league, season: initialSeason }: { league: string; season:
               <div key={p.mc_uuid} className="flex items-center justify-between gap-4 rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 hover:border-slate-700 transition">
                 <Avatar uuid={p.mc_uuid} username={p.mc_username} />
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  <select
-                    className="rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none"
-                    value={teamForPlayer(p.mc_uuid)}
-                    onChange={(e) => assignTeam(p.mc_uuid, e.target.value)}
-                  >
-                    <option value="">No Team</option>
-                    {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                  </select>
                   <button className={btnDanger} onClick={() => deletePlayer(p.mc_uuid)}>Delete</button>
                 </div>
               </div>
@@ -552,22 +508,25 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
   const [err, setErr] = useState("");
   const [records, setRecords] = useState<Record<string, { wins: number; losses: number }>>({});
   const [recordInputs, setRecordInputs] = useState<Record<string, { wins: string; losses: string }>>({});
+  const [allPlayers, setAllPlayers] = useState<Player[]>([]);
+  const [playerTeams, setPlayerTeams] = useState<{ mc_uuid: string; team_id: string; players: Player }[]>([]);
+  const [addingToTeam, setAddingToTeam] = useState<Record<string, string>>({});
 
   const refresh = useCallback(async () => {
-    fetch(`/api/teams?league=${league}&season=${encodeURIComponent(season)}`)
-      .then((r) => r.json())
-      .then((data) => setTeams(Array.isArray(data) ? data : []))
-      .catch(() => setTeams([]));
-    fetch(`/api/teams/records?league=${league}&season=${encodeURIComponent(season)}`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data)) {
-          const map: Record<string, { wins: number; losses: number }> = {};
-          for (const rec of data) map[rec.team_id] = { wins: rec.wins, losses: rec.losses };
-          setRecords(map);
-        }
-      })
-      .catch(() => {});
+    const [teamsData, recData, playersData, ptData] = await Promise.all([
+      fetch(`/api/teams?league=${league}&season=${encodeURIComponent(season)}`).then((r) => r.json()).catch(() => []),
+      fetch(`/api/teams/records?league=${league}&season=${encodeURIComponent(season)}`).then((r) => r.json()).catch(() => []),
+      fetch(`/api/players`).then((r) => r.json()).catch(() => []),
+      fetch(`/api/teams/players?league=${league}&season=${encodeURIComponent(season)}`).then((r) => r.json()).catch(() => []),
+    ]);
+    setTeams(Array.isArray(teamsData) ? teamsData : []);
+    if (Array.isArray(recData)) {
+      const map: Record<string, { wins: number; losses: number }> = {};
+      for (const rec of recData) map[rec.team_id] = { wins: rec.wins, losses: rec.losses };
+      setRecords(map);
+    }
+    setAllPlayers(Array.isArray(playersData) ? playersData : []);
+    setPlayerTeams(Array.isArray(ptData) ? ptData : []);
   }, [league, season]);
 
   useEffect(() => { refresh(); }, [refresh]);
@@ -616,6 +575,26 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
     if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Record save failed"); return; }
     setRecords((prev) => ({ ...prev, [teamId]: { wins, losses } }));
     setRecordInputs((prev) => { const n = { ...prev }; delete n[teamId]; return n; });
+  };
+
+  const addToTeam = async (teamId: string) => {
+    const uuid = addingToTeam[teamId];
+    if (!uuid) return;
+    const r = await fetch("/api/teams/players", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mc_uuid: uuid, team_id: teamId, league, season }),
+    });
+    if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Failed to add player to team"); return; }
+    setAddingToTeam((prev) => { const n = { ...prev }; delete n[teamId]; return n; });
+    refresh();
+  };
+
+  const removeFromTeam = async (uuid: string) => {
+    const params = new URLSearchParams({ mc_uuid: uuid, league, season });
+    const r = await fetch(`/api/teams/players?${params}`, { method: "DELETE" });
+    if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Failed to remove player"); return; }
+    refresh();
   };
 
   const uploadLogo = async (teamId: string, file: File) => {
@@ -758,21 +737,22 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
                     <button className={btnSecondary} onClick={() => setEditing(null)}>Cancel</button>
                   </div>
                 ) : (
-                  <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <div className="flex items-center gap-3">
-                      <TeamLogoAdmin team={t} />
-                      <div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-semibold text-white">{t.name}</span>
-                          <span className="rounded bg-slate-800 px-1.5 py-0.5 text-xs font-mono text-slate-400">{t.abbreviation}</span>
-                          {t.division && (
-                            <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${t.division === "East" ? "bg-orange-950 text-orange-400" : "bg-blue-950 text-blue-400"}`}>{t.division}</span>
-                          )}
+                  <div>
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div className="flex items-center gap-3">
+                        <TeamLogoAdmin team={t} />
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-white">{t.name}</span>
+                            <span className="rounded bg-slate-800 px-1.5 py-0.5 text-xs font-mono text-slate-400">{t.abbreviation}</span>
+                            {t.division && (
+                              <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${t.division === "East" ? "bg-orange-950 text-orange-400" : "bg-blue-950 text-blue-400"}`}>{t.division}</span>
+                            )}
+                          </div>
+                          {t.logo_url && <p className="text-xs text-slate-600 mt-0.5">Logo uploaded</p>}
                         </div>
-                        {t.logo_url && <p className="text-xs text-slate-600 mt-0.5">Logo uploaded</p>}
                       </div>
-                    </div>
-                    <div className="flex gap-2 items-center flex-wrap">
+                      <div className="flex gap-2 items-center flex-wrap">
                       {/* W/L Record */}
                       {recordInputs[t.id] ? (
                         <div className="flex items-center gap-1">
@@ -815,9 +795,57 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
                           }}
                         />
                       </label>
-                      <button className={btnSecondary} onClick={() => { setEditing(t.id); setEditName(t.name); setEditAbbr(t.abbreviation); setEditDivision(t.division ?? ""); setErr(""); }}>Edit</button>
-                      <button className={btnDanger} onClick={() => deleteTeam(t.id)}>Delete</button>
+                        <button className={btnSecondary} onClick={() => { setEditing(t.id); setEditName(t.name); setEditAbbr(t.abbreviation); setEditDivision(t.division ?? ""); setErr(""); }}>Edit</button>
+                        <button className={btnDanger} onClick={() => deleteTeam(t.id)}>Delete</button>
+                      </div>
                     </div>
+                    {/* Roster */}
+                    {(() => {
+                      const roster = playerTeams.filter((pt) => pt.team_id === t.id);
+                      const assigned = new Set(playerTeams.map((pt) => pt.mc_uuid));
+                      const unassigned = allPlayers.filter((p) => !assigned.has(p.mc_uuid));
+                      return (
+                        <div className="mt-3 pt-3 border-t border-slate-800">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Roster ({roster.length})</span>
+                          </div>
+                          {roster.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 mb-2">
+                              {roster.map((pt) => (
+                                <div key={pt.mc_uuid} className="flex items-center gap-1.5 rounded-full bg-slate-800 border border-slate-700 pl-1 pr-2 py-0.5">
+                                  <img
+                                    src={`https://minotar.net/avatar/${pt.players?.mc_username ?? "MHF_Steve"}/20`}
+                                    alt={pt.players?.mc_username}
+                                    className="w-5 h-5 rounded-full flex-shrink-0"
+                                    onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/20"; }}
+                                  />
+                                  <span className="text-xs text-white">{pt.players?.mc_username}</span>
+                                  <button
+                                    className="text-slate-500 hover:text-red-400 transition text-xs leading-none ml-0.5"
+                                    onClick={() => removeFromTeam(pt.mc_uuid)}
+                                    title="Remove from team"
+                                  >✕</button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div className="flex items-center gap-2">
+                            <PlayerSearchSelect
+                              players={unassigned}
+                              value={addingToTeam[t.id] ?? ""}
+                              onChange={(uuid) => setAddingToTeam((prev) => ({ ...prev, [t.id]: uuid }))}
+                              placeholder="Add player..."
+                            />
+                            <button
+                              className={btnPrimary}
+                              onClick={() => addToTeam(t.id)}
+                              disabled={!addingToTeam[t.id]}
+                              style={{ whiteSpace: "nowrap" }}
+                            >Add</button>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
               </div>
@@ -2022,7 +2050,7 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
       </div>
 
       <div className="p-6">
-        {activeTab === "Players" && <PlayersTab league={league} season={season} />}
+        {activeTab === "Players" && <PlayersTab league={league} />}
         {activeTab === "Teams" && <TeamsTab league={league} season={season} />}
         {activeTab === "Schedule" && <ScheduleTab league={league} season={season} />}
         {activeTab === "Box Scores" && <BoxScoresTab league={league} season={season} />}
