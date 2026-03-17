@@ -7,6 +7,8 @@ const leagueNames: Record<string, string> = {
   pbgl: "G League",
 };
 
+const SEASONS = ["Season 1","Season 2","Season 3","Season 4","Season 5","Season 6","Season 7"];
+
 type Team = {
   id: string;
   name: string;
@@ -64,9 +66,10 @@ function TeamCard({ team, roster }: { team: Team; roster: { mc_uuid: string; mc_
           {roster.map((p) => (
             <li key={p.mc_uuid} className="flex items-center gap-3 px-5 py-2.5 hover:bg-slate-800/20 transition">
               <img
-                src={`https://crafatar.com/avatars/${p.mc_uuid}?size=28&default=MHF_Steve&overlay`}
+                src={`https://minotar.net/avatar/${p.mc_username}/28`}
                 alt={p.mc_username}
                 className="w-7 h-7 rounded ring-1 ring-slate-700 flex-shrink-0"
+                onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/28"; }}
               />
               <span className="text-base text-slate-300">{p.mc_username}</span>
             </li>
@@ -107,30 +110,28 @@ function DivisionSection({
   );
 }
 
-export default function TeamsPage({
-  params,
-}: {
-  params?: Promise<{ league?: string }>;
-}) {
+export default function TeamsPage({ params }: { params?: Promise<{ league?: string }> }) {
   const resolved = React.use(params ?? Promise.resolve({})) as { league?: string };
   const slug = resolved.league ?? "";
   const leagueDisplay = leagueNames[slug] ?? slug.toUpperCase();
 
+  const [season, setSeason] = React.useState(SEASONS[SEASONS.length - 1]);
   const [teams, setTeams] = React.useState<Team[]>([]);
   const [playerTeams, setPlayerTeams] = React.useState<PlayerTeam[]>([]);
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
     if (!slug) return;
+    setLoading(true);
     Promise.all([
-      fetch(`/api/teams?league=${slug}`).then((r) => r.json()),
-      fetch(`/api/teams/players?league=${slug}`).then((r) => r.json()),
+      fetch(`/api/teams?league=${slug}&season=${encodeURIComponent(season)}`).then((r) => r.json()),
+      fetch(`/api/teams/players?league=${slug}&season=${encodeURIComponent(season)}`).then((r) => r.json()),
     ]).then(([t, pt]) => {
       setTeams(Array.isArray(t) ? t : []);
       setPlayerTeams(Array.isArray(pt) ? pt : []);
       setLoading(false);
     });
-  }, [slug]);
+  }, [slug, season]);
 
   const playersForTeam = (teamId: string) =>
     playerTeams.filter((pt) => pt.team_id === teamId).map((pt) => pt.players);
@@ -142,18 +143,26 @@ export default function TeamsPage({
 
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
-      {/* Header */}
-      <div className="px-6 py-5 border-b border-slate-800">
-        <h2 className="text-2xl font-bold text-white">Teams</h2>
-        <p className="text-slate-400 text-sm mt-0.5">
-          {leagueDisplay} · {teams.length} teams
-        </p>
+      <div className="px-6 py-5 border-b border-slate-800 flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h2 className="text-2xl font-bold text-white">Teams</h2>
+          <p className="text-slate-400 text-sm mt-0.5">{leagueDisplay} · {teams.length} teams</p>
+        </div>
+        <select
+          className="rounded-lg border border-slate-700 bg-slate-800 text-white text-sm px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          value={season}
+          onChange={(e) => setSeason(e.target.value)}
+        >
+          {SEASONS.map((s) => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
       </div>
 
       {loading ? (
         <div className="p-10 text-center text-slate-500">Loading teams...</div>
       ) : teams.length === 0 ? (
-        <div className="p-10 text-center text-slate-500">No teams yet.</div>
+        <div className="p-10 text-center text-slate-500">No teams for {season} yet.</div>
       ) : hasDivisions ? (
         <div className="divide-y divide-slate-800">
           {eastTeams.length > 0 && (
