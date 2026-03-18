@@ -32,7 +32,13 @@ type Category =
   | { type: "szn_ppg";     min: number; seasonSet: Set<string>; label: string }
   | { type: "szn_rpg";     min: number; seasonSet: Set<string>; label: string }
   | { type: "szn_apg";     min: number; seasonSet: Set<string>; label: string }
-  | { type: "playoff_ppg"; min: number; seasonSet: Set<string>; label: string };
+  | { type: "playoff_ppg"; min: number; seasonSet: Set<string>; label: string }
+  // career totals
+  | { type: "career_pts";  min: number; playerSet: Set<string>; label: string }
+  | { type: "career_reb";  min: number; playerSet: Set<string>; label: string }
+  | { type: "career_ast";  min: number; playerSet: Set<string>; label: string }
+  // played with
+  | { type: "played_with"; refUuid: string; refName: string; refTeamIds: Set<string>; label: string };
 
 type CellState =
   | { status: "empty" }
@@ -80,6 +86,10 @@ function playerFits(
     case "szn_rpg":     return cat.seasonSet.has(uuid);
     case "szn_apg":     return cat.seasonSet.has(uuid);
     case "playoff_ppg": return cat.seasonSet.has(uuid);
+    case "career_pts":  return cat.playerSet.has(uuid);
+    case "career_reb":  return cat.playerSet.has(uuid);
+    case "career_ast":  return cat.playerSet.has(uuid);
+    case "played_with": return uuid !== cat.refUuid && (ptMap[uuid] ?? []).some(pt => cat.refTeamIds.has(pt.team_id));
   }
 }
 
@@ -106,15 +116,16 @@ function checkValidAssignment(cellPlayers: string[][]): boolean {
 }
 
 function generateGrid(
-  dayNum:       number,
-  allTeams:     Team[],
-  ptMap:        Record<string, PlayerTeamEntry[]>,
-  statsMap:     Record<string, StatRow>,
-  ringMap:      Record<string, number>,
-  accoladeMap:  Record<string, string[]>,
-  uuids:        string[],
-  allAccolades: Accolade[],
-  seasonRows:   SeasonRow[],
+  dayNum:         number,
+  allTeams:       Team[],
+  ptMap:          Record<string, PlayerTeamEntry[]>,
+  statsMap:       Record<string, StatRow>,
+  ringMap:        Record<string, number>,
+  accoladeMap:    Record<string, string[]>,
+  uuids:          string[],
+  allAccolades:   Accolade[],
+  seasonRows:     SeasonRow[],
+  playerNameMap:  Record<string, string>,
 ): { rows: Category[]; cols: Category[] } | null {
 
   // ── Precompute season-based sets ─────────────────────────────────────────
@@ -208,8 +219,57 @@ function generateGrid(
     .filter(([, count]) => count >= 2)
     .map(([type]) => ({ type: "accolade" as const, accoladeType: type, label: type }));
 
+  // ── Career total categories ──────────────────────────────────────────────
+
+  function careerSet(map: Record<string, number>, min: number): Set<string> {
+    return new Set(uuids.filter(u => (map[u] ?? 0) >= min));
+  }
+  const careerPTS: Record<string, number> = {};
+  const careerREB: Record<string, number> = {};
+  const careerAST: Record<string, number> = {};
+  for (const u of uuids) {
+    const s = statsMap[u];
+    if (s) {
+      careerPTS[u] = Math.round((s.ppg ?? 0) * (s.gp ?? 0));
+      careerREB[u] = Math.round((s.rpg ?? 0) * (s.gp ?? 0));
+      careerAST[u] = Math.round((s.apg ?? 0) * (s.gp ?? 0));
+    }
+  }
+  const careerCandidates: Category[] = ([
+    { type: "career_pts" as const, min: 1000, playerSet: careerSet(careerPTS, 1000), label: "1000+ Career PTS" },
+    { type: "career_pts" as const, min: 500,  playerSet: careerSet(careerPTS, 500),  label: "500+ Career PTS"  },
+    { type: "career_pts" as const, min: 250,  playerSet: careerSet(careerPTS, 250),  label: "250+ Career PTS"  },
+    { type: "career_reb" as const, min: 500,  playerSet: careerSet(careerREB, 500),  label: "500+ Career REB"  },
+    { type: "career_reb" as const, min: 250,  playerSet: careerSet(careerREB, 250),  label: "250+ Career REB"  },
+    { type: "career_reb" as const, min: 100,  playerSet: careerSet(careerREB, 100),  label: "100+ Career REB"  },
+    { type: "career_ast" as const, min: 300,  playerSet: careerSet(careerAST, 300),  label: "300+ Career AST"  },
+    { type: "career_ast" as const, min: 150,  playerSet: careerSet(careerAST, 150),  label: "150+ Career AST"  },
+    { type: "career_ast" as const, min: 75,   playerSet: careerSet(careerAST, 75),   label: "75+ Career AST"   },
+  ] as Category[]).filter(c => (c as { playerSet: Set<string> }).playerSet.size >= 1);
+
+  // ── Played-with categories ────────────────────────────────────────────────
+  // For each uuid, find all team_ids they played on
+  const playedWithCats: Category[] = [];
+  for (const refUuid of uuids) {
+    const refTeamIds = new Set((ptMap[refUuid] ?? []).map(pt => pt.team_id));
+    if (refTeamIds.size === 0) continue;
+    const teammates = uuids.filter(u =>
+      u !== refUuid && (ptMap[u] ?? []).some(pt => refTeamIds.has(pt.team_id))
+    );
+    if (teammates.length >= 1) {
+      const refName = playerNameMap[refUuid] ?? refUuid;
+      playedWithCats.push({
+        type: "played_with" as const,
+        refUuid,
+        refName,
+        refTeamIds,
+        label: `Teammate of ${refName}`,
+      });
+    }
+  }
+
   const allCats: Category[] = [
-    ...teamCats, ...divCats, ...statCats, ...sznCandidates, ...ringCats, ...accoladeCats,
+    ...teamCats, ...divCats, ...statCats, ...sznCandidates, ...careerCandidates, ...ringCats, ...accoladeCats, ...playedWithCats,
   ];
 
   if (allCats.length < 6) return null;
@@ -398,9 +458,20 @@ function CategoryHeader({ cat }: { cat: Category }) {
     cat.type === "division" && cat.division === "West" ? "bg-blue-950 border-blue-800 text-blue-300" :
     cat.type === "rings"    || cat.type === "accolade" ? "bg-yellow-950 border-yellow-800 text-yellow-300" :
     cat.type === "team"                                ? "bg-slate-900 border-slate-700 text-white" :
+    cat.type === "played_with"                         ? "bg-purple-950 border-purple-800 text-purple-200" :
+    cat.type === "career_pts" || cat.type === "career_reb" || cat.type === "career_ast"
+                                                       ? "bg-cyan-950 border-cyan-800 text-cyan-300" :
                                                          "bg-green-950 border-green-800 text-green-300";
   return (
-    <div className={`rounded-xl border flex items-center justify-center text-center px-1.5 py-2 min-h-[56px] ${cls}`}>
+    <div className={`rounded-xl border flex flex-col items-center justify-center text-center px-1.5 py-2 min-h-[56px] gap-1 ${cls}`}>
+      {cat.type === "played_with" && (
+        <img
+          src={`https://minotar.net/avatar/${cat.refName}/20`}
+          className="w-5 h-5 rounded flex-shrink-0"
+          onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/20"; }}
+          alt=""
+        />
+      )}
       <span className="text-[11px] font-semibold leading-tight">{cat.label}</span>
     </div>
   );
@@ -577,7 +648,9 @@ export default function GridPage({ params }: { params?: Promise<{ league?: strin
       setAllPlayers(leaguePlayers);
 
       const uuids = leaguePlayers.map(p => p.mc_uuid);
-      const grid  = generateGrid(dayNum, teamsArr, pm, sm, rm, am, uuids, accsArr, sznArr);
+      const nameMap: Record<string, string> = {};
+      for (const p of playersArr) nameMap[p.mc_uuid] = p.mc_username;
+      const grid  = generateGrid(dayNum, teamsArr, pm, sm, rm, am, uuids, accsArr, sznArr, nameMap);
 
       if (!grid) {
         setNoGrid(true);

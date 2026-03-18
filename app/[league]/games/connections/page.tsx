@@ -143,6 +143,33 @@ function generateGroups(
       candidates.push({ label: awardType, description: `Won ${awardType}`, pool: awardPlayers });
   }
 
+  // ── Played-with groups ────────────────────────────────────────────────────
+  // Build team_id → player list map (any season)
+  const teamIdToPlayers: Record<string, Player[]> = {};
+  for (const pt of ptArr) {
+    const p = players.find(pl => pl.mc_uuid === pt.mc_uuid);
+    if (!p) continue;
+    if (!teamIdToPlayers[pt.team_id]) teamIdToPlayers[pt.team_id] = [];
+    if (!teamIdToPlayers[pt.team_id].find(pl => pl.mc_uuid === p.mc_uuid))
+      teamIdToPlayers[pt.team_id].push(p);
+  }
+  // For each player, check if they have 4+ other players who shared a team with them
+  for (const refPlayer of players) {
+    const refTeamIds = new Set((ptArr.filter(pt => pt.mc_uuid === refPlayer.mc_uuid)).map(pt => pt.team_id));
+    if (refTeamIds.size === 0) continue;
+    const teammates = players.filter(p =>
+      p.mc_uuid !== refPlayer.mc_uuid &&
+      ptArr.some(pt => pt.mc_uuid === p.mc_uuid && refTeamIds.has(pt.team_id))
+    );
+    if (teammates.length >= 4) {
+      candidates.push({
+        label: `Teammate of ${refPlayer.mc_username}`,
+        description: `Played on the same team as ${refPlayer.mc_username}`,
+        pool: teammates,
+      });
+    }
+  }
+
   // ── Greedily pick 4 non-overlapping groups of exactly 4 players ───────────
   const shuffledCandidates = shuffled(candidates, rng);
   const selected: Group[] = [];

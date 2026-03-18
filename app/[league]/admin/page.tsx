@@ -22,6 +22,7 @@ type GameStat = {
   turnovers: number | null; minutes_played: number | null;
   fg_made: number | null; fg_attempted: number | null;
   three_pt_made: number | null; three_pt_attempted: number | null;
+  pass_attempts: number | null; possession_time: number | null;
   players: Player;
 };
 type Accolade = {
@@ -1195,6 +1196,8 @@ function parseStatBlock(text: string, players: Player[]): ParsedStat[] {
         steals: ext(/\bSTL\s+(\d+)/i),
         blocks: ext(/\bBLK\s+(\d+)/i),
         turnovers: ext(/\bTOV\s+(\d+)/i),
+        pass_attempts: ext(/\bPASS\s+(\d+)/i),
+        possession_time: ext(/\bPOSS\s+(\d+)/i),
       };
     } else {
       // Positional format: "Name | Min | PTS | FGM/FGA | 3PM/3PA | ORB | DRB | AST | STL | BLK | TOV"
@@ -1271,6 +1274,8 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
             minutes_played: s.minutes_played === null ? "" : fmtMins(s.minutes_played),
             fg: fmtSlash(s.fg_made, s.fg_attempted),
             three_fg: fmtSlash(s.three_pt_made, s.three_pt_attempted),
+            pass_attempts: s.pass_attempts === null ? "" : String(s.pass_attempts),
+            possession_time: s.possession_time === null ? "" : String(s.possession_time),
           };
         }
         setStatForm(form);
@@ -1304,6 +1309,8 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
           turnovers: ni(fields.turnovers), minutes_played: nm(fields.minutes_played),
           fg_made: fgMade, fg_attempted: fgAtt,
           three_pt_made: tpMade, three_pt_attempted: tpAtt,
+          pass_attempts: ni(fields.pass_attempts),
+          possession_time: ni(fields.possession_time),
         }),
       });
       if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Save failed"); setSaving(false); return; }
@@ -1312,8 +1319,8 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
     alert("Box scores saved!");
   };
 
-  const statCols = ["points","rebounds_off","rebounds_def","assists","steals","blocks","turnovers","minutes_played","fg","three_fg"] as const;
-  const colLabels: Record<string, string> = { points:"PTS", rebounds_off:"ORB", rebounds_def:"DRB", assists:"AST", steals:"STL", blocks:"BLK", turnovers:"TO", minutes_played:"MIN", fg:"FG", three_fg:"3FG" };
+  const statCols = ["points","rebounds_off","rebounds_def","assists","steals","blocks","turnovers","minutes_played","fg","three_fg","pass_attempts","possession_time"] as const;
+  const colLabels: Record<string, string> = { points:"PTS", rebounds_off:"ORB", rebounds_def:"DRB", assists:"AST", steals:"STL", blocks:"BLK", turnovers:"TO", minutes_played:"MIN", fg:"FG", three_fg:"3FG", pass_attempts:"PASS", possession_time:"POSS" };
 
   const applyPastePreview = () => {
     if (!pastePreview) return;
@@ -1727,15 +1734,18 @@ function ArticlesTab({ league }: { league: string }) {
 
 function StatsViewTab({ league, season: initialSeason }: { league: string; season: string }) {
   const STAT_FIELDS = [
-    { key: "gp",       label: "GP",  hint: "Games Played",               slash: false },
-    { key: "pts",      label: "PTS", hint: "Total Points",                slash: false },
-    { key: "reb",      label: "REB", hint: "Total Rebounds",              slash: false },
-    { key: "ast",      label: "AST", hint: "Total Assists",               slash: false },
-    { key: "stl",      label: "STL", hint: "Total Steals",                slash: false },
-    { key: "blk",      label: "BLK", hint: "Total Blocks",                slash: false },
-    { key: "fg",          label: "FG",   hint: "FG Made / Attempted (14/25)", slash: true  },
-    { key: "three_made",  label: "3s",   hint: "Total 3-pointers made",       slash: false },
-    { key: "three_pct",   label: "3FG%", hint: "3-point % (e.g. 41.7)",       slash: false },
+    { key: "gp",       label: "GP",   hint: "Games Played",                slash: false },
+    { key: "pts",      label: "PTS",  hint: "Total Points",                 slash: false },
+    { key: "reb",      label: "REB",  hint: "Total Rebounds",               slash: false },
+    { key: "ast",      label: "AST",  hint: "Total Assists",                slash: false },
+    { key: "stl",      label: "STL",  hint: "Total Steals",                 slash: false },
+    { key: "blk",      label: "BLK",  hint: "Total Blocks",                 slash: false },
+    { key: "to_total", label: "TO",   hint: "Total Turnovers",              slash: false },
+    { key: "fg",          label: "FG",     hint: "FG Made / Attempted (14/25)",  slash: true  },
+    { key: "three_made",  label: "3s",     hint: "Total 3-pointers made",        slash: false },
+    { key: "three_pct",   label: "3FG%",   hint: "3-point % (e.g. 41.7)",        slash: false },
+    { key: "pass_total",  label: "PASS",   hint: "Total Pass Attempts",          slash: false },
+    { key: "poss_total",  label: "POSS",   hint: "Total Possession Seconds",      slash: false },
   ];
 
   const [players, setPlayers] = useState<Player[]>([]);
@@ -1751,6 +1761,9 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
   const [loadedFgPct, setLoadedFgPct] = useState<number | null>(null);
   const [loadedThreePct, setLoadedThreePct] = useState<number | null>(null);
   const [loadedThreeMade, setLoadedThreeMade] = useState<number | null>(null);
+  const [loadedTopg, setLoadedTopg] = useState<number | null>(null);
+  const [loadedPassPg, setLoadedPassPg] = useState<number | null>(null);
+  const [loadedPossPg, setLoadedPossPg] = useState<number | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -1766,6 +1779,7 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
     setFields({});
     setHasExisting(false);
     setLoadedFgPct(null); setLoadedThreePct(null); setLoadedThreeMade(null);
+    setLoadedTopg(null); setLoadedPassPg(null); setLoadedPossPg(null);
     fetch(`/api/stats?league=${league}&season=${encodeURIComponent(initialSeason)}&mc_uuid=${selectedUuid}`)
       .then((r) => r.json())
       .then((data) => {
@@ -1777,6 +1791,9 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
           setLoadedFgPct(row.fg_pct ?? null);
           setLoadedThreePct(row.three_pt_pct ?? null);
           setLoadedThreeMade(row.three_pt_made ?? null);
+          setLoadedTopg(row.topg ?? null);
+          setLoadedPassPg(row.pass_attempts_pg ?? null);
+          setLoadedPossPg(row.possession_time_pg ?? null);
           setFields({
             gp:  String(row.gp ?? ""),
             pts: gp ? String(round((row.ppg ?? 0) * gp)) : "",
@@ -1787,6 +1804,9 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
             fg:           "",
             three_made:   row.three_pt_made  != null ? String(row.three_pt_made)  : "",
             three_pct:    row.three_pt_pct   != null ? String(row.three_pt_pct)   : "",
+            to_total:     gp && row.topg  != null ? String(round(row.topg  * gp)) : "",
+            pass_total:   gp && row.pass_attempts_pg  != null ? String(round(row.pass_attempts_pg  * gp)) : "",
+            poss_total:   gp && row.possession_time_pg != null ? String(Math.round(row.possession_time_pg * gp)) : "",
           });
         }
       })
@@ -1801,6 +1821,8 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
     if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Delete failed"); return; }
     setFields({});
     setHasExisting(false);
+    setLoadedFgPct(null); setLoadedThreePct(null); setLoadedThreeMade(null);
+    setLoadedTopg(null); setLoadedPassPg(null); setLoadedPossPg(null);
     setSavedPlayers((prev) => { const s = new Set(prev); s.delete(selectedUuid); return s; });
   };
 
@@ -1835,12 +1857,19 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
       ? Math.round(fgMade / fgAtt * 1000) / 10 : loadedFgPct;
     const three_pt_made = fields.three_made?.trim() ? (parseFloat(fields.three_made) || null) : loadedThreeMade;
     const three_pt_pct  = fields.three_pct?.trim()  ? (parseFloat(fields.three_pct)  || null) : loadedThreePct;
+    const to_total  = fields.to_total?.trim()   ? parseFloat(fields.to_total)   || null : null;
+    const pass_tot  = fields.pass_total?.trim() ? parseFloat(fields.pass_total)  || null : null;
+    const poss_tot  = fields.poss_total?.trim() ? parseInt(fields.poss_total)    || null : null;
+    const topg             = (gp && to_total  != null) ? r1(to_total  / gp) : loadedTopg;
+    const pass_attempts_pg = (gp && pass_tot  != null) ? r1(pass_tot  / gp) : loadedPassPg;
+    const possession_time_pg = (gp && poss_tot != null) ? Math.round(poss_tot / gp) : loadedPossPg;
     const r = await fetch(`/api/stats?league=${encodeURIComponent(league)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         league, season: initialSeason, mc_uuid: selectedUuid,
         gp, ppg, rpg, apg, spg, bpg, fg_pct, three_pt_made, three_pt_pct,
+        topg, pass_attempts_pg, possession_time_pg,
       }),
     });
     setSaving(false);
@@ -1945,9 +1974,232 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
   );
 }
 
+// ─── Tab: Playoffs ────────────────────────────────────────────────────────────
+
+type BracketMatchup = {
+  id: string; round_name: string; round_order: number; matchup_index: number;
+  team1_id: string | null; team2_id: string | null;
+  team1_score: number | null; team2_score: number | null;
+  winner_id: string | null;
+  team1?: { id: string; name: string; abbreviation: string } | null;
+  team2?: { id: string; name: string; abbreviation: string } | null;
+};
+
+function PlayoffsTab({ league, season }: { league: string; season: string }) {
+  const [matchups, setMatchups] = useState<BracketMatchup[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [err, setErr] = useState("");
+  const [saving, setSaving] = useState<string | null>(null);
+  // Add matchup form
+  const [newRound, setNewRound] = useState("");
+  const [newRoundOrder, setNewRoundOrder] = useState("0");
+  const [newTeam1, setNewTeam1] = useState("");
+  const [newTeam2, setNewTeam2] = useState("");
+  const [adding, setAdding] = useState(false);
+
+  const refresh = useCallback(async () => {
+    const [m, t] = await Promise.all([
+      fetch(`/api/playoff-brackets?league=${encodeURIComponent(league)}&season=${encodeURIComponent(season)}`).then(r => r.json()),
+      fetch(`/api/teams?league=${league}&season=${encodeURIComponent(season)}`).then(r => r.json()),
+    ]);
+    setMatchups(Array.isArray(m) ? m : []);
+    setTeams(Array.isArray(t) ? t : []);
+  }, [league, season]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const save = async (payload: object) => {
+    const r = await fetch("/api/playoff-brackets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Save failed"); return false; }
+    return true;
+  };
+
+  const addMatchup = async () => {
+    if (!newRound.trim()) { setErr("Round name is required"); return; }
+    setAdding(true); setErr("");
+    // Determine matchup_index = count of existing matchups in this round
+    const existingInRound = matchups.filter(m => m.round_name === newRound.trim());
+    const ok = await save({
+      league, season,
+      round_name: newRound.trim(),
+      round_order: parseInt(newRoundOrder) || 0,
+      matchup_index: existingInRound.length,
+      team1_id: newTeam1 || null,
+      team2_id: newTeam2 || null,
+    });
+    setAdding(false);
+    if (ok) { setNewTeam1(""); setNewTeam2(""); refresh(); }
+  };
+
+  const updateMatchup = async (m: BracketMatchup, patch: Partial<BracketMatchup>) => {
+    setSaving(m.id); setErr("");
+    const ok = await save({
+      league, season,
+      round_name: m.round_name,
+      round_order: m.round_order,
+      matchup_index: m.matchup_index,
+      team1_id: m.team1_id,
+      team2_id: m.team2_id,
+      team1_score: m.team1_score,
+      team2_score: m.team2_score,
+      winner_id: m.winner_id,
+      ...patch,
+    });
+    setSaving(null);
+    if (ok) refresh();
+  };
+
+  const deleteMatchup = async (id: string) => {
+    if (!confirm("Delete this matchup?")) return;
+    const r = await fetch(`/api/playoff-brackets?id=${id}`, { method: "DELETE" });
+    if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Delete failed"); return; }
+    refresh();
+  };
+
+  // Group matchups by round
+  const rounds: { name: string; order: number; matchups: BracketMatchup[] }[] = [];
+  for (const m of matchups) {
+    let rnd = rounds.find(r => r.name === m.round_name);
+    if (!rnd) { rnd = { name: m.round_name, order: m.round_order, matchups: [] }; rounds.push(rnd); }
+    rnd.matchups.push(m);
+  }
+  rounds.sort((a, b) => a.order - b.order);
+
+  const COMMON_ROUNDS = ["Round 1", "Quarterfinals", "Semifinals", "Finals"];
+
+  return (
+    <div className="space-y-5">
+      <ErrMsg msg={err} />
+
+      {/* Add matchup */}
+      <div className={card}>
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Add Matchup — {season}</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 mb-3">
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Round Name</label>
+            <input
+              className={input} list="round-suggestions" placeholder="e.g. Semifinals"
+              value={newRound} onChange={(e) => { setNewRound(e.target.value); setErr(""); }}
+            />
+            <datalist id="round-suggestions">
+              {COMMON_ROUNDS.map(r => <option key={r} value={r} />)}
+            </datalist>
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Round Order (0 = first)</label>
+            <input className={input} type="number" min="0" placeholder="0" value={newRoundOrder} onChange={(e) => setNewRoundOrder(e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Team 1</label>
+            <select className={input} value={newTeam1} onChange={(e) => setNewTeam1(e.target.value)}>
+              <option value="">TBD</option>
+              {teams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.abbreviation})</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Team 2</label>
+            <select className={input} value={newTeam2} onChange={(e) => setNewTeam2(e.target.value)}>
+              <option value="">TBD</option>
+              {teams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.abbreviation})</option>)}
+            </select>
+          </div>
+        </div>
+        <button className={btnPrimary} onClick={addMatchup} disabled={adding}>
+          {adding ? "Adding..." : "+ Add Matchup"}
+        </button>
+      </div>
+
+      {/* Bracket rounds */}
+      {rounds.length === 0 ? (
+        <div className={`${card} text-slate-500 text-sm`}>No matchups yet for {season}. Add one above.</div>
+      ) : (
+        rounds.map((round) => (
+          <div key={round.name} className={card}>
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+              🏀 {round.name} <span className="text-slate-600 font-normal">· order {round.order}</span>
+            </h3>
+            <div className="space-y-3">
+              {round.matchups.map((m) => {
+                const t1 = m.team1 ?? teams.find(t => t.id === m.team1_id);
+                const t2 = m.team2 ?? teams.find(t => t.id === m.team2_id);
+                return (
+                  <div key={m.id} className="rounded-lg border border-slate-800 bg-slate-900 p-4">
+                    <div className="flex flex-wrap gap-3 items-center mb-3">
+                      {/* Team 1 selector */}
+                      <div className="flex-1 min-w-[140px]">
+                        <label className="block text-xs text-slate-500 mb-1">Team 1</label>
+                        <select className={input} value={m.team1_id ?? ""} onChange={(e) => updateMatchup(m, { team1_id: e.target.value || null })}>
+                          <option value="">TBD</option>
+                          {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        </select>
+                      </div>
+                      {/* Scores */}
+                      <div className="flex items-end gap-1">
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">{t1?.abbreviation ?? "T1"} Score</label>
+                          <input
+                            className="rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none w-16 text-center"
+                            type="number" min="0"
+                            value={m.team1_score ?? ""}
+                            onChange={(e) => updateMatchup(m, { team1_score: e.target.value ? parseInt(e.target.value) : null })}
+                          />
+                        </div>
+                        <span className="text-slate-500 pb-2">–</span>
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">{t2?.abbreviation ?? "T2"} Score</label>
+                          <input
+                            className="rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none w-16 text-center"
+                            type="number" min="0"
+                            value={m.team2_score ?? ""}
+                            onChange={(e) => updateMatchup(m, { team2_score: e.target.value ? parseInt(e.target.value) : null })}
+                          />
+                        </div>
+                      </div>
+                      {/* Team 2 selector */}
+                      <div className="flex-1 min-w-[140px]">
+                        <label className="block text-xs text-slate-500 mb-1">Team 2</label>
+                        <select className={input} value={m.team2_id ?? ""} onChange={(e) => updateMatchup(m, { team2_id: e.target.value || null })}>
+                          <option value="">TBD</option>
+                          {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    {/* Winner + Delete */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs text-slate-500">Set Winner:</span>
+                      {[{ id: m.team1_id, name: t1?.name ?? "Team 1" }, { id: m.team2_id, name: t2?.name ?? "Team 2" }].map(({ id, name }) => (
+                        id ? (
+                          <button
+                            key={id}
+                            className={`${btn} text-xs px-3 py-1 ${m.winner_id === id ? "bg-yellow-700 text-yellow-200" : "bg-slate-800 text-slate-300 hover:bg-slate-700"}`}
+                            onClick={() => updateMatchup(m, { winner_id: m.winner_id === id ? null : id })}
+                            disabled={saving === m.id}
+                          >
+                            {m.winner_id === id ? "🏆 " : ""}{name}
+                          </button>
+                        ) : null
+                      ))}
+                      <button className={`${btnDanger} ml-auto text-xs`} onClick={() => deleteMatchup(m.id)}>Delete</button>
+                    </div>
+                    {saving === m.id && <p className="text-xs text-slate-500 mt-1">Saving...</p>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
 // ─── Main Admin Page ──────────────────────────────────────────────────────────
 
-const TABS = ["Players", "Teams", "Schedule", "Box Scores", "Accolades", "Champions", "Articles", "Stats"] as const;
+const TABS = ["Players", "Teams", "Schedule", "Box Scores", "Accolades", "Champions", "Articles", "Stats", "Playoffs"] as const;
 type Tab = typeof TABS[number];
 const SEASONS = ["Season 1","Season 1 Playoffs","Season 2","Season 2 Playoffs","Season 3","Season 3 Playoffs","Season 4","Season 4 Playoffs","Season 5","Season 5 Playoffs","Season 6","Season 6 Playoffs","Season 7","Season 7 Playoffs"];
 
@@ -2058,6 +2310,7 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
         {activeTab === "Champions" && <ChampionsTab league={league} season={season} />}
         {activeTab === "Articles" && <ArticlesTab league={league} />}
         {activeTab === "Stats" && <StatsViewTab league={league} season={season} />}
+        {activeTab === "Playoffs" && <PlayoffsTab league={league} season={season} />}
       </div>
     </div>
   );
