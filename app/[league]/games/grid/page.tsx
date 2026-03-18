@@ -3,9 +3,10 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useSession, signIn } from "next-auth/react";
 
 const TOTAL_GUESSES = 9;
-const LAUNCH_DAY_NUM = Math.floor(new Date("2026-03-17T00:00:00Z").getTime() / 86400000);
+// Day 1 starts 2026-03-17 at 10 AM EST (15:00 UTC). Advances every 24 h at 10 AM EST.
+const EPOCH_MS = new Date("2026-03-17T15:00:00Z").getTime();
 function getDayNum() {
-  return Math.max(1, Math.floor(Date.now() / 86400000) - LAUNCH_DAY_NUM + 1);
+  return Math.max(1, Math.floor((Date.now() - EPOCH_MS) / 86400000) + 1);
 }
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -16,15 +17,22 @@ type Accolade = { mc_uuid: string; type: string };
 type PlayerTeamEntry = { mc_uuid: string; team_id: string; teams: Team; season: string | null };
 type Player = { mc_uuid: string; mc_username: string };
 
+type SeasonRow = { mc_uuid: string; season: string; ppg: number | null; rpg: number | null; apg: number | null; gp: number | null };
+
 type Category =
-  | { type: "team";     teamName: string; teamIds: string[]; label: string }
-  | { type: "division"; division: "East" | "West";           label: string }
-  | { type: "ppg";      min: number;                         label: string }
-  | { type: "rpg";      min: number;                         label: string }
-  | { type: "apg";      min: number;                         label: string }
-  | { type: "gp";       min: number;                         label: string }
-  | { type: "rings";                                          label: string }
-  | { type: "accolade"; accoladeType: string;                 label: string };
+  | { type: "team";        teamName: string; teamIds: string[]; label: string }
+  | { type: "division";    division: "East" | "West";           label: string }
+  | { type: "ppg";         min: number;                         label: string }
+  | { type: "rpg";         min: number;                         label: string }
+  | { type: "apg";         min: number;                         label: string }
+  | { type: "gp";          min: number;                         label: string }
+  | { type: "rings";                                             label: string }
+  | { type: "accolade";    accoladeType: string;                 label: string }
+  // single-season thresholds
+  | { type: "szn_ppg";     min: number; seasonSet: Set<string>; label: string }
+  | { type: "szn_rpg";     min: number; seasonSet: Set<string>; label: string }
+  | { type: "szn_apg";     min: number; seasonSet: Set<string>; label: string }
+  | { type: "playoff_ppg"; min: number; seasonSet: Set<string>; label: string };
 
 type CellState =
   | { status: "empty" }
@@ -60,14 +68,18 @@ function playerFits(
   const pts   = ptMap[uuid]       ?? [];
   const stats = statsMap[uuid];
   switch (cat.type) {
-    case "team":     return pts.some(pt => cat.teamIds.includes(pt.team_id));
-    case "division": return pts.some(pt => pt.teams?.division === cat.division);
-    case "ppg":      return stats != null && (stats.ppg ?? 0) >= cat.min;
-    case "rpg":      return stats != null && (stats.rpg ?? 0) >= cat.min;
-    case "apg":      return stats != null && (stats.apg ?? 0) >= cat.min;
-    case "gp":       return stats != null && (stats.gp  ?? 0) >= cat.min;
-    case "rings":    return (ringMap[uuid] ?? 0) >= 1;
-    case "accolade": return (accoladeMap[uuid] ?? []).includes(cat.accoladeType);
+    case "team":        return pts.some(pt => cat.teamIds.includes(pt.team_id));
+    case "division":    return pts.some(pt => pt.teams?.division === cat.division);
+    case "ppg":         return stats != null && (stats.ppg ?? 0) >= cat.min;
+    case "rpg":         return stats != null && (stats.rpg ?? 0) >= cat.min;
+    case "apg":         return stats != null && (stats.apg ?? 0) >= cat.min;
+    case "gp":          return stats != null && (stats.gp  ?? 0) >= cat.min;
+    case "rings":       return (ringMap[uuid] ?? 0) >= 1;
+    case "accolade":    return (accoladeMap[uuid] ?? []).includes(cat.accoladeType);
+    case "szn_ppg":     return cat.seasonSet.has(uuid);
+    case "szn_rpg":     return cat.seasonSet.has(uuid);
+    case "szn_apg":     return cat.seasonSet.has(uuid);
+    case "playoff_ppg": return cat.seasonSet.has(uuid);
   }
 }
 
@@ -94,15 +106,38 @@ function checkValidAssignment(cellPlayers: string[][]): boolean {
 }
 
 function generateGrid(
-  dayNum:      number,
-  allTeams:    Team[],
-  ptMap:       Record<string, PlayerTeamEntry[]>,
-  statsMap:    Record<string, StatRow>,
-  ringMap:     Record<string, number>,
-  accoladeMap: Record<string, string[]>,
-  uuids:       string[],
+  dayNum:       number,
+  allTeams:     Team[],
+  ptMap:        Record<string, PlayerTeamEntry[]>,
+  statsMap:     Record<string, StatRow>,
+  ringMap:      Record<string, number>,
+  accoladeMap:  Record<string, string[]>,
+  uuids:        string[],
   allAccolades: Accolade[],
+  seasonRows:   SeasonRow[],
 ): { rows: Category[]; cols: Category[] } | null {
+
+  // ── Precompute season-based sets ─────────────────────────────────────────
+
+  // Build per-player max regular-season and max playoff-season stats
+  const maxSznPPG: Record<string, number> = {};
+  const maxSznRPG: Record<string, number> = {};
+  const maxSznAPG: Record<string, number> = {};
+  const maxPOPPG:  Record<string, number> = {};
+  for (const row of seasonRows) {
+    const isPlayoff = row.season?.toLowerCase().includes("playoff");
+    if (!isPlayoff) {
+      if (row.ppg != null) maxSznPPG[row.mc_uuid] = Math.max(maxSznPPG[row.mc_uuid] ?? 0, row.ppg);
+      if (row.rpg != null) maxSznRPG[row.mc_uuid] = Math.max(maxSznRPG[row.mc_uuid] ?? 0, row.rpg);
+      if (row.apg != null) maxSznAPG[row.mc_uuid] = Math.max(maxSznAPG[row.mc_uuid] ?? 0, row.apg);
+    } else {
+      if (row.ppg != null) maxPOPPG[row.mc_uuid]  = Math.max(maxPOPPG[row.mc_uuid]  ?? 0, row.ppg);
+    }
+  }
+
+  function sznSet(map: Record<string, number>, min: number): Set<string> {
+    return new Set(uuids.filter(u => (map[u] ?? 0) >= min));
+  }
 
   // ── Build every possible category from available data ────────────────────
 
@@ -121,6 +156,23 @@ function generateGrid(
     divCats.push({ type: "division", division: "East", label: "East Division" });
   if (uuids.some(u => (ptMap[u] ?? []).some(pt => pt.teams?.division === "West")))
     divCats.push({ type: "division", division: "West", label: "West Division" });
+
+  // Season-stat threshold candidates
+  const sznCandidates: Category[] = ([
+    { type: "szn_ppg"     as const, min: 30, seasonSet: sznSet(maxSznPPG, 30), label: "30+ PPG Season" },
+    { type: "szn_ppg"     as const, min: 25, seasonSet: sznSet(maxSznPPG, 25), label: "25+ PPG Season" },
+    { type: "szn_ppg"     as const, min: 20, seasonSet: sznSet(maxSznPPG, 20), label: "20+ PPG Season" },
+    { type: "szn_ppg"     as const, min: 15, seasonSet: sznSet(maxSznPPG, 15), label: "15+ PPG Season" },
+    { type: "szn_rpg"     as const, min: 10, seasonSet: sznSet(maxSznRPG, 10), label: "10+ RPG Season" },
+    { type: "szn_rpg"     as const, min: 8,  seasonSet: sznSet(maxSznRPG, 8),  label: "8+ RPG Season"  },
+    { type: "szn_rpg"     as const, min: 5,  seasonSet: sznSet(maxSznRPG, 5),  label: "5+ RPG Season"  },
+    { type: "szn_apg"     as const, min: 8,  seasonSet: sznSet(maxSznAPG, 8),  label: "8+ APG Season"  },
+    { type: "szn_apg"     as const, min: 5,  seasonSet: sznSet(maxSznAPG, 5),  label: "5+ APG Season"  },
+    { type: "szn_apg"     as const, min: 3,  seasonSet: sznSet(maxSznAPG, 3),  label: "3+ APG Season"  },
+    { type: "playoff_ppg" as const, min: 20, seasonSet: sznSet(maxPOPPG, 20),  label: "20+ PPG Playoffs" },
+    { type: "playoff_ppg" as const, min: 15, seasonSet: sznSet(maxPOPPG, 15),  label: "15+ PPG Playoffs" },
+    { type: "playoff_ppg" as const, min: 10, seasonSet: sznSet(maxPOPPG, 10),  label: "10+ PPG Playoffs" },
+  ] as Category[]).filter(c => (c as { seasonSet: Set<string> }).seasonSet.size >= 1);
 
   const statCandidates: Category[] = [
     { type: "ppg", min: 5,  label: "PPG ≥ 5"  },
@@ -157,7 +209,7 @@ function generateGrid(
     .map(([type]) => ({ type: "accolade" as const, accoladeType: type, label: type }));
 
   const allCats: Category[] = [
-    ...teamCats, ...divCats, ...statCats, ...ringCats, ...accoladeCats,
+    ...teamCats, ...divCats, ...statCats, ...sznCandidates, ...ringCats, ...accoladeCats,
   ];
 
   if (allCats.length < 6) return null;
@@ -465,6 +517,7 @@ export default function GridPage({ params }: { params?: Promise<{ league?: strin
   const [accoladeMap,  setAccoladeMap]  = useState<Record<string, string[]>>({});
   const [ptMap,        setPtMap]        = useState<Record<string, PlayerTeamEntry[]>>({});
   const [allAccolades, setAllAccolades] = useState<Accolade[]>([]);
+  const [seasonRows,   setSeasonRows]   = useState<SeasonRow[]>([]);
   const [rows,  setRows]  = useState<Category[]>([]);
   const [cols,  setCols]  = useState<Category[]>([]);
   const [loading,   setLoading]   = useState(true);
@@ -488,12 +541,15 @@ export default function GridPage({ params }: { params?: Promise<{ league?: strin
       fetch(`/api/teams/players?league=${slug}`).then(r => r.json()),
       fetch(`/api/teams?league=${slug}`).then(r => r.json()),
       fetch(`/api/players`).then(r => r.json()),
-    ]).then(([stats, accolades, playerTeams, teams, players]) => {
+      fetch(`/api/stats/seasons?league=${slug}`).then(r => r.json()),
+    ]).then(([stats, accolades, playerTeams, teams, players, seasons]) => {
       const statsArr:   StatRow[]         = Array.isArray(stats)       ? stats       : [];
       const accsArr:    Accolade[]        = Array.isArray(accolades)   ? accolades   : [];
       const ptArr:      PlayerTeamEntry[] = Array.isArray(playerTeams) ? playerTeams : [];
       const teamsArr:   Team[]            = Array.isArray(teams)       ? teams       : [];
       const playersArr: Player[]          = Array.isArray(players)     ? players     : [];
+      const sznArr:     SeasonRow[]       = Array.isArray(seasons)     ? seasons     : [];
+      setSeasonRows(sznArr);
 
       const sm: Record<string, StatRow>           = {};
       const rm: Record<string, number>            = {};
@@ -521,7 +577,7 @@ export default function GridPage({ params }: { params?: Promise<{ league?: strin
       setAllPlayers(leaguePlayers);
 
       const uuids = leaguePlayers.map(p => p.mc_uuid);
-      const grid  = generateGrid(dayNum, teamsArr, pm, sm, rm, am, uuids, accsArr);
+      const grid  = generateGrid(dayNum, teamsArr, pm, sm, rm, am, uuids, accsArr, sznArr);
 
       if (!grid) {
         setNoGrid(true);
