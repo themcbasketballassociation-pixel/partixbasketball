@@ -1841,53 +1841,58 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
     refreshAllStats();
   }, [league, refreshAllStats]);
 
-  // When player is selected, load their existing stats for this season
+  // Convert a stats row into form field values
+  const applyStatsRow = useCallback((row: any) => {
+    if (!row || !row.mc_uuid) return;
+    const gp = parseInt(String(row.gp ?? 0)) || 0;
+    const round = (v: number) => Math.round(v);
+    const tpMade = row.three_pt_made ?? null;
+    const tpPct  = row.three_pt_pct  ?? null;
+    const tpAtt  = (tpMade != null && tpPct != null && tpPct > 0)
+      ? Math.round(tpMade * 100 / tpPct) : null;
+    setLoadedFgPct(row.fg_pct ?? null);
+    setLoadedThreePct(row.three_pt_pct ?? null);
+    setLoadedThreeMade(row.three_pt_made ?? null);
+    setLoadedTopg(row.topg ?? null);
+    setLoadedPassPg(row.pass_attempts_pg ?? null);
+    setLoadedPossPg(row.possession_time_pg ?? null);
+    setHasExisting(true);
+    setFields({
+      gp:  String(row.gp ?? ""),
+      pts: gp ? String(round((row.ppg ?? 0) * gp)) : "",
+      reb: gp ? String(round((row.rpg ?? 0) * gp)) : "",
+      ast: gp ? String(round((row.apg ?? 0) * gp)) : "",
+      stl: gp ? String(round((row.spg ?? 0) * gp)) : "",
+      blk: gp ? String(round((row.bpg ?? 0) * gp)) : "",
+      fg:        "",
+      three_fg:  tpMade != null && tpAtt != null ? `${tpMade}/${tpAtt}` : tpMade != null ? String(tpMade) : "",
+      to_total:  gp && row.topg != null ? String(round(row.topg * gp)) : "",
+      pass_total: gp && row.pass_attempts_pg != null ? String(round(row.pass_attempts_pg * gp)) : "",
+      poss_total: gp && row.possession_time_pg != null ? String(Math.round(row.possession_time_pg * gp)) : "",
+    });
+  }, []);
+
+  // When player is selected, pre-fill from cached allStats immediately, then
+  // also fetch their exact season-specific row for accurate season data
   useEffect(() => {
     if (!selectedUuid) return;
     setFields({});
     setHasExisting(false);
-    setLoadedFgPct(null); setLoadedThreePct(null); setLoadedThreeMade(null); 
+    setLoadedFgPct(null); setLoadedThreePct(null); setLoadedThreeMade(null);
     setLoadedTopg(null); setLoadedPassPg(null); setLoadedPossPg(null);
+
+    // Immediate pre-fill from cached overview stats so form isn't blank
+    if (allStats[selectedUuid]) applyStatsRow(allStats[selectedUuid]);
+
+    // Then fetch season-specific row (for accurate season-level save)
     fetch(`/api/stats?league=${league}&season=${encodeURIComponent(initialSeason)}&mc_uuid=${selectedUuid}`)
       .then((r) => r.json())
       .then((data) => {
         const row = Array.isArray(data) ? data[0] : data;
-        if (row && row.mc_uuid) {
-          setHasExisting(true);
-          const gp = parseInt(String(row.gp ?? 0)) || 0;
-          const round = (v: number) => Math.round(v);
-          setLoadedFgPct(row.fg_pct ?? null);
-          setLoadedThreePct(row.three_pt_pct ?? null);
-          setLoadedThreeMade(row.three_pt_made ?? null);
-          // Reconstruct attempted from made & pct if available
-          const tpMade = row.three_pt_made ?? null;
-          const tpPct  = row.three_pt_pct  ?? null;
-          const tpAtt  = (tpMade != null && tpPct != null && tpPct > 0)
-            ? Math.round(tpMade * 100 / tpPct) : null;
-          
-          setLoadedTopg(row.topg ?? null);
-          setLoadedPassPg(row.pass_attempts_pg ?? null);
-          setLoadedPossPg(row.possession_time_pg ?? null);
-          const threeFgStr = tpMade != null && tpAtt != null
-            ? `${tpMade}/${tpAtt}`
-            : tpMade != null ? String(tpMade) : "";
-          setFields({
-            gp:  String(row.gp ?? ""),
-            pts: gp ? String(round((row.ppg ?? 0) * gp)) : "",
-            reb: gp ? String(round((row.rpg ?? 0) * gp)) : "",
-            ast: gp ? String(round((row.apg ?? 0) * gp)) : "",
-            stl: gp ? String(round((row.spg ?? 0) * gp)) : "",
-            blk: gp ? String(round((row.bpg ?? 0) * gp)) : "",
-            fg:           "",
-            three_fg:     threeFgStr,
-            to_total:     gp && row.topg  != null ? String(round(row.topg  * gp)) : "",
-            pass_total:   gp && row.pass_attempts_pg  != null ? String(round(row.pass_attempts_pg  * gp)) : "",
-            poss_total:   gp && row.possession_time_pg != null ? String(Math.round(row.possession_time_pg * gp)) : "",
-          });
-        }
+        if (row && row.mc_uuid) applyStatsRow(row);
       })
       .catch(() => {});
-  }, [selectedUuid, league, initialSeason]);
+  }, [selectedUuid, league, initialSeason, allStats, applyStatsRow]);
 
   const deletePlayer = async () => {
     if (!selectedUuid) return;
