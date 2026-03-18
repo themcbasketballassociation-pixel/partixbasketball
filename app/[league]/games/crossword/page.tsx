@@ -4,6 +4,7 @@ import { useSession, signIn } from "next-auth/react";
 
 // Day advances at 10 AM EST (15:00 UTC)
 const EPOCH_MS = new Date("2026-03-19T15:00:00Z").getTime();
+const SEASON_SEED = Math.floor(EPOCH_MS / 86400000); // auto-changes with epoch
 function getDayNum() {
   return Math.max(1, Math.floor((Date.now() - EPOCH_MS) / 86400000) + 1);
 }
@@ -299,7 +300,7 @@ export default function CrosswordPage({ params }: { params?: Promise<{ league?: 
       if (candidates.length < 2) { setNoData(true); setLoading(false); return; }
 
       // Shuffle and try to place up to 7 words
-      const rng = seededRng(dayNum * 79 + 3);
+      const rng = seededRng((SEASON_SEED + dayNum) * 79 + 3);
       const shuffledCands = shuffled(candidates, rng);
       // Prefer longer words (more intersections)
       const sorted = [...shuffledCands].sort((a, b) => b.word.length - a.word.length).slice(0, 7);

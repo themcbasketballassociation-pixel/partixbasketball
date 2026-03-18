@@ -5,6 +5,7 @@ import { useSession, signIn } from "next-auth/react";
 const TOTAL_GUESSES = 9;
 // Day 1 starts 2026-03-17 at 10 AM EST (15:00 UTC). Advances every 24 h at 10 AM EST.
 const EPOCH_MS = new Date("2026-03-19T15:00:00Z").getTime();
+const SEASON_SEED = Math.floor(EPOCH_MS / 86400000); // auto-changes with epoch
 function getDayNum() {
   return Math.max(1, Math.floor((Date.now() - EPOCH_MS) / 86400000) + 1);
 }
@@ -291,7 +292,7 @@ function generateGrid(
 
   // Search for a valid 3×3 grid where 9 distinct players can fill all cells
   for (let attempt = 0; attempt < 500; attempt++) {
-    const rng    = seededRng(dayNum * 137 + attempt);
+    const rng    = seededRng((SEASON_SEED + dayNum) * 137 + attempt);
     const picked = shuffled(usable, rng);
     const rows   = picked.slice(0, 3);
     const cols   = picked.slice(3, 6);

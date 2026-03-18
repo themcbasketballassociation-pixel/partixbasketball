@@ -4,6 +4,7 @@ import { useSession, signIn } from "next-auth/react";
 
 // Day advances at 10 AM EST (15:00 UTC)
 const EPOCH_MS = new Date("2026-03-19T15:00:00Z").getTime();
+const SEASON_SEED = Math.floor(EPOCH_MS / 86400000); // auto-changes with epoch
 function getDayNum() {
   return Math.max(1, Math.floor((Date.now() - EPOCH_MS) / 86400000) + 1);
 }
@@ -67,7 +68,7 @@ function generateGroups(
   seasonRows: SeasonRow[],
   accsArr: Accolade[],
 ): Group[] | null {
-  const rng = seededRng(dayNum * 53 + 7);
+  const rng = seededRng((SEASON_SEED + dayNum) * 53 + 7);
 
   // Most-recent team for each player
   const playerTeam: Record<string, string> = {};
@@ -298,7 +299,7 @@ export default function ConnectionsPage({ params }: { params?: Promise<{ league?
       setGroups(gs);
 
       // Shuffle the 16 tiles using seeded RNG for consistent daily order
-      const rng = seededRng(dayNum * 53 + 99);
+      const rng = seededRng((SEASON_SEED + dayNum) * 53 + 99);
       const tiles = gs.flatMap(g => g.players);
       setAllTiles([...tiles].sort(() => rng() - 0.5));
 
