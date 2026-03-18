@@ -562,7 +562,7 @@ function PlayerModal({
 type SavedState = { cells: CellState[]; guessesLeft: number; usedUuids: string[] };
 
 function storageKey(league: string, day: number) {
-  return `partix:grid:${league}:${day}`;
+  return `partix:grid:${league}:${SEASON_SEED}:${day}`;
 }
 function loadState(league: string, day: number): SavedState | null {
   try {

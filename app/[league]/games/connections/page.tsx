@@ -192,7 +192,7 @@ function generateGroups(
 // ── localStorage ──────────────────────────────────────────────────────────────
 
 type SavedConn = { foundGroups: number[]; guessHistory: number[][]; attemptsLeft: number };
-function connKey(league: string, day: number) { return `partix:conn:${league}:${day}`; }
+function connKey(league: string, day: number) { return `partix:conn:${league}:${SEASON_SEED}:${day}`; }
 function loadConn(league: string, day: number): SavedConn | null {
   try { const r = localStorage.getItem(connKey(league, day)); return r ? JSON.parse(r) : null; } catch { return null; }
 }

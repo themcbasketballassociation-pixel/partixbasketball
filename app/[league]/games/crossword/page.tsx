@@ -233,7 +233,7 @@ function buildPuzzle(placements: Placement[]): {
 
 type UserGrid = (string | null)[][];
 
-function crosswordKey(league: string, day: number) { return `partix:xwd:${league}:${day}`; }
+function crosswordKey(league: string, day: number) { return `partix:xwd:${league}:${SEASON_SEED}:${day}`; }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
