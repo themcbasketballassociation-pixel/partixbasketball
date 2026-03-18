@@ -124,51 +124,36 @@ function ScheduleView({ slug }: { slug: string }) {
   );
 }
 
-function BracketMatchupCard({ matchup }: { matchup: BracketMatchup }) {
+function BracketCard({ matchup }: { matchup: BracketMatchup }) {
   const hasScores = matchup.team1_score != null || matchup.team2_score != null;
-  const t1Won = matchup.winner?.id === matchup.team1?.id;
-  const t2Won = matchup.winner?.id === matchup.team2?.id;
+  const t1Won = !!matchup.winner && matchup.winner.id === matchup.team1?.id;
+  const t2Won = !!matchup.winner && matchup.winner.id === matchup.team2?.id;
+
+  const TeamRow = ({ team, score, won, border }: { team: Team | null; score: number | null; won: boolean; border?: boolean }) => (
+    <div className={`flex items-center justify-between gap-2 px-3 py-2 ${border ? "border-b border-slate-700/60" : ""} ${won ? "bg-blue-950/40" : ""}`}>
+      <div className="flex items-center gap-2 min-w-0">
+        {team?.logo_url ? (
+          <img src={team.logo_url} className="w-5 h-5 rounded-sm object-contain flex-shrink-0" alt="" />
+        ) : (
+          <div className="w-5 h-5 rounded-sm bg-slate-700 flex items-center justify-center text-[9px] text-slate-400 font-bold flex-shrink-0">
+            {team?.abbreviation?.[0] ?? "?"}
+          </div>
+        )}
+        <span className={`text-xs font-bold truncate ${won ? "text-white" : team ? "text-slate-300" : "text-slate-600"}`}>
+          {team?.abbreviation ?? "TBD"}
+        </span>
+        {won && <span className="text-yellow-400 text-[10px] flex-shrink-0">🏆</span>}
+      </div>
+      <span className={`tabular-nums text-sm font-black flex-shrink-0 ${won ? "text-white" : "text-slate-500"}`}>
+        {hasScores ? (score ?? "—") : ""}
+      </span>
+    </div>
+  );
 
   return (
-    <div className="rounded-xl border border-slate-700 bg-slate-950 overflow-hidden min-w-[200px]">
-      {/* Team 1 */}
-      <div className={`flex items-center justify-between px-3 py-2.5 border-b border-slate-800 ${t1Won ? "bg-green-950/40" : ""}`}>
-        <div className="flex items-center gap-2">
-          {matchup.team1?.logo_url ? (
-            <img src={matchup.team1.logo_url} className="w-5 h-5 rounded object-contain" alt="" />
-          ) : (
-            <div className="w-5 h-5 rounded bg-slate-700 flex items-center justify-center text-[9px] text-slate-400 font-bold">
-              {matchup.team1?.abbreviation?.[0] ?? "?"}
-            </div>
-          )}
-          <span className={`text-sm font-semibold ${t1Won ? "text-green-300" : matchup.team1 ? "text-white" : "text-slate-600"}`}>
-            {matchup.team1?.abbreviation ?? "TBD"}
-          </span>
-          {t1Won && <span className="text-yellow-400 text-xs">🏆</span>}
-        </div>
-        <span className={`tabular-nums text-sm font-bold ${t1Won ? "text-green-300" : "text-slate-300"}`}>
-          {hasScores ? (matchup.team1_score ?? "—") : ""}
-        </span>
-      </div>
-      {/* Team 2 */}
-      <div className={`flex items-center justify-between px-3 py-2.5 ${t2Won ? "bg-green-950/40" : ""}`}>
-        <div className="flex items-center gap-2">
-          {matchup.team2?.logo_url ? (
-            <img src={matchup.team2.logo_url} className="w-5 h-5 rounded object-contain" alt="" />
-          ) : (
-            <div className="w-5 h-5 rounded bg-slate-700 flex items-center justify-center text-[9px] text-slate-400 font-bold">
-              {matchup.team2?.abbreviation?.[0] ?? "?"}
-            </div>
-          )}
-          <span className={`text-sm font-semibold ${t2Won ? "text-green-300" : matchup.team2 ? "text-white" : "text-slate-600"}`}>
-            {matchup.team2?.abbreviation ?? "TBD"}
-          </span>
-          {t2Won && <span className="text-yellow-400 text-xs">🏆</span>}
-        </div>
-        <span className={`tabular-nums text-sm font-bold ${t2Won ? "text-green-300" : "text-slate-300"}`}>
-          {hasScores ? (matchup.team2_score ?? "—") : ""}
-        </span>
-      </div>
+    <div className="rounded-lg border border-slate-700 bg-slate-900 overflow-hidden w-[160px]">
+      <TeamRow team={matchup.team1} score={matchup.team1_score} won={t1Won} border />
+      <TeamRow team={matchup.team2} score={matchup.team2_score} won={t2Won} />
     </div>
   );
 }
@@ -187,25 +172,31 @@ function BracketView({ slug }: { slug: string }) {
       .catch(() => setLoading(false));
   }, [slug, season]);
 
-  // Group matchups by round_name (ordered by round_order)
-  const rounds: { name: string; matchups: BracketMatchup[] }[] = [];
-  const seen = new Set<string>();
+  // Build sorted rounds
+  const roundMap = new Map<string, { order: number; matchups: BracketMatchup[] }>();
   for (const m of matchups) {
-    if (!seen.has(m.round_name)) {
-      seen.add(m.round_name);
-      rounds.push({ name: m.round_name, matchups: [] });
-    }
-    rounds.find((r) => r.name === m.round_name)!.matchups.push(m);
+    if (!roundMap.has(m.round_name)) roundMap.set(m.round_name, { order: m.round_order, matchups: [] });
+    roundMap.get(m.round_name)!.matchups.push(m);
   }
+  const rounds = [...roundMap.entries()]
+    .sort((a, b) => a[1].order - b[1].order)
+    .map(([name, { matchups: ms }]) => ({
+      name,
+      matchups: [...ms].sort((a, b) => a.matchup_index - b.matchup_index),
+    }));
+
+  // Champion = winner of the final matchup in the last round
+  const lastRound = rounds[rounds.length - 1];
+  const champion = lastRound?.matchups[0]?.winner ?? null;
 
   return (
-    <div className="p-6">
-      <div className="flex items-center gap-3 mb-6">
+    <div className="p-4 sm:p-6">
+      {/* Season selector */}
+      <div className="flex items-center gap-3 mb-6 flex-wrap">
         <label className="text-slate-400 text-sm font-medium">Season:</label>
         <select
-          className="rounded-lg border border-slate-700 bg-slate-800 text-white text-sm px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          value={season}
-          onChange={(e) => setSeason(e.target.value)}
+          className="rounded-lg border border-slate-700 bg-slate-800 text-white text-sm px-3 py-1.5 focus:outline-none"
+          value={season} onChange={(e) => setSeason(e.target.value)}
         >
           {SEASONS.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
@@ -216,22 +207,55 @@ function BracketView({ slug }: { slug: string }) {
       ) : matchups.length === 0 ? (
         <div className="text-center text-slate-500 py-10">No bracket set up for {season} yet.</div>
       ) : (
-        <div className="flex gap-8 overflow-x-auto pb-4">
-          {rounds.map((round) => (
-            <div key={round.name} className="flex flex-col gap-4 flex-shrink-0">
-              <div className="text-center mb-2">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest bg-slate-800 rounded-full px-3 py-1">
-                  {round.name}
-                </span>
-              </div>
-              {/* Vertically center matchups within the round */}
-              <div className="flex flex-col gap-6 justify-center flex-1">
-                {round.matchups.map((m) => (
-                  <BracketMatchupCard key={m.id} matchup={m} />
-                ))}
+        <div className="overflow-x-auto pb-4">
+          {/* Champion banner */}
+          {champion && (
+            <div className="flex justify-center mb-6">
+              <div className="flex items-center gap-3 rounded-xl border border-yellow-600/40 bg-yellow-950/30 px-5 py-3">
+                <span className="text-2xl">🏆</span>
+                {champion.logo_url && <img src={champion.logo_url} className="w-8 h-8 object-contain rounded" alt="" />}
+                <div>
+                  <div className="text-xs text-yellow-400 font-semibold uppercase tracking-widest">Champion</div>
+                  <div className="text-white font-bold">{champion.name}</div>
+                </div>
               </div>
             </div>
-          ))}
+          )}
+
+          {/* Bracket rounds — left to right */}
+          <div className="flex items-stretch gap-0">
+            {rounds.map((round, ri) => {
+              const isLast = ri === rounds.length - 1;
+              // Spacing grows as rounds progress (fewer matchups = more space between them)
+              const gapClass = round.matchups.length >= 8 ? "gap-2" :
+                               round.matchups.length >= 4 ? "gap-6" :
+                               round.matchups.length >= 2 ? "gap-16" : "gap-0";
+              return (
+                <div key={round.name} className="flex flex-col flex-shrink-0">
+                  {/* Round label */}
+                  <div className="text-center mb-3">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap px-2">
+                      {round.name}
+                    </span>
+                  </div>
+                  {/* Matchups column */}
+                  <div className={`flex flex-col flex-1 items-center justify-around ${gapClass} px-3`}>
+                    {round.matchups.map((m) => (
+                      <div key={m.id} className="relative flex items-center">
+                        <BracketCard matchup={m} />
+                        {/* Connector line to next round */}
+                        {!isLast && (
+                          <div className="absolute right-0 translate-x-full w-3 flex flex-col items-center">
+                            <div className="w-3 h-px bg-slate-600" />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

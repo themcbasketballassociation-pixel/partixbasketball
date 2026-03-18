@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 
 const MAX_GUESSES = 5;
 // Day 1 starts 2026-03-17 at 10 AM EST (15:00 UTC). Advances every 24 h at 10 AM EST.
-const EPOCH_MS = new Date("2026-03-17T15:00:00Z").getTime();
+const EPOCH_MS = new Date("2026-03-19T15:00:00Z").getTime();
 function getDayNum() {
   return Math.max(1, Math.floor((Date.now() - EPOCH_MS) / 86400000) + 1);
 }

@@ -1742,8 +1742,7 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
     { key: "blk",      label: "BLK",  hint: "Total Blocks",                 slash: false },
     { key: "to_total", label: "TO",   hint: "Total Turnovers",              slash: false },
     { key: "fg",          label: "FG",     hint: "FG Made / Attempted (14/25)",  slash: true  },
-    { key: "three_made",  label: "3s",     hint: "Total 3-pointers made",        slash: false },
-    { key: "three_pct",   label: "3FG%",   hint: "3-point % (e.g. 41.7)",        slash: false },
+    { key: "three_fg",    label: "3FG",    hint: "3FG Made / Attempted (5/12)",  slash: true  },
     { key: "pass_total",  label: "PASS",   hint: "Total Pass Attempts",          slash: false },
     { key: "poss_total",  label: "POSS",   hint: "Total Possession Seconds",      slash: false },
   ];
@@ -1778,7 +1777,7 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
     if (!selectedUuid) return;
     setFields({});
     setHasExisting(false);
-    setLoadedFgPct(null); setLoadedThreePct(null); setLoadedThreeMade(null);
+    setLoadedFgPct(null); setLoadedThreePct(null); setLoadedThreeMade(null); 
     setLoadedTopg(null); setLoadedPassPg(null); setLoadedPossPg(null);
     fetch(`/api/stats?league=${league}&season=${encodeURIComponent(initialSeason)}&mc_uuid=${selectedUuid}`)
       .then((r) => r.json())
@@ -1791,9 +1790,18 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
           setLoadedFgPct(row.fg_pct ?? null);
           setLoadedThreePct(row.three_pt_pct ?? null);
           setLoadedThreeMade(row.three_pt_made ?? null);
+          // Reconstruct attempted from made & pct if available
+          const tpMade = row.three_pt_made ?? null;
+          const tpPct  = row.three_pt_pct  ?? null;
+          const tpAtt  = (tpMade != null && tpPct != null && tpPct > 0)
+            ? Math.round(tpMade * 100 / tpPct) : null;
+          
           setLoadedTopg(row.topg ?? null);
           setLoadedPassPg(row.pass_attempts_pg ?? null);
           setLoadedPossPg(row.possession_time_pg ?? null);
+          const threeFgStr = tpMade != null && tpAtt != null
+            ? `${tpMade}/${tpAtt}`
+            : tpMade != null ? String(tpMade) : "";
           setFields({
             gp:  String(row.gp ?? ""),
             pts: gp ? String(round((row.ppg ?? 0) * gp)) : "",
@@ -1802,8 +1810,7 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
             stl: gp ? String(round((row.spg ?? 0) * gp)) : "",
             blk: gp ? String(round((row.bpg ?? 0) * gp)) : "",
             fg:           "",
-            three_made:   row.three_pt_made  != null ? String(row.three_pt_made)  : "",
-            three_pct:    row.three_pt_pct   != null ? String(row.three_pt_pct)   : "",
+            three_fg:     threeFgStr,
             to_total:     gp && row.topg  != null ? String(round(row.topg  * gp)) : "",
             pass_total:   gp && row.pass_attempts_pg  != null ? String(round(row.pass_attempts_pg  * gp)) : "",
             poss_total:   gp && row.possession_time_pg != null ? String(Math.round(row.possession_time_pg * gp)) : "",
@@ -1821,7 +1828,7 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
     if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Delete failed"); return; }
     setFields({});
     setHasExisting(false);
-    setLoadedFgPct(null); setLoadedThreePct(null); setLoadedThreeMade(null);
+    setLoadedFgPct(null); setLoadedThreePct(null); setLoadedThreeMade(null); 
     setLoadedTopg(null); setLoadedPassPg(null); setLoadedPossPg(null);
     setSavedPlayers((prev) => { const s = new Set(prev); s.delete(selectedUuid); return s; });
   };
@@ -1855,8 +1862,11 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
     const [fgMade, fgAtt] = parseSlash(fields.fg);
     const fg_pct = fgMade !== null && fgAtt !== null && fgAtt > 0
       ? Math.round(fgMade / fgAtt * 1000) / 10 : loadedFgPct;
-    const three_pt_made = fields.three_made?.trim() ? (parseFloat(fields.three_made) || null) : loadedThreeMade;
-    const three_pt_pct  = fields.three_pct?.trim()  ? (parseFloat(fields.three_pct)  || null) : loadedThreePct;
+    const [tpMadeParsed, tpAttParsed] = parseSlash(fields.three_fg ?? "");
+    const three_pt_made = tpMadeParsed !== null ? tpMadeParsed : loadedThreeMade;
+    const three_pt_pct  = (tpMadeParsed !== null && tpAttParsed !== null && tpAttParsed > 0)
+      ? Math.round(tpMadeParsed / tpAttParsed * 1000) / 10
+      : loadedThreePct;
     const to_total  = fields.to_total?.trim()   ? parseFloat(fields.to_total)   || null : null;
     const pass_tot  = fields.pass_total?.trim() ? parseFloat(fields.pass_total)  || null : null;
     const poss_tot  = fields.poss_total?.trim() ? parseInt(fields.poss_total)    || null : null;
@@ -1985,17 +1995,33 @@ type BracketMatchup = {
   team2?: { id: string; name: string; abbreviation: string } | null;
 };
 
+function getRoundStructure(n: number): { name: string; order: number; matchupCount: number }[] {
+  const rounds: { name: string; order: number; matchupCount: number }[] = [];
+  let teams = n;
+  let order = 0;
+  while (teams >= 2) {
+    const mc = teams / 2;
+    let name: string;
+    if (teams === 2) name = "Finals";
+    else if (teams === 4) name = n >= 16 ? "Conference Finals" : "Semifinals";
+    else if (teams === 8) name = n >= 16 ? "Conference Semifinals" : "First Round";
+    else if (teams === 16) name = "First Round";
+    else name = `Round of ${teams}`;
+    rounds.push({ name, order, matchupCount: mc });
+    teams = mc;
+    order++;
+  }
+  return rounds;
+}
+
 function PlayoffsTab({ league, season }: { league: string; season: string }) {
   const [matchups, setMatchups] = useState<BracketMatchup[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [err, setErr] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
-  // Add matchup form
-  const [newRound, setNewRound] = useState("");
-  const [newRoundOrder, setNewRoundOrder] = useState("0");
-  const [newTeam1, setNewTeam1] = useState("");
-  const [newTeam2, setNewTeam2] = useState("");
-  const [adding, setAdding] = useState(false);
+  const [numTeams, setNumTeams] = useState("8");
+  const [generating, setGenerating] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   const refresh = useCallback(async () => {
     const [m, t] = await Promise.all([
@@ -2008,7 +2034,7 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const save = async (payload: object) => {
+  const upsert = async (payload: object) => {
     const r = await fetch("/api/playoff-brackets", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -2018,45 +2044,44 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
     return true;
   };
 
-  const addMatchup = async () => {
-    if (!newRound.trim()) { setErr("Round name is required"); return; }
-    setAdding(true); setErr("");
-    // Determine matchup_index = count of existing matchups in this round
-    const existingInRound = matchups.filter(m => m.round_name === newRound.trim());
-    const ok = await save({
-      league, season,
-      round_name: newRound.trim(),
-      round_order: parseInt(newRoundOrder) || 0,
-      matchup_index: existingInRound.length,
-      team1_id: newTeam1 || null,
-      team2_id: newTeam2 || null,
-    });
-    setAdding(false);
-    if (ok) { setNewTeam1(""); setNewTeam2(""); refresh(); }
+  const generateBracket = async () => {
+    const n = parseInt(numTeams);
+    if (isNaN(n) || n < 2 || n > 64 || (n & (n - 1)) !== 0) {
+      setErr("Teams must be a power of 2 (2, 4, 8, 16, 32...)"); return;
+    }
+    if (matchups.length > 0 && !confirm(`This will overwrite the existing bracket for ${season}. Continue?`)) return;
+    setGenerating(true); setErr("");
+    const rounds = getRoundStructure(n);
+    for (const rnd of rounds) {
+      for (let i = 0; i < rnd.matchupCount; i++) {
+        const ok = await upsert({ league, season, round_name: rnd.name, round_order: rnd.order, matchup_index: i });
+        if (!ok) { setGenerating(false); return; }
+      }
+    }
+    setGenerating(false);
+    refresh();
   };
 
-  const updateMatchup = async (m: BracketMatchup, patch: Partial<BracketMatchup>) => {
+  const clearBracket = async () => {
+    if (!confirm(`Delete the entire bracket for ${season}? This cannot be undone.`)) return;
+    setClearing(true); setErr("");
+    for (const m of matchups) {
+      await fetch(`/api/playoff-brackets?id=${m.id}`, { method: "DELETE" });
+    }
+    setClearing(false);
+    refresh();
+  };
+
+  const updateMatchup = async (m: BracketMatchup, patch: object) => {
     setSaving(m.id); setErr("");
-    const ok = await save({
+    await upsert({
       league, season,
-      round_name: m.round_name,
-      round_order: m.round_order,
-      matchup_index: m.matchup_index,
-      team1_id: m.team1_id,
-      team2_id: m.team2_id,
-      team1_score: m.team1_score,
-      team2_score: m.team2_score,
-      winner_id: m.winner_id,
+      round_name: m.round_name, round_order: m.round_order, matchup_index: m.matchup_index,
+      team1_id: m.team1_id, team2_id: m.team2_id,
+      team1_score: m.team1_score, team2_score: m.team2_score, winner_id: m.winner_id,
       ...patch,
     });
     setSaving(null);
-    if (ok) refresh();
-  };
-
-  const deleteMatchup = async (id: string) => {
-    if (!confirm("Delete this matchup?")) return;
-    const r = await fetch(`/api/playoff-brackets?id=${id}`, { method: "DELETE" });
-    if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Delete failed"); return; }
     refresh();
   };
 
@@ -2068,131 +2093,110 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
     rnd.matchups.push(m);
   }
   rounds.sort((a, b) => a.order - b.order);
-
-  const COMMON_ROUNDS = ["Round 1", "Quarterfinals", "Semifinals", "Finals"];
+  for (const rnd of rounds) rnd.matchups.sort((a, b) => a.matchup_index - b.matchup_index);
 
   return (
     <div className="space-y-5">
       <ErrMsg msg={err} />
 
-      {/* Add matchup */}
+      {/* Generate / Clear header */}
       <div className={card}>
-        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Add Matchup — {season}</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 mb-3">
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">
+          {matchups.length === 0 ? "Generate Bracket" : "Bracket"} — {season}
+        </h3>
+        <div className="flex flex-wrap items-end gap-3">
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Round Name</label>
-            <input
-              className={input} list="round-suggestions" placeholder="e.g. Semifinals"
-              value={newRound} onChange={(e) => { setNewRound(e.target.value); setErr(""); }}
-            />
-            <datalist id="round-suggestions">
-              {COMMON_ROUNDS.map(r => <option key={r} value={r} />)}
-            </datalist>
-          </div>
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">Round Order (0 = first)</label>
-            <input className={input} type="number" min="0" placeholder="0" value={newRoundOrder} onChange={(e) => setNewRoundOrder(e.target.value)} />
-          </div>
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">Team 1</label>
-            <select className={input} value={newTeam1} onChange={(e) => setNewTeam1(e.target.value)}>
-              <option value="">TBD</option>
-              {teams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.abbreviation})</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">Team 2</label>
-            <select className={input} value={newTeam2} onChange={(e) => setNewTeam2(e.target.value)}>
-              <option value="">TBD</option>
-              {teams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.abbreviation})</option>)}
-            </select>
-          </div>
-        </div>
-        <button className={btnPrimary} onClick={addMatchup} disabled={adding}>
-          {adding ? "Adding..." : "+ Add Matchup"}
-        </button>
-      </div>
-
-      {/* Bracket rounds */}
-      {rounds.length === 0 ? (
-        <div className={`${card} text-slate-500 text-sm`}>No matchups yet for {season}. Add one above.</div>
-      ) : (
-        rounds.map((round) => (
-          <div key={round.name} className={card}>
-            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-              🏀 {round.name} <span className="text-slate-600 font-normal">· order {round.order}</span>
-            </h3>
-            <div className="space-y-3">
-              {round.matchups.map((m) => {
-                const t1 = m.team1 ?? teams.find(t => t.id === m.team1_id);
-                const t2 = m.team2 ?? teams.find(t => t.id === m.team2_id);
-                return (
-                  <div key={m.id} className="rounded-lg border border-slate-800 bg-slate-900 p-4">
-                    <div className="flex flex-wrap gap-3 items-center mb-3">
-                      {/* Team 1 selector */}
-                      <div className="flex-1 min-w-[140px]">
-                        <label className="block text-xs text-slate-500 mb-1">Team 1</label>
-                        <select className={input} value={m.team1_id ?? ""} onChange={(e) => updateMatchup(m, { team1_id: e.target.value || null })}>
-                          <option value="">TBD</option>
-                          {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                        </select>
-                      </div>
-                      {/* Scores */}
-                      <div className="flex items-end gap-1">
-                        <div>
-                          <label className="block text-xs text-slate-500 mb-1">{t1?.abbreviation ?? "T1"} Score</label>
-                          <input
-                            className="rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none w-16 text-center"
-                            type="number" min="0"
-                            value={m.team1_score ?? ""}
-                            onChange={(e) => updateMatchup(m, { team1_score: e.target.value ? parseInt(e.target.value) : null })}
-                          />
-                        </div>
-                        <span className="text-slate-500 pb-2">–</span>
-                        <div>
-                          <label className="block text-xs text-slate-500 mb-1">{t2?.abbreviation ?? "T2"} Score</label>
-                          <input
-                            className="rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none w-16 text-center"
-                            type="number" min="0"
-                            value={m.team2_score ?? ""}
-                            onChange={(e) => updateMatchup(m, { team2_score: e.target.value ? parseInt(e.target.value) : null })}
-                          />
-                        </div>
-                      </div>
-                      {/* Team 2 selector */}
-                      <div className="flex-1 min-w-[140px]">
-                        <label className="block text-xs text-slate-500 mb-1">Team 2</label>
-                        <select className={input} value={m.team2_id ?? ""} onChange={(e) => updateMatchup(m, { team2_id: e.target.value || null })}>
-                          <option value="">TBD</option>
-                          {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                        </select>
-                      </div>
-                    </div>
-                    {/* Winner + Delete */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs text-slate-500">Set Winner:</span>
-                      {[{ id: m.team1_id, name: t1?.name ?? "Team 1" }, { id: m.team2_id, name: t2?.name ?? "Team 2" }].map(({ id, name }) => (
-                        id ? (
-                          <button
-                            key={id}
-                            className={`${btn} text-xs px-3 py-1 ${m.winner_id === id ? "bg-yellow-700 text-yellow-200" : "bg-slate-800 text-slate-300 hover:bg-slate-700"}`}
-                            onClick={() => updateMatchup(m, { winner_id: m.winner_id === id ? null : id })}
-                            disabled={saving === m.id}
-                          >
-                            {m.winner_id === id ? "🏆 " : ""}{name}
-                          </button>
-                        ) : null
-                      ))}
-                      <button className={`${btnDanger} ml-auto text-xs`} onClick={() => deleteMatchup(m.id)}>Delete</button>
-                    </div>
-                    {saving === m.id && <p className="text-xs text-slate-500 mt-1">Saving...</p>}
-                  </div>
-                );
-              })}
+            <label className="block text-xs text-slate-500 mb-1">Number of Teams</label>
+            <div className="flex gap-1 flex-wrap">
+              {["4","8","16","32"].map(n => (
+                <button key={n} onClick={() => setNumTeams(n)}
+                  className={`px-3 py-1.5 rounded text-sm font-medium transition border ${numTeams === n ? "bg-blue-600 border-blue-500 text-white" : "bg-slate-800 border-slate-700 text-slate-300 hover:text-white"}`}>
+                  {n}
+                </button>
+              ))}
+              <input
+                className={`${input} w-20`} type="number" min="2" max="64" placeholder="Other"
+                value={["4","8","16","32"].includes(numTeams) ? "" : numTeams}
+                onChange={(e) => setNumTeams(e.target.value)}
+              />
             </div>
           </div>
-        ))
-      )}
+          <button className={btnPrimary} onClick={generateBracket} disabled={generating}>
+            {generating ? "Generating..." : matchups.length > 0 ? "↻ Regenerate" : "Generate Bracket"}
+          </button>
+          {matchups.length > 0 && (
+            <button className={btnDanger} onClick={clearBracket} disabled={clearing}>
+              {clearing ? "Clearing..." : "Clear Bracket"}
+            </button>
+          )}
+        </div>
+        {matchups.length === 0 && (
+          <p className="text-xs text-slate-500 mt-3">
+            Choose the number of teams → click Generate → then pick which team goes in each slot.
+          </p>
+        )}
+      </div>
+
+      {/* Rounds */}
+      {rounds.map((round) => (
+        <div key={round.name} className={card}>
+          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+            🏀 {round.name}
+          </h3>
+          <div className="space-y-3">
+            {round.matchups.map((m) => {
+              const t1 = m.team1 ?? teams.find(t => t.id === m.team1_id) ?? null;
+              const t2 = m.team2 ?? teams.find(t => t.id === m.team2_id) ?? null;
+              return (
+                <div key={m.id} className="rounded-xl border border-slate-700 bg-slate-950 overflow-hidden">
+                  {/* Team rows */}
+                  {([{ side: "team1", teamData: t1, scoreKey: "team1_score" as const, idKey: "team1_id" as const },
+                     { side: "team2", teamData: t2, scoreKey: "team2_score" as const, idKey: "team2_id" as const }] as const).map(({ side, teamData, scoreKey, idKey }, rowIdx) => {
+                    const isWinner = m.winner_id && teamData?.id === m.winner_id;
+                    return (
+                      <div key={side} className={`flex items-center gap-3 px-4 py-3 ${rowIdx === 0 ? "border-b border-slate-800" : ""} ${isWinner ? "bg-green-950/30" : ""}`}>
+                        {/* Logo/abbr */}
+                        <div className="w-7 h-7 rounded flex-shrink-0 overflow-hidden flex items-center justify-center bg-slate-800 text-[10px] font-bold text-slate-400">
+                          {(teamData as Team | null)?.logo_url
+                            ? <img src={(teamData as Team).logo_url!} className="w-full h-full object-contain" alt="" />
+                            : (teamData?.abbreviation?.[0] ?? "?")}
+                        </div>
+                        {/* Team picker */}
+                        <select
+                          className="flex-1 rounded border border-slate-700 bg-slate-800 text-sm text-white px-2 py-1 focus:border-blue-500 focus:outline-none"
+                          value={m[idKey] ?? ""}
+                          onChange={(e) => updateMatchup(m, { [idKey]: e.target.value || null })}
+                        >
+                          <option value="">— TBD —</option>
+                          {teams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.abbreviation})</option>)}
+                        </select>
+                        {/* Score */}
+                        <input
+                          type="number" min="0" placeholder="—"
+                          className="w-16 rounded border border-slate-700 bg-slate-800 text-sm text-white px-2 py-1 text-center focus:border-blue-500 focus:outline-none"
+                          value={m[scoreKey] ?? ""}
+                          onChange={(e) => updateMatchup(m, { [scoreKey]: e.target.value !== "" ? parseInt(e.target.value) : null })}
+                        />
+                        {/* Trophy / win button */}
+                        {teamData && (
+                          <button
+                            title={isWinner ? "Clear winner" : "Set as winner"}
+                            className={`text-lg transition ${isWinner ? "opacity-100" : "opacity-20 hover:opacity-60"}`}
+                            onClick={() => updateMatchup(m, { winner_id: isWinner ? null : teamData.id })}
+                            disabled={saving === m.id}
+                          >
+                            🏆
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
