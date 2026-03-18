@@ -1803,6 +1803,7 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
   ];
 
   const [players, setPlayers] = useState<Player[]>([]);
+  const [allStats, setAllStats] = useState<Record<string, any>>({});
   const [selectedUuid, setSelectedUuid] = useState("");
   const [fields, setFields] = useState<Record<string, string>>({});
   const [savedPlayers, setSavedPlayers] = useState<Set<string>>(new Set());
@@ -1819,13 +1820,26 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
   const [loadedPassPg, setLoadedPassPg] = useState<number | null>(null);
   const [loadedPossPg, setLoadedPossPg] = useState<number | null>(null);
 
+  const refreshAllStats = useCallback(() => {
+    fetch(`/api/stats?league=${league}&season=${encodeURIComponent(initialSeason)}`)
+      .then(r => r.json())
+      .then(data => {
+        const map: Record<string, any> = {};
+        for (const row of (Array.isArray(data) ? data : [])) map[row.mc_uuid] = row;
+        setAllStats(map);
+      }).catch(() => {});
+  }, [league, initialSeason]);
+
   useEffect(() => {
     setLoading(true);
-    fetch("/api/players")
-      .then((r) => r.json())
-      .then((p) => { setPlayers(Array.isArray(p) ? p : []); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, [league]);
+    Promise.all([
+      fetch("/api/players").then(r => r.json()),
+    ]).then(([p]) => {
+      setPlayers(Array.isArray(p) ? p : []);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+    refreshAllStats();
+  }, [league, refreshAllStats]);
 
   // When player is selected, load their existing stats for this season
   useEffect(() => {
@@ -1883,9 +1897,10 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
     if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Delete failed"); return; }
     setFields({});
     setHasExisting(false);
-    setLoadedFgPct(null); setLoadedThreePct(null); setLoadedThreeMade(null); 
+    setLoadedFgPct(null); setLoadedThreePct(null); setLoadedThreeMade(null);
     setLoadedTopg(null); setLoadedPassPg(null); setLoadedPossPg(null);
     setSavedPlayers((prev) => { const s = new Set(prev); s.delete(selectedUuid); return s; });
+    refreshAllStats();
   };
 
   const parseSlash = (s: string): [number | null, number | null] => {
@@ -1942,16 +1957,83 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
     setSaved(true);
     setSavedPlayers((prev) => new Set([...prev, selectedUuid]));
     setTimeout(() => setSaved(false), 2000);
+    refreshAllStats();
   };
 
   const selectedPlayer = players.find((p) => p.mc_uuid === selectedUuid);
 
   if (loading) return <div className={`${card} text-slate-500 text-sm`}>Loading...</div>;
 
+  const playersWithStats = players.filter(p => allStats[p.mc_uuid]);
+  const fmt1 = (v: number | null | undefined) => v != null ? v.toFixed(1) : "—";
+  const fmtPct = (v: number | null | undefined) => v != null ? `${v.toFixed(1)}%` : "—";
+
   return (
     <div className="space-y-4">
+      {/* All-players overview table */}
+      <div className={`${card} overflow-x-auto`}>
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest">
+            All Stats — {initialSeason}
+            <span className="ml-2 text-slate-600 normal-case font-normal">{playersWithStats.length} player{playersWithStats.length !== 1 ? "s" : ""} · click a row to edit</span>
+          </h3>
+        </div>
+        {playersWithStats.length === 0 ? (
+          <p className="text-slate-600 text-sm">No stats saved for this season yet.</p>
+        ) : (
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-800">
+                <th className="px-3 py-2 text-left text-xs text-slate-400 uppercase tracking-widest">Player</th>
+                <th className="px-2 py-2 text-center text-xs text-slate-400 uppercase tracking-widest">GP</th>
+                <th className="px-2 py-2 text-center text-xs text-slate-400 uppercase tracking-widest">PPG</th>
+                <th className="px-2 py-2 text-center text-xs text-slate-400 uppercase tracking-widest">RPG</th>
+                <th className="px-2 py-2 text-center text-xs text-slate-400 uppercase tracking-widest">APG</th>
+                <th className="px-2 py-2 text-center text-xs text-slate-400 uppercase tracking-widest">SPG</th>
+                <th className="px-2 py-2 text-center text-xs text-slate-400 uppercase tracking-widest">BPG</th>
+                <th className="px-2 py-2 text-center text-xs text-slate-400 uppercase tracking-widest">FG%</th>
+                <th className="px-2 py-2 text-center text-xs text-slate-400 uppercase tracking-widest">3PM</th>
+                <th className="px-2 py-2 text-center text-xs text-slate-400 uppercase tracking-widest">3P%</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800">
+              {playersWithStats.map(p => {
+                const s = allStats[p.mc_uuid];
+                const isSelected = selectedUuid === p.mc_uuid;
+                return (
+                  <tr
+                    key={p.mc_uuid}
+                    onClick={() => { setSelectedUuid(p.mc_uuid); setErr(""); setSaved(false); setTimeout(() => document.getElementById("stats-edit-form")?.scrollIntoView({ behavior: "smooth" }), 50); }}
+                    className={`cursor-pointer transition ${isSelected ? "bg-blue-950/40 border-l-2 border-blue-500" : "hover:bg-slate-800/60"} ${savedPlayers.has(p.mc_uuid) ? "opacity-70" : ""}`}
+                  >
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <img src={`https://minotar.net/avatar/${p.mc_username}/20`} className="w-5 h-5 rounded" onError={e => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/20"; }} />
+                        <span className="text-white font-medium">{p.mc_username}</span>
+                        {savedPlayers.has(p.mc_uuid) && <span className="text-green-400 text-xs">✓</span>}
+                      </div>
+                    </td>
+                    <td className="px-2 py-2 text-center text-slate-300">{s.gp ?? "—"}</td>
+                    <td className="px-2 py-2 text-center text-slate-300">{fmt1(s.ppg)}</td>
+                    <td className="px-2 py-2 text-center text-slate-300">{fmt1(s.rpg)}</td>
+                    <td className="px-2 py-2 text-center text-slate-300">{fmt1(s.apg)}</td>
+                    <td className="px-2 py-2 text-center text-slate-300">{fmt1(s.spg)}</td>
+                    <td className="px-2 py-2 text-center text-slate-300">{fmt1(s.bpg)}</td>
+                    <td className="px-2 py-2 text-center text-slate-300">{fmtPct(s.fg_pct)}</td>
+                    <td className="px-2 py-2 text-center text-slate-300">{s.three_pt_made ?? "—"}</td>
+                    <td className={`px-2 py-2 text-center font-medium ${s.three_pt_pct != null && (s.three_pt_pct < 0 || s.three_pt_pct > 100) ? "text-red-400" : "text-slate-300"}`}>
+                      {fmtPct(s.three_pt_pct)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
       {/* Player picker */}
-      <div className={card}>
+      <div id="stats-edit-form" className={card}>
         <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">
           Add / Edit Player Stats — {initialSeason}
         </h3>
