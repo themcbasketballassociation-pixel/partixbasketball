@@ -333,6 +333,16 @@ export default function ConnectionsPage({ params }: { params?: Promise<{ league?
     });
   }, [isDone]);
 
+  // Check if current selection of 4 has exactly 3 from the same group
+  const oneAway = React.useMemo(() => {
+    if (!groups || selected.size !== 4) return false;
+    const selectedArr = [...selected];
+    return groups.some(g => {
+      const matches = selectedArr.filter(uuid => g.players.some(p => p.mc_uuid === uuid));
+      return matches.length === 3;
+    });
+  }, [groups, selected]);
+
   const submitGuess = useCallback(() => {
     if (!groups || selected.size !== 4) return;
     const selectedArr = [...selected];
@@ -475,7 +485,13 @@ export default function ConnectionsPage({ params }: { params?: Promise<{ league?
 
             {/* Submit / done */}
             {!isDone ? (
-              <div className="flex justify-center gap-3 pt-1">
+              <div className="flex flex-col items-center gap-2 pt-1">
+                {oneAway && (
+                  <div className="text-sm font-bold text-yellow-300 bg-yellow-900/50 border border-yellow-700 rounded-lg px-4 py-1.5 animate-pulse">
+                    🔥 1 Away!
+                  </div>
+                )}
+              <div className="flex justify-center gap-3">
                 <button onClick={() => setSelected(new Set())}
                   className="rounded-lg border border-slate-600 bg-slate-800 hover:bg-slate-700 text-white text-sm px-4 py-2 transition disabled:opacity-30"
                   disabled={selected.size === 0}>
@@ -486,6 +502,7 @@ export default function ConnectionsPage({ params }: { params?: Promise<{ league?
                   disabled={selected.size !== 4}>
                   Submit ({selected.size}/4 selected)
                 </button>
+              </div>
               </div>
             ) : (
               <div className={`rounded-xl border p-4 text-center ${foundGroups.length === 4 ? "border-green-800 bg-green-950" : "border-slate-700 bg-slate-950"}`}>
