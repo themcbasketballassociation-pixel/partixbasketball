@@ -1821,14 +1821,14 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
   const [loadedPossPg, setLoadedPossPg] = useState<number | null>(null);
 
   const refreshAllStats = useCallback(() => {
-    fetch(`/api/stats?league=${league}&season=all`)
+    fetch(`/api/stats?league=${league}&season=${encodeURIComponent(initialSeason)}`)
       .then(r => r.json())
       .then(data => {
         const map: Record<string, any> = {};
         for (const row of (Array.isArray(data) ? data : [])) map[row.mc_uuid] = row;
         setAllStats(map);
       }).catch(() => {});
-  }, [league]);
+  }, [league, initialSeason]);
 
   useEffect(() => {
     setLoading(true);
