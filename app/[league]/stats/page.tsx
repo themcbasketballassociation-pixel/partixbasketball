@@ -70,6 +70,8 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
   const [viewMode, setViewMode] = React.useState<"avg" | "total">("avg");
   const [sortKey, setSortKey] = React.useState<string>("ppg");
   const [sortDir, setSortDir] = React.useState<"desc" | "asc">("desc");
+  const [page, setPage] = React.useState(1);
+  const PAGE_SIZE = 10;
 
   const apiSeason = season === "All Time" ? "all" : season;
 
@@ -82,13 +84,18 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
       .catch(() => setLoading(false));
   }, [slug, apiSeason, tab]);
 
-  // Reset sort key when switching view modes
+  // Reset sort key + page when switching view modes
   React.useEffect(() => {
     setSortKey(viewMode === "avg" ? "ppg" : "pts");
     setSortDir("desc");
+    setPage(1);
   }, [viewMode]);
 
+  // Reset page when season or tab changes
+  React.useEffect(() => { setPage(1); }, [tab, apiSeason]);
+
   const handleSort = (key: string) => {
+    setPage(1);
     if (sortKey === key) {
       setSortDir((d) => (d === "desc" ? "asc" : "desc"));
     } else {
@@ -123,6 +130,9 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
     const diff = bv - av;
     return sortDir === "desc" ? diff : -diff;
   });
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const pageRows = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   // Average-mode columns
   type ColDef = { key: string; label: string; title: string };
@@ -268,38 +278,104 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
               </tr>
             </thead>
             <tbody>
-              {sorted.map((row, i) => (
-                <tr
-                  key={row.mc_uuid}
-                  className={`border-b border-slate-800/50 hover:bg-slate-800/40 transition ${i === 0 ? "bg-slate-800/20" : ""}`}
-                >
-                  <td className="px-4 py-3 text-slate-500 text-xs">{i + 1}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <img
-                        src={`https://minotar.net/avatar/${row.mc_username}/32`}
-                        alt={row.mc_username}
-                        className="w-8 h-8 rounded"
-                        onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/32"; }}
-                      />
-                      <span className="font-medium text-white">{row.mc_username}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-slate-400 text-xs">
-                    {row.team ? (row.team as Team).abbreviation : "—"}
-                  </td>
-                  {activeCols.map(({ key }) => (
-                    <td
-                      key={key}
-                      className={`px-3 py-3 text-right tabular-nums ${sortKey === key ? "text-blue-300 font-semibold" : "text-slate-300"}`}
-                    >
-                      {renderCell(row, key)}
+              {pageRows.map((row, i) => {
+                const globalRank = (page - 1) * PAGE_SIZE + i + 1;
+                return (
+                  <tr
+                    key={row.mc_uuid}
+                    className={`border-b border-slate-800/50 hover:bg-slate-800/40 transition ${globalRank === 1 ? "bg-slate-800/20" : ""}`}
+                  >
+                    <td className="px-4 py-3 text-slate-500 text-xs">{globalRank}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <img
+                          src={`https://minotar.net/avatar/${row.mc_username}/32`}
+                          alt={row.mc_username}
+                          className="w-8 h-8 rounded"
+                          onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/32"; }}
+                        />
+                        <span className="font-medium text-white">{row.mc_username}</span>
+                      </div>
                     </td>
-                  ))}
-                </tr>
-              ))}
+                    <td className="px-4 py-3 text-slate-400 text-xs">
+                      {row.team ? (row.team as Team).abbreviation : "—"}
+                    </td>
+                    {activeCols.map(({ key }) => (
+                      <td
+                        key={key}
+                        className={`px-3 py-3 text-right tabular-nums ${sortKey === key ? "text-blue-300 font-semibold" : "text-slate-300"}`}
+                      >
+                        {renderCell(row, key)}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-6 py-4 border-t border-slate-800">
+              <span className="text-sm text-slate-500">
+                {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, sorted.length)} of {sorted.length} players
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPage(1)}
+                  disabled={page === 1}
+                  className="px-2 py-1.5 rounded text-sm text-slate-400 hover:text-white hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition"
+                >
+                  «
+                </button>
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="px-3 py-1.5 rounded text-sm text-slate-400 hover:text-white hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition"
+                >
+                  ‹ Prev
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
+                  .reduce<(number | "…")[]>((acc, p, idx, arr) => {
+                    if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push("…");
+                    acc.push(p);
+                    return acc;
+                  }, [])
+                  .map((p, idx) =>
+                    p === "…" ? (
+                      <span key={`ellipsis-${idx}`} className="px-2 text-slate-600 text-sm">…</span>
+                    ) : (
+                      <button
+                        key={p}
+                        onClick={() => setPage(p as number)}
+                        className={`px-3 py-1.5 rounded text-sm font-medium transition ${
+                          page === p
+                            ? "bg-blue-600 text-white"
+                            : "text-slate-400 hover:text-white hover:bg-slate-800"
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    )
+                  )}
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="px-3 py-1.5 rounded text-sm text-slate-400 hover:text-white hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition"
+                >
+                  Next ›
+                </button>
+                <button
+                  onClick={() => setPage(totalPages)}
+                  disabled={page === totalPages}
+                  className="px-2 py-1.5 rounded text-sm text-slate-400 hover:text-white hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition"
+                >
+                  »
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
