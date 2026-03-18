@@ -4,9 +4,9 @@ import { requireAdmin } from "../../../lib/adminAuth";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { league, season } = req.query;
-  if (!league) return res.status(400).json({ error: "league required" });
 
   if (req.method === "GET") {
+    if (!league) return res.status(400).json({ error: "league required" });
     // Fetch team IDs for this league (+season), then get their records
     let teamsQuery = supabase.from("teams").select("id").eq("league", league as string);
     if (season) teamsQuery = teamsQuery.eq("season", season as string);
