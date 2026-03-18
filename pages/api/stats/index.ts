@@ -97,13 +97,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // GET with season (and optional type) — leaderboard
   if (season) {
     const typeStr = (type as string) ?? "regular";
-    const querySeasons = getQuerySeasons(season as string, typeStr);
+    const seasonStr = season as string;
 
-    const { data, error } = await supabase
-      .from("stats")
-      .select("*")
-      .eq("league", league as string)
-      .in("season", querySeasons);
+    let statsQuery = supabase.from("stats").select("*").eq("league", league as string);
+    if (seasonStr !== "all") {
+      // Specific season — filter by computed season names
+      const querySeasons = getQuerySeasons(seasonStr, typeStr);
+      statsQuery = statsQuery.in("season", querySeasons);
+    } else if (typeStr === "playoffs") {
+      statsQuery = statsQuery.ilike("season", "%Playoff%");
+    } else if (typeStr === "regular") {
+      statsQuery = statsQuery.not("season", "ilike", "%Playoff%");
+    }
+    // type="combined" or season="all" with no type filter → all rows for league
+
+    const { data, error } = await statsQuery;
     if (error) return res.status(500).json({ error: error.message });
 
     // Group by mc_uuid and merge across seasons
