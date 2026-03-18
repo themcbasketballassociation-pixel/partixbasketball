@@ -90,9 +90,10 @@ export default function AccoladesPage({ params }: { params?: Promise<{ league?: 
                   <div key={a.id} className="rounded-xl border border-slate-700 bg-slate-950 px-5 py-4 hover:border-slate-600 transition">
                     <div className="flex items-center gap-3 mb-3">
                       <img
-                        src={`https://crafatar.com/avatars/${a.mc_uuid}?size=40&default=MHF_Steve&overlay`}
+                        src={`https://minotar.net/avatar/${a.players?.mc_username ?? "MHF_Steve"}/40`}
                         alt={a.players?.mc_username}
                         className="w-10 h-10 rounded-lg ring-1 ring-slate-700 flex-shrink-0"
+                        onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/40"; }}
                       />
                       <div>
                         <div className="font-semibold text-white">{a.players?.mc_username ?? a.mc_uuid}</div>
