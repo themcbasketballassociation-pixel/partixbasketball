@@ -86,14 +86,15 @@ function generateGroups(
     byTeam[t].push(p);
   }
 
-  // Candidate groups list (label, description, players pool)
-  type Candidate = { label: string; description: string; pool: Player[] };
+  // Candidate groups list (label, description, players pool, category type)
+  type CandType = "team" | "stat" | "award" | "teammate";
+  type Candidate = { label: string; description: string; pool: Player[]; type: CandType };
   const candidates: Candidate[] = [];
 
   // ── Team-based groups ─────────────────────────────────────────────────────
   for (const [teamName, teamPlayers] of Object.entries(byTeam)) {
     if (teamPlayers.length >= 4) {
-      candidates.push({ label: teamName, description: `Played for ${teamName}`, pool: teamPlayers });
+      candidates.push({ label: teamName, description: `Played for ${teamName}`, pool: teamPlayers, type: "team" });
     }
   }
 
@@ -128,7 +129,7 @@ function generateGroups(
 
   for (const { map, min, label, desc } of statThresholds) {
     const pool = players.filter(p => (map[p.mc_uuid] ?? 0) >= min);
-    if (pool.length >= 4) candidates.push({ label, description: desc, pool });
+    if (pool.length >= 4) candidates.push({ label, description: desc, pool, type: "stat" });
   }
 
   // ── Award-based groups ────────────────────────────────────────────────────
@@ -141,7 +142,7 @@ function generateGroups(
   }
   for (const [awardType, awardPlayers] of Object.entries(awardMap)) {
     if (awardPlayers.length >= 4)
-      candidates.push({ label: awardType, description: `Won ${awardType}`, pool: awardPlayers });
+      candidates.push({ label: awardType, description: `Won ${awardType}`, pool: awardPlayers, type: "award" });
   }
 
   // ── Played-with groups ────────────────────────────────────────────────────
@@ -167,23 +168,27 @@ function generateGroups(
         label: `Teammate of ${refPlayer.mc_username}`,
         description: `Played on the same team as ${refPlayer.mc_username}`,
         pool: teammates,
+        type: "teammate",
       });
     }
   }
 
-  // ── Greedily pick 4 non-overlapping groups of exactly 4 players ───────────
+  // ── Greedily pick 4 non-overlapping groups — max 1 per category type ───────
   const shuffledCandidates = shuffled(candidates, rng);
   const selected: Group[] = [];
   const usedUuids = new Set<string>();
+  const usedTypes = new Set<CandType>();
   const colors: GroupColor[] = shuffled(["yellow", "green", "blue", "purple"] as GroupColor[], rng);
 
   for (const cand of shuffledCandidates) {
     if (selected.length >= 4) break;
+    if (usedTypes.has(cand.type)) continue; // skip duplicate category types
     const available = cand.pool.filter(p => !usedUuids.has(p.mc_uuid));
     if (available.length < 4) continue;
     const picked = shuffled(available, rng).slice(0, 4);
     selected.push({ label: cand.label, description: cand.description, color: colors[selected.length], players: picked });
     for (const p of picked) usedUuids.add(p.mc_uuid);
+    usedTypes.add(cand.type);
   }
 
   return selected.length === 4 ? selected : null;
