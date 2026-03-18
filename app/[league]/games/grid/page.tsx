@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useSession, signIn } from "next-auth/react";
 
 const TOTAL_GUESSES = 9;
 const LAUNCH_DAY_NUM = Math.floor(new Date("2026-03-17T00:00:00Z").getTime() / 86400000);
@@ -70,6 +71,28 @@ function playerFits(
   }
 }
 
+/**
+ * Backtracking check: can we assign 9 DISTINCT players to 9 cells?
+ * Processes most-constrained cells first for fast pruning.
+ */
+function checkValidAssignment(cellPlayers: string[][]): boolean {
+  const order = [...Array(cellPlayers.length).keys()]
+    .sort((a, b) => cellPlayers[a].length - cellPlayers[b].length);
+  const used = new Set<string>();
+  function bt(pos: number): boolean {
+    if (pos === order.length) return true;
+    for (const p of cellPlayers[order[pos]]) {
+      if (!used.has(p)) {
+        used.add(p);
+        if (bt(pos + 1)) return true;
+        used.delete(p);
+      }
+    }
+    return false;
+  }
+  return bt(0);
+}
+
 function generateGrid(
   dayNum:      number,
   allTeams:    Team[],
@@ -83,7 +106,6 @@ function generateGrid(
 
   // ── Build every possible category from available data ────────────────────
 
-  // Teams (deduplicated by name across seasons)
   const byName: Record<string, string[]> = {};
   for (const t of allTeams) {
     const n = t.name.trim();
@@ -94,14 +116,12 @@ function generateGrid(
     .filter(([, ids]) => uuids.some(u => (ptMap[u] ?? []).some(pt => ids.includes(pt.team_id))))
     .map(([name, ids]) => ({ type: "team" as const, teamName: name, teamIds: ids, label: name }));
 
-  // Divisions
   const divCats: Category[] = [];
   if (uuids.some(u => (ptMap[u] ?? []).some(pt => pt.teams?.division === "East")))
     divCats.push({ type: "division", division: "East", label: "East Division" });
   if (uuids.some(u => (ptMap[u] ?? []).some(pt => pt.teams?.division === "West")))
     divCats.push({ type: "division", division: "West", label: "West Division" });
 
-  // Stats — broad range of thresholds so something always qualifies
   const statCandidates: Category[] = [
     { type: "ppg", min: 5,  label: "PPG ≥ 5"  },
     { type: "ppg", min: 10, label: "PPG ≥ 10" },
@@ -123,12 +143,10 @@ function generateGrid(
     uuids.some(u => playerFits(u, c, ptMap, statsMap, ringMap, accoladeMap))
   );
 
-  // Rings
   const ringCats: Category[] = [];
   if (uuids.some(u => (ringMap[u] ?? 0) >= 1))
     ringCats.push({ type: "rings", label: "Won Finals 🏆" });
 
-  // Accolades (require ≥2 players so cells aren't unsolvable)
   const accoladeTypeCounts: Record<string, number> = {};
   for (const a of allAccolades) {
     if (a.type !== "Finals Champion")
@@ -138,15 +156,13 @@ function generateGrid(
     .filter(([, count]) => count >= 2)
     .map(([type]) => ({ type: "accolade" as const, accoladeType: type, label: type }));
 
-  // Unified pool — rows and cols can be any category type
   const allCats: Category[] = [
     ...teamCats, ...divCats, ...statCats, ...ringCats, ...accoladeCats,
   ];
 
   if (allCats.length < 6) return null;
 
-  // ── Pre-filter: only keep categories that form a valid pair with ≥2 others ─
-  // (so every selected category can actually appear in a solvable grid)
+  // Pre-filter: only keep categories that pair with ≥2 others
   const pairCount = allCats.map((a, i) =>
     allCats.reduce((n, b, j) => {
       if (i === j || a.label === b.label) return n;
@@ -161,36 +177,106 @@ function generateGrid(
 
   if (usable.length < 6) return null;
 
-  // ── Search for a valid 3×3 grid ──────────────────────────────────────────
+  // Search for a valid 3×3 grid where 9 distinct players can fill all cells
   for (let attempt = 0; attempt < 500; attempt++) {
-    const rng     = seededRng(dayNum * 137 + attempt);
-    const picked  = shuffled(usable, rng);
-    const rows    = picked.slice(0, 3);
-    const cols    = picked.slice(3, 6);
+    const rng    = seededRng(dayNum * 137 + attempt);
+    const picked = shuffled(usable, rng);
+    const rows   = picked.slice(0, 3);
+    const cols   = picked.slice(3, 6);
 
-    // No duplicate labels across rows + cols
     const labels = [...rows, ...cols].map(c => c.label);
     if (new Set(labels).size < 6) continue;
 
-    // Every cell must have ≥1 valid player
-    let valid = true;
-    outer: for (const row of rows) {
+    // Each cell must have ≥1 valid player
+    let anyEmpty = false;
+    const cellPlayers: string[][] = [];
+    for (const row of rows) {
       for (const col of cols) {
-        const ok = uuids.some(u =>
+        const valid = uuids.filter(u =>
           playerFits(u, row, ptMap, statsMap, ringMap, accoladeMap) &&
           playerFits(u, col, ptMap, statsMap, ringMap, accoladeMap)
-        );
-        if (!ok) { valid = false; break outer; }
+        ).slice(0, 30); // cap for backtracking perf
+        if (valid.length === 0) { anyEmpty = true; break; }
+        cellPlayers.push(valid);
       }
+      if (anyEmpty) break;
     }
-    if (valid) return { rows, cols };
+    if (anyEmpty) continue;
+
+    // Verify 9 DISTINCT players can fill all cells simultaneously
+    if (!checkValidAssignment(cellPlayers)) continue;
+
+    return { rows, cols };
   }
   return null;
 }
 
+// ── Share card ────────────────────────────────────────────────────────────────
+
+const CELL_EMOJI = (s: CellState) => s.status === "correct" ? "🟩" : "⬛";
+
+function GridShareModal({
+  cells, guessesUsed, dayNum, onClose,
+}: {
+  cells: CellState[]; guessesUsed: number; dayNum: number; onClose: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const solved = cells.filter(c => c.status === "correct").length;
+
+  const text = [
+    `Partix Basketball Grid – Day #${dayNum}`,
+    `${solved}/9 cells · ${guessesUsed}/${TOTAL_GUESSES} guesses`,
+    "",
+    cells.slice(0, 3).map(CELL_EMOJI).join(""),
+    cells.slice(3, 6).map(CELL_EMOJI).join(""),
+    cells.slice(6, 9).map(CELL_EMOJI).join(""),
+  ].join("\n");
+
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(text); } catch { /* ignore */ }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="w-full max-w-xs rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden">
+        <div className="px-5 pt-5 pb-3 border-b border-slate-800 flex items-center justify-between">
+          <div>
+            <h3 className="text-white font-bold">Share Result</h3>
+            <p className="text-slate-400 text-xs mt-0.5">Day #{dayNum} · {solved}/9 cells · {guessesUsed}/{TOTAL_GUESSES} guesses</p>
+          </div>
+          <button onClick={onClose} className="text-slate-500 hover:text-white text-xl leading-none">✕</button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className="flex flex-col items-center gap-1.5">
+            {[0, 1, 2].map(row => (
+              <div key={row} className="flex gap-1">
+                {[0, 1, 2].map(col => (
+                  <span key={col} className="text-3xl leading-none">{CELL_EMOJI(cells[row * 3 + col])}</span>
+                ))}
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={copy}
+            className={`w-full rounded-lg py-2.5 text-sm font-semibold transition ${
+              copied ? "bg-green-700 text-green-200" : "bg-blue-600 hover:bg-blue-500 text-white"
+            }`}
+          >
+            {copied ? "✓ Copied!" : "📋 Copy to Clipboard"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-/** Shown in place of an unsolved cell when the player reveals answers */
 function AnswerCell({ validPlayers }: { validPlayers: Player[] }) {
   const show = validPlayers.slice(0, 7);
   const more = validPlayers.length - show.length;
@@ -210,9 +296,7 @@ function AnswerCell({ validPlayers }: { validPlayers: Player[] }) {
               <span className="text-[11px] text-slate-300 truncate leading-tight">{p.mc_username}</span>
             </div>
           ))}
-          {more > 0 && (
-            <p className="text-slate-600 text-[10px] text-center pt-0.5">+{more} more</p>
-          )}
+          {more > 0 && <p className="text-slate-600 text-[10px] text-center pt-0.5">+{more} more</p>}
         </div>
       )}
     </div>
@@ -232,7 +316,7 @@ function GridCell({
           className="w-9 h-9 rounded-lg ring-2 ring-green-700"
           onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/36"; }}
         />
-        <span className="text-[10px] font-bold text-green-200 text-center leading-tight w-full text-center break-all line-clamp-2 px-0.5">
+        <span className="text-[10px] font-bold text-green-200 text-center leading-tight w-full break-all line-clamp-2 px-0.5">
           {cell.player.mc_username}
         </span>
       </div>
@@ -349,6 +433,23 @@ function PlayerModal({
   );
 }
 
+// ── localStorage helpers ──────────────────────────────────────────────────────
+
+type SavedState = { cells: CellState[]; guessesLeft: number; usedUuids: string[] };
+
+function storageKey(league: string, day: number) {
+  return `partix:grid:${league}:${day}`;
+}
+function loadState(league: string, day: number): SavedState | null {
+  try {
+    const raw = localStorage.getItem(storageKey(league, day));
+    return raw ? (JSON.parse(raw) as SavedState) : null;
+  } catch { return null; }
+}
+function saveState(league: string, day: number, state: SavedState) {
+  try { localStorage.setItem(storageKey(league, day), JSON.stringify(state)); } catch { /* ignore */ }
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function GridPage({ params }: { params?: Promise<{ league?: string }> }) {
@@ -356,24 +457,29 @@ export default function GridPage({ params }: { params?: Promise<{ league?: strin
   const slug = resolved.league ?? "";
   const dayNum = getDayNum();
 
-  const [allPlayers,  setAllPlayers]  = useState<Player[]>([]);
-  const [statsMap,    setStatsMap]    = useState<Record<string, StatRow>>({});
-  const [ringMap,     setRingMap]     = useState<Record<string, number>>({});
-  const [accoladeMap, setAccoladeMap] = useState<Record<string, string[]>>({});
-  const [ptMap,       setPtMap]       = useState<Record<string, PlayerTeamEntry[]>>({});
+  const { data: session, status: authStatus } = useSession();
+
+  const [allPlayers,   setAllPlayers]   = useState<Player[]>([]);
+  const [statsMap,     setStatsMap]     = useState<Record<string, StatRow>>({});
+  const [ringMap,      setRingMap]      = useState<Record<string, number>>({});
+  const [accoladeMap,  setAccoladeMap]  = useState<Record<string, string[]>>({});
+  const [ptMap,        setPtMap]        = useState<Record<string, PlayerTeamEntry[]>>({});
   const [allAccolades, setAllAccolades] = useState<Accolade[]>([]);
   const [rows,  setRows]  = useState<Category[]>([]);
   const [cols,  setCols]  = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [noGrid,  setNoGrid]  = useState(false);
+  const [loading,   setLoading]   = useState(true);
+  const [noGrid,    setNoGrid]    = useState(false);
 
-  const [cells,        setCells]        = useState<CellState[]>(Array(9).fill({ status: "empty" }));
-  const [guessesLeft,  setGuessesLeft]  = useState(TOTAL_GUESSES);
-  const [usedUuids,    setUsedUuids]    = useState<Set<string>>(new Set());
-  const [activeCell,   setActiveCell]   = useState<number | null>(null);
-  const [flashCell,    setFlashCell]    = useState<number | null>(null);
-  const [showAnswers,  setShowAnswers]  = useState(false);
+  const [cells,       setCells]       = useState<CellState[]>(Array(9).fill({ status: "empty" }));
+  const [guessesLeft, setGuessesLeft] = useState(TOTAL_GUESSES);
+  const [usedUuids,   setUsedUuids]   = useState<Set<string>>(new Set());
+  const [activeCell,  setActiveCell]  = useState<number | null>(null);
+  const [flashCell,   setFlashCell]   = useState<number | null>(null);
+  const [showAnswers, setShowAnswers] = useState(false);
+  const [showShare,   setShowShare]   = useState(false);
+  const [stateReady,  setStateReady]  = useState(false);
 
+  // Load data + grid
   useEffect(() => {
     if (!slug) return;
     Promise.all([
@@ -389,10 +495,10 @@ export default function GridPage({ params }: { params?: Promise<{ league?: strin
       const teamsArr:   Team[]            = Array.isArray(teams)       ? teams       : [];
       const playersArr: Player[]          = Array.isArray(players)     ? players     : [];
 
-      const sm: Record<string, StatRow>     = {};
-      const rm: Record<string, number>      = {};
+      const sm: Record<string, StatRow>           = {};
+      const rm: Record<string, number>            = {};
       const pm: Record<string, PlayerTeamEntry[]> = {};
-      const am: Record<string, string[]>    = {};
+      const am: Record<string, string[]>          = {};
 
       for (const s of statsArr)  sm[s.mc_uuid] = s;
       for (const a of accsArr) {
@@ -405,13 +511,8 @@ export default function GridPage({ params }: { params?: Promise<{ league?: strin
         pm[pt.mc_uuid].push(pt);
       }
 
-      setStatsMap(sm);
-      setRingMap(rm);
-      setAccoladeMap(am);
-      setPtMap(pm);
-      setAllAccolades(accsArr);
+      setStatsMap(sm); setRingMap(rm); setAccoladeMap(am); setPtMap(pm); setAllAccolades(accsArr);
 
-      // Only include players connected to this league (have a team entry or stats)
       const leagueUuids = new Set([
         ...ptArr.map(pt => pt.mc_uuid),
         ...statsArr.map(s => s.mc_uuid),
@@ -419,21 +520,37 @@ export default function GridPage({ params }: { params?: Promise<{ league?: strin
       const leaguePlayers = playersArr.filter(p => leagueUuids.has(p.mc_uuid));
       setAllPlayers(leaguePlayers);
 
-      const uuids  = leaguePlayers.map(p => p.mc_uuid);
-      const grid   = generateGrid(dayNum, teamsArr, pm, sm, rm, am, uuids, accsArr);
+      const uuids = leaguePlayers.map(p => p.mc_uuid);
+      const grid  = generateGrid(dayNum, teamsArr, pm, sm, rm, am, uuids, accsArr);
 
       if (!grid) {
         setNoGrid(true);
       } else {
         setRows(grid.rows);
         setCols(grid.cols);
+
+        // Restore persisted state for today
+        const saved = loadState(slug, dayNum);
+        if (saved) {
+          setCells(saved.cells);
+          setGuessesLeft(saved.guessesLeft);
+          setUsedUuids(new Set(saved.usedUuids));
+        }
       }
       setLoading(false);
+      setStateReady(true);
     });
   }, [slug, dayNum]);
 
+  // Persist state whenever it changes (after initial load)
+  useEffect(() => {
+    if (!stateReady || loading) return;
+    saveState(slug, dayNum, { cells, guessesLeft, usedUuids: [...usedUuids] });
+  }, [cells, guessesLeft, usedUuids, stateReady, loading, slug, dayNum]);
+
   const solved = cells.filter(c => c.status === "correct").length;
   const isDone = guessesLeft === 0 || solved === 9;
+  const guessesUsed = TOTAL_GUESSES - guessesLeft;
 
   const handleCellClick = (idx: number) => {
     if (isDone || cells[idx].status === "correct") return;
@@ -444,23 +561,70 @@ export default function GridPage({ params }: { params?: Promise<{ league?: strin
     if (activeCell === null) return;
 
     if (correct) {
-      setCells(prev => {
-        const next = [...prev];
-        next[activeCell] = { status: "correct", player };
-        return next;
-      });
+      const next = [...cells] as CellState[];
+      next[activeCell] = { status: "correct", player };
+      setCells(next);
       setUsedUuids(prev => new Set([...prev, player.mc_uuid]));
+      // Show share after final correct fill
+      const newSolved = next.filter(c => c.status === "correct").length;
+      if (guessesLeft - 1 <= 0 || newSolved === 9) {
+        setTimeout(() => setShowShare(true), 700);
+      }
     } else {
       setFlashCell(activeCell);
       setTimeout(() => setFlashCell(null), 700);
     }
 
-    setGuessesLeft(prev => prev - 1);
+    const newLeft = guessesLeft - 1;
+    setGuessesLeft(newLeft);
     setActiveCell(null);
-  }, [activeCell]);
+
+    // Show share when out of guesses
+    if (newLeft <= 0) setTimeout(() => setShowShare(true), 700);
+  }, [activeCell, cells, guessesLeft]);
+
+  // ── Discord login gate ────────────────────────────────────────────────────
+
+  if (authStatus === "unauthenticated") {
+    return (
+      <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
+        <div className="px-6 py-5 border-b border-slate-800">
+          <h2 className="text-2xl font-bold text-white">Player Grid</h2>
+          <p className="text-slate-400 text-sm mt-0.5">Day #{dayNum} · Fill the 3×3 grid with 9 guesses</p>
+        </div>
+        <div className="p-12 flex flex-col items-center gap-5 text-center">
+          <div className="text-5xl">🔐</div>
+          <div>
+            <p className="text-white font-semibold text-lg">Sign in to play</p>
+            <p className="text-slate-400 text-sm mt-1">
+              Discord login is required to track your daily result and prevent replays.
+            </p>
+          </div>
+          <button
+            onClick={() => signIn("discord")}
+            className="flex items-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-6 py-2.5 transition"
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057c.002.017.012.033.026.044a19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
+            </svg>
+            Sign in with Discord
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
+      {showShare && isDone && (
+        <GridShareModal
+          cells={cells}
+          guessesUsed={guessesUsed}
+          dayNum={dayNum}
+          onClose={() => setShowShare(false)}
+        />
+      )}
+
       {activeCell !== null && rows.length > 0 && (
         <PlayerModal
           row={rows[Math.floor(activeCell / 3)]}
@@ -489,25 +653,25 @@ export default function GridPage({ params }: { params?: Promise<{ league?: strin
             <span className={guessesLeft <= 2 ? "text-red-400" : "text-slate-300"}>
               {guessesLeft} guess{guessesLeft !== 1 ? "es" : ""} left
             </span>
+            {isDone && (
+              <button
+                onClick={() => setShowShare(true)}
+                className="rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-white px-3 py-1.5 text-sm transition"
+                title="Share result"
+              >📋</button>
+            )}
           </div>
         </div>
 
-        {loading ? (
+        {loading || authStatus === "loading" ? (
           <div className="p-10 text-center text-slate-500">Building today's grid...</div>
         ) : noGrid ? (
           <div className="p-10 text-center text-slate-500">Not enough data to generate a grid for this league yet.</div>
         ) : (
           <div className="p-4">
-            {/*
-              Grid layout — all visible at once without scrolling.
-              Use a fixed CSS grid: 4 cols (label + 3) × 4 rows (label + 3).
-              Each cell is square-ish via min-h.
-            */}
             <div
               className="grid gap-2"
-              style={{
-                gridTemplateColumns: "minmax(80px,1fr) repeat(3, minmax(0,1fr))",
-              }}
+              style={{ gridTemplateColumns: "minmax(80px,1fr) repeat(3, minmax(0,1fr))" }}
             >
               {/* Top-left corner */}
               <div />
@@ -520,13 +684,9 @@ export default function GridPage({ params }: { params?: Promise<{ league?: strin
               {/* Rows */}
               {rows.map((row, ri) => (
                 <React.Fragment key={ri}>
-                  {/* Row header */}
                   <CategoryHeader cat={row} />
-
-                  {/* 3 cells */}
                   {cols.map((col, ci) => {
                     const idx = ri * 3 + ci;
-                    // Show valid-player list when answers are revealed for unsolved cells
                     if (isDone && showAnswers && cells[idx].status !== "correct") {
                       const valid = allPlayers.filter(p =>
                         playerFits(p.mc_uuid, rows[ri], ptMap, statsMap, ringMap, accoladeMap) &&
@@ -554,7 +714,7 @@ export default function GridPage({ params }: { params?: Promise<{ league?: strin
                 <div className="text-center mb-3">
                   {solved === 9 ? (
                     <div className="text-xl font-bold text-green-300">
-                      🎉 Perfect Grid! Used {TOTAL_GUESSES - guessesLeft} guess{TOTAL_GUESSES - guessesLeft !== 1 ? "es" : ""}
+                      🎉 Perfect Grid! Used {guessesUsed} guess{guessesUsed !== 1 ? "es" : ""}
                     </div>
                   ) : (
                     <>
@@ -563,18 +723,23 @@ export default function GridPage({ params }: { params?: Promise<{ league?: strin
                     </>
                   )}
                 </div>
-                <div className="flex justify-center">
+                <div className="flex justify-center gap-2">
+                  <button
+                    onClick={() => setShowShare(true)}
+                    className="rounded-lg border border-blue-700 bg-blue-900 hover:bg-blue-800 text-blue-200 text-sm font-medium px-4 py-2 transition"
+                  >
+                    📋 Share Result
+                  </button>
                   <button
                     onClick={() => setShowAnswers(v => !v)}
                     className="rounded-lg border border-slate-600 bg-slate-800 hover:bg-slate-700 text-white text-sm font-medium px-4 py-2 transition"
                   >
-                    {showAnswers ? "🙈 Hide Answers" : "👁 See Who Fits Each Cell"}
+                    {showAnswers ? "🙈 Hide Answers" : "👁 See Who Fits"}
                   </button>
                 </div>
               </div>
             )}
 
-            {/* Instructions */}
             {!isDone && (
               <p className="mt-3 text-xs text-slate-600 text-center">
                 Click any empty cell and pick a player matching <em>both</em> the row and column. Wrong guesses still count. Each player can only be used once.
