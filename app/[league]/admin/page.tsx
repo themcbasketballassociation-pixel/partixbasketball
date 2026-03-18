@@ -1996,22 +1996,22 @@ type BracketMatchup = {
 };
 
 function getRoundStructure(n: number): { name: string; order: number; matchupCount: number }[] {
-  const rounds: { name: string; order: number; matchupCount: number }[] = [];
+  // Build rounds using ceil so odd team counts work (byes handled by leaving TBD slots)
+  const rawRounds: { matchupCount: number }[] = [];
   let teams = n;
-  let order = 0;
   while (teams >= 2) {
-    const mc = teams / 2;
-    let name: string;
-    if (teams === 2) name = "Finals";
-    else if (teams === 4) name = n >= 16 ? "Conference Finals" : "Semifinals";
-    else if (teams === 8) name = n >= 16 ? "Conference Semifinals" : "First Round";
-    else if (teams === 16) name = "First Round";
-    else name = `Round of ${teams}`;
-    rounds.push({ name, order, matchupCount: mc });
+    const mc = Math.ceil(teams / 2);
+    rawRounds.push({ matchupCount: mc });
     teams = mc;
-    order++;
   }
-  return rounds;
+  // Name rounds based on their distance from the Finals (last round)
+  const total = rawRounds.length;
+  const NAMES_FROM_END = ["Finals", "Semifinals", "Quarterfinals", "Round of 16", "Round of 32", "Round of 64"];
+  return rawRounds.map((r, i) => ({
+    matchupCount: r.matchupCount,
+    order: i,
+    name: NAMES_FROM_END[total - 1 - i] ?? `Round ${i + 1}`,
+  }));
 }
 
 function PlayoffsTab({ league, season }: { league: string; season: string }) {
@@ -2046,8 +2046,8 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
 
   const generateBracket = async () => {
     const n = parseInt(numTeams);
-    if (isNaN(n) || n < 2 || n > 64 || (n & (n - 1)) !== 0) {
-      setErr("Teams must be a power of 2 (2, 4, 8, 16, 32...)"); return;
+    if (isNaN(n) || n < 2 || n > 128) {
+      setErr("Enter a number between 2 and 128"); return;
     }
     if (matchups.length > 0 && !confirm(`This will overwrite the existing bracket for ${season}. Continue?`)) return;
     setGenerating(true); setErr("");

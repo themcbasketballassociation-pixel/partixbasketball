@@ -42,5 +42,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({ success: true });
   }
 
+  if (req.method === "DELETE") {
+    const { league, day } = req.query;
+    if (!league || !day) return res.status(400).json({ error: "league and day required" });
+    const { error } = await supabase
+      .from("wordle_states")
+      .delete()
+      .eq("discord_id", discordId)
+      .eq("league", league as string)
+      .eq("day_num", parseInt(day as string, 10));
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json({ success: true });
+  }
+
   return res.status(405).json({ error: "Method not allowed" });
 }
