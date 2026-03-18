@@ -94,7 +94,7 @@ function ScheduleView({ slug }: { slug: string }) {
                           <div className="font-semibold text-white">{g.home_team?.name ?? "?"}</div>
                           <div className="text-xs text-slate-500">{g.home_team?.abbreviation}</div>
                         </div>
-                        {g.status === "completed" ? (
+                        {g.home_score !== null && g.away_score !== null ? (
                           <div className="text-center px-3">
                             <div className="text-lg font-bold text-white tabular-nums">{g.home_score} – {g.away_score}</div>
                             <div className="text-xs text-green-400 font-semibold">Final</div>
@@ -108,9 +108,9 @@ function ScheduleView({ slug }: { slug: string }) {
                         </div>
                       </div>
                       <span className={`rounded-full px-2 py-0.5 text-xs font-semibold flex-shrink-0 ${
-                        g.status === "completed" ? "bg-green-900 text-green-300" : "bg-yellow-900 text-yellow-300"
+                        g.home_score !== null && g.away_score !== null ? "bg-green-900 text-green-300" : "bg-yellow-900 text-yellow-300"
                       }`}>
-                        {g.status === "completed" ? "Final" : "Scheduled"}
+                        {g.home_score !== null && g.away_score !== null ? "Final" : "Scheduled"}
                       </span>
                     </div>
                   ))}

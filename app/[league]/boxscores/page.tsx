@@ -41,7 +41,7 @@ export default function BoxScoresPage({ params }: { params?: Promise<{ league?: 
     fetch(`/api/games?league=${slug}`)
       .then((r) => r.json())
       .then((data) => {
-        const completed = Array.isArray(data) ? data.filter((g: Game) => g.status === "completed") : [];
+        const completed = Array.isArray(data) ? data.filter((g: Game) => g.home_score !== null && g.away_score !== null) : [];
         setGames(completed.reverse());
         setLoading(false);
       });

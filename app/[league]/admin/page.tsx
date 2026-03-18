@@ -1788,18 +1788,25 @@ function ArticlesTab({ league }: { league: string }) {
 // ─── Tab: Stats (read-only) ───────────────────────────────────────────────────
 
 function StatsViewTab({ league, season: initialSeason }: { league: string; season: string }) {
+  const seasonNum = parseInt(initialSeason.replace(/\D/g, "")) || 0;
+  const isS5Plus = seasonNum >= 5;
   const STAT_FIELDS = [
-    { key: "gp",       label: "GP",   hint: "Games Played",                slash: false },
-    { key: "pts",      label: "PTS",  hint: "Total Points",                 slash: false },
-    { key: "reb",      label: "REB",  hint: "Total Rebounds",               slash: false },
-    { key: "ast",      label: "AST",  hint: "Total Assists",                slash: false },
-    { key: "stl",      label: "STL",  hint: "Total Steals",                 slash: false },
-    { key: "blk",      label: "BLK",  hint: "Total Blocks",                 slash: false },
-    { key: "to_total", label: "TO",   hint: "Total Turnovers",              slash: false },
-    { key: "fg",          label: "FG",     hint: "FG Made / Attempted (14/25)",  slash: true  },
-    { key: "three_fg",    label: "3FG",    hint: "3FG Made / Attempted (5/12)",  slash: true  },
-    { key: "pass_total",  label: "PASS",   hint: "Total Pass Attempts",          slash: false },
-    { key: "poss_total",  label: "POSS",   hint: "Total Possession Seconds",      slash: false },
+    { key: "gp",       label: "GP",   hint: "Games Played",       slash: false },
+    { key: "pts",      label: "PTS",  hint: "Total Points",        slash: false },
+    ...(isS5Plus ? [
+      { key: "oreb", label: "OREB", hint: "Total Off. Rebounds",  slash: false },
+      { key: "dreb", label: "DREB", hint: "Total Def. Rebounds",  slash: false },
+    ] : [
+      { key: "reb",  label: "REB",  hint: "Total Rebounds",       slash: false },
+    ]),
+    { key: "ast",      label: "AST",  hint: "Total Assists",       slash: false },
+    { key: "stl",      label: "STL",  hint: "Total Steals",        slash: false },
+    { key: "blk",      label: "BLK",  hint: "Total Blocks",        slash: false },
+    { key: "to_total", label: "TO",   hint: "Total Turnovers",     slash: false },
+    { key: "fg",       label: "FG%",  hint: "14/25 or just 46.7", slash: false },
+    { key: "three_fg", label: "3FG%", hint: "5/12 or just 44.9",  slash: false },
+    { key: "pass_total",  label: "PASS", hint: "Total Pass Attempts",      slash: false },
+    { key: "poss_total",  label: "POSS", hint: "Total Possession Seconds", slash: false },
   ];
 
   const [players, setPlayers] = useState<Player[]>([]);
@@ -1858,14 +1865,16 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
     setLoadedPossPg(row.possession_time_pg ?? null);
     setHasExisting(true);
     setFields({
-      gp:  String(row.gp ?? ""),
-      pts: gp ? String(round((row.ppg ?? 0) * gp)) : "",
-      reb: gp ? String(round((row.rpg ?? 0) * gp)) : "",
-      ast: gp ? String(round((row.apg ?? 0) * gp)) : "",
-      stl: gp ? String(round((row.spg ?? 0) * gp)) : "",
-      blk: gp ? String(round((row.bpg ?? 0) * gp)) : "",
-      fg:        "",
-      three_fg:  tpMade != null && tpAtt != null ? `${tpMade}/${tpAtt}` : tpMade != null ? String(tpMade) : "",
+      gp:   String(row.gp ?? ""),
+      pts:  gp ? String(round((row.ppg ?? 0) * gp)) : "",
+      reb:  gp && !row.orpg ? String(round((row.rpg ?? 0) * gp)) : "",
+      oreb: gp && row.orpg != null ? String(round(row.orpg * gp)) : "",
+      dreb: gp && row.drpg != null ? String(round(row.drpg * gp)) : "",
+      ast:  gp ? String(round((row.apg ?? 0) * gp)) : "",
+      stl:  gp ? String(round((row.spg ?? 0) * gp)) : "",
+      blk:  gp ? String(round((row.bpg ?? 0) * gp)) : "",
+      fg:        row.fg_pct != null ? String(row.fg_pct) : "",
+      three_fg:  tpMade != null && tpAtt != null ? `${tpMade}/${tpAtt}` : row.three_pt_pct != null ? String(row.three_pt_pct) : "",
       to_total:  gp && row.topg != null ? String(round(row.topg * gp)) : "",
       pass_total: gp && row.pass_attempts_pg != null ? String(round(row.pass_attempts_pg * gp)) : "",
       poss_total: gp && row.possession_time_pg != null ? String(Math.round(row.possession_time_pg * gp)) : "",
@@ -1923,37 +1932,51 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
     if (!selectedUuid) return;
     setSaving(true); setErr("");
     const r1 = (n: number) => Math.round(n * 10) / 10;
-    const gp  = fields.gp  ? parseInt(fields.gp)   || null : null;
-    const pts = fields.pts ? parseFloat(fields.pts) || null : null;
-    const reb = fields.reb ? parseFloat(fields.reb) || null : null;
-    const ast = fields.ast ? parseFloat(fields.ast) || null : null;
-    const stl = fields.stl ? parseFloat(fields.stl) || null : null;
-    const blk = fields.blk ? parseFloat(fields.blk) || null : null;
-    const ppg = gp && pts ? r1(pts / gp) : null;
-    const rpg = gp && reb ? r1(reb / gp) : null;
-    const apg = gp && ast ? r1(ast / gp) : null;
-    const spg = gp && stl ? r1(stl / gp) : null;
-    const bpg = gp && blk ? r1(blk / gp) : null;
-    const [fgMade, fgAtt] = parseSlash(fields.fg);
-    const fg_pct = fgMade !== null && fgAtt !== null && fgAtt > 0
-      ? Math.round(fgMade / fgAtt * 1000) / 10 : loadedFgPct;
-    const [tpMadeParsed, tpAttParsed] = parseSlash(fields.three_fg ?? "");
+    const gp   = fields.gp   ? parseInt(fields.gp)    || null : null;
+    const pts  = fields.pts  ? parseFloat(fields.pts)  || null : null;
+    const oreb = fields.oreb ? parseFloat(fields.oreb) || null : null;
+    const dreb = fields.dreb ? parseFloat(fields.dreb) || null : null;
+    const reb  = fields.reb  ? parseFloat(fields.reb)  || null : null;
+    const ast  = fields.ast  ? parseFloat(fields.ast)  || null : null;
+    const stl  = fields.stl  ? parseFloat(fields.stl)  || null : null;
+    const blk  = fields.blk  ? parseFloat(fields.blk)  || null : null;
+    const ppg  = gp && pts  ? r1(pts  / gp) : null;
+    const orpg = gp && oreb != null ? r1(oreb / gp) : null;
+    const drpg = gp && dreb != null ? r1(dreb / gp) : null;
+    // For S5+: rpg = orpg + drpg; for earlier seasons: from reb field
+    const rpg  = orpg != null && drpg != null ? r1(orpg + drpg)
+               : gp && reb ? r1(reb / gp) : null;
+    const apg  = gp && ast ? r1(ast / gp) : null;
+    const spg  = gp && stl ? r1(stl / gp) : null;
+    const bpg  = gp && blk ? r1(blk / gp) : null;
+    // FG%: accept "14/25" slash OR direct "46.7" percentage
+    const parseShooting = (s: string): { pct: number | null; made: number | null } => {
+      if (!s?.trim()) return { pct: null, made: null };
+      if (s.includes("/")) {
+        const [m, a] = parseSlash(s);
+        if (m !== null && a !== null && a > 0) return { pct: Math.round(m / a * 1000) / 10, made: m };
+        return { pct: null, made: null };
+      }
+      const pct = parseFloat(s);
+      return { pct: isNaN(pct) ? null : pct, made: null };
+    };
+    const { pct: fgPctParsed } = parseShooting(fields.fg ?? "");
+    const { pct: tpPctParsed, made: tpMadeParsed } = parseShooting(fields.three_fg ?? "");
+    const fg_pct        = fgPctParsed  !== null ? fgPctParsed  : loadedFgPct;
+    const three_pt_pct  = tpPctParsed  !== null ? tpPctParsed  : loadedThreePct;
     const three_pt_made = tpMadeParsed !== null ? tpMadeParsed : loadedThreeMade;
-    const three_pt_pct  = (tpMadeParsed !== null && tpAttParsed !== null && tpAttParsed > 0)
-      ? Math.round(tpMadeParsed / tpAttParsed * 1000) / 10
-      : loadedThreePct;
-    const to_total  = fields.to_total?.trim()   ? parseFloat(fields.to_total)   || null : null;
-    const pass_tot  = fields.pass_total?.trim() ? parseFloat(fields.pass_total)  || null : null;
-    const poss_tot  = fields.poss_total?.trim() ? parseInt(fields.poss_total)    || null : null;
-    const topg             = (gp && to_total  != null) ? r1(to_total  / gp) : loadedTopg;
-    const pass_attempts_pg = (gp && pass_tot  != null) ? r1(pass_tot  / gp) : loadedPassPg;
+    const to_total  = fields.to_total?.trim()   ? parseFloat(fields.to_total)  || null : null;
+    const pass_tot  = fields.pass_total?.trim() ? parseFloat(fields.pass_total) || null : null;
+    const poss_tot  = fields.poss_total?.trim() ? parseInt(fields.poss_total)   || null : null;
+    const topg             = (gp && to_total != null) ? r1(to_total / gp) : loadedTopg;
+    const pass_attempts_pg = (gp && pass_tot != null) ? r1(pass_tot / gp) : loadedPassPg;
     const possession_time_pg = (gp && poss_tot != null) ? Math.round(poss_tot / gp) : loadedPossPg;
     const r = await fetch(`/api/stats?league=${encodeURIComponent(league)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         league, season: initialSeason, mc_uuid: selectedUuid,
-        gp, ppg, rpg, apg, spg, bpg, fg_pct, three_pt_made, three_pt_pct,
+        gp, ppg, rpg, orpg, drpg, apg, spg, bpg, fg_pct, three_pt_made, three_pt_pct,
         topg, pass_attempts_pg, possession_time_pg,
       }),
     });

@@ -15,9 +15,10 @@ function getQuerySeasons(season: string, type: string): string[] {
 function mergePlayerRows(rows: Record<string, unknown>[]) {
   let gp = 0, wPts = 0, wReb = 0, wAst = 0, wStl = 0, wBlk = 0;
   let totalThree = 0, wTo = 0, wPass = 0, wPoss = 0;
-  // Track fg% and 3pt% separately — only include seasons where they were actually tracked (> 0)
   let wFg = 0, fgGames = 0;
   let wThreePct = 0, threeGames = 0;
+  let wOReb = 0, oRebGames = 0;
+  let wDReb = 0, dRebGames = 0;
   for (const r of rows) {
     const g = (r.gp as number) ?? 0;
     gp += g;
@@ -26,22 +27,27 @@ function mergePlayerRows(rows: Record<string, unknown>[]) {
     wAst += ((r.apg as number) ?? 0) * g;
     wStl += ((r.spg as number) ?? 0) * g;
     wBlk += ((r.bpg as number) ?? 0) * g;
-    // Only count FG% if it was actually tracked (non-zero)
     const fgP = (r.fg_pct as number) ?? 0;
     if (fgP > 0) { wFg += fgP * g; fgGames += g; }
     totalThree += (r.three_pt_made as number) ?? 0;
-    // Only count 3P% if it was actually tracked (non-zero)
     const tpP = (r.three_pt_pct as number) ?? 0;
     if (tpP > 0) { wThreePct += tpP * g; threeGames += g; }
-    wTo   += ((r.topg             as number) ?? 0) * g;
-    wPass += ((r.pass_attempts_pg as number) ?? 0) * g;
+    wTo   += ((r.topg              as number) ?? 0) * g;
+    wPass += ((r.pass_attempts_pg  as number) ?? 0) * g;
     wPoss += ((r.possession_time_pg as number) ?? 0) * g;
+    // Off/def rebounds — only tracked Season 5+
+    const orP = (r.orpg as number) ?? 0;
+    if (orP > 0) { wOReb += orP * g; oRebGames += g; }
+    const drP = (r.drpg as number) ?? 0;
+    if (drP > 0) { wDReb += drP * g; dRebGames += g; }
   }
   const r1 = (n: number) => Math.round(n * 10) / 10;
   return {
     gp,
     ppg: gp > 0 ? r1(wPts / gp) : null,
     rpg: gp > 0 ? r1(wReb / gp) : null,
+    orpg: oRebGames > 0 ? r1(wOReb / oRebGames) : null,
+    drpg: dRebGames > 0 ? r1(wDReb / dRebGames) : null,
     apg: gp > 0 ? r1(wAst / gp) : null,
     spg: gp > 0 ? r1(wStl / gp) : null,
     bpg: gp > 0 ? r1(wBlk / gp) : null,
@@ -61,11 +67,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   // POST — save manual season-level stats for a player
   if (req.method === "POST") {
-    const { mc_uuid, season, gp, ppg, rpg, apg, spg, bpg, fg_pct, three_pt_made, three_pt_pct, topg, pass_attempts_pg, possession_time_pg } = req.body;
+    const { mc_uuid, season, gp, ppg, rpg, orpg, drpg, apg, spg, bpg, fg_pct, three_pt_made, three_pt_pct, topg, pass_attempts_pg, possession_time_pg } = req.body;
     if (!mc_uuid || !season) return res.status(400).json({ error: "mc_uuid, season required" });
     const { data, error } = await supabase
       .from("stats")
-      .upsert([{ mc_uuid, league, season, gp: gp ?? null, ppg: ppg ?? null, rpg: rpg ?? null, apg: apg ?? null, spg: spg ?? null, bpg: bpg ?? null, fg_pct: fg_pct ?? null, three_pt_made: three_pt_made ?? null, three_pt_pct: three_pt_pct ?? null, topg: topg ?? null, pass_attempts_pg: pass_attempts_pg ?? null, possession_time_pg: possession_time_pg ?? null }], { onConflict: "mc_uuid,league,season" })
+      .upsert([{ mc_uuid, league, season, gp: gp ?? null, ppg: ppg ?? null, rpg: rpg ?? null, orpg: orpg ?? null, drpg: drpg ?? null, apg: apg ?? null, spg: spg ?? null, bpg: bpg ?? null, fg_pct: fg_pct ?? null, three_pt_made: three_pt_made ?? null, three_pt_pct: three_pt_pct ?? null, topg: topg ?? null, pass_attempts_pg: pass_attempts_pg ?? null, possession_time_pg: possession_time_pg ?? null }], { onConflict: "mc_uuid,league,season" })
       .select()
       .single();
     if (error) return res.status(500).json({ error: error.message });

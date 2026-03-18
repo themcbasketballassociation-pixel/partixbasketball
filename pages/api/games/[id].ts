@@ -17,6 +17,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (home_score !== undefined) updates.home_score = home_score;
     if (away_score !== undefined) updates.away_score = away_score;
     if (status !== undefined) updates.status = status;
+    // Auto-set final when both scores are provided and no explicit status given
+    if (home_score !== undefined && away_score !== undefined && status === undefined) {
+      updates.status = "final";
+    }
     const { data, error } = await supabase
       .from("games")
       .update(updates)
