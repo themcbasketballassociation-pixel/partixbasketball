@@ -1238,6 +1238,8 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
   const [players, setPlayers] = useState<Player[]>([]);
   const [selectedGameId, setSelectedGameId] = useState<string>("");
   const [statForm, setStatForm] = useState<Record<string, Record<string, string>>>({});
+  const [activeUuids, setActiveUuids] = useState<string[]>([]); // uuids shown in table
+  const [addUuid, setAddUuid] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
   const [showPaste, setShowPaste] = useState(false);
@@ -1256,13 +1258,16 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
 
   useEffect(() => {
     if (!selectedGameId) return;
+    setActiveUuids([]);
+    setAddUuid("");
     fetch(`/api/game-stats?game_id=${selectedGameId}`)
       .then((r) => r.json())
       .then((data) => {
         const form: Record<string, Record<string, string>> = {};
         const fmtSlash = (m: number | null, a: number | null) =>
           m === null && a === null ? "" : `${m ?? 0}/${a ?? 0}`;
-        for (const s of (Array.isArray(data) ? data : []) as GameStat[]) {
+        const rows = (Array.isArray(data) ? data : []) as GameStat[];
+        for (const s of rows) {
           form[s.mc_uuid] = {
             points: s.points === null ? "" : String(s.points),
             rebounds_off: s.rebounds_off === null ? "" : String(s.rebounds_off),
@@ -1279,6 +1284,7 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
           };
         }
         setStatForm(form);
+        setActiveUuids(rows.map(s => s.mc_uuid));
       });
   }, [selectedGameId]);
 
@@ -1324,10 +1330,17 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
 
   const applyPastePreview = () => {
     if (!pastePreview) return;
+    const newUuids: string[] = [];
     for (const entry of pastePreview) {
       if (!entry.matched) continue;
       setStatForm((prev) => ({ ...prev, [entry.matched!.mc_uuid]: entry.fields }));
+      newUuids.push(entry.matched.mc_uuid);
     }
+    setActiveUuids(prev => {
+      const merged = [...prev];
+      for (const u of newUuids) if (!merged.includes(u)) merged.push(u);
+      return merged;
+    });
     setShowPaste(false);
     setPasteText("");
     setPastePreview(null);
@@ -1415,34 +1428,76 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
 
           {/* Stats table */}
           <div className={`${card} overflow-x-auto`}>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Player Stats</h3>
+            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest">
+                Player Stats
+                <span className="ml-2 text-slate-600 normal-case font-normal">{activeUuids.length} player{activeUuids.length !== 1 ? "s" : ""}</span>
+              </h3>
               <button className={btnPrimary} onClick={saveStats} disabled={saving}>{saving ? "Saving..." : "Save All"}</button>
             </div>
-            {players.length === 0 ? <p className="text-slate-600 text-sm">No players. Add players in the Players tab first.</p> : (
+
+            {/* Add player row */}
+            <div className="flex items-center gap-2 mb-4">
+              <select
+                className={`${input} flex-1`}
+                value={addUuid}
+                onChange={e => setAddUuid(e.target.value)}
+              >
+                <option value="">+ Add player to this game...</option>
+                {players
+                  .filter(p => !activeUuids.includes(p.mc_uuid))
+                  .map(p => <option key={p.mc_uuid} value={p.mc_uuid}>{p.mc_username}</option>)}
+              </select>
+              <button
+                className={btnSecondary}
+                disabled={!addUuid}
+                onClick={() => {
+                  if (!addUuid) return;
+                  setActiveUuids(prev => [...prev, addUuid]);
+                  setStatForm(prev => ({ ...prev, [addUuid]: prev[addUuid] ?? {} }));
+                  setAddUuid("");
+                }}
+              >Add</button>
+            </div>
+
+            {activeUuids.length === 0 ? (
+              <p className="text-slate-600 text-sm">No stats entered yet. Add players above or paste a stat block.</p>
+            ) : (
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-800">
                     <th className="px-3 py-2 text-left text-xs text-slate-400 uppercase tracking-widest">Player</th>
                     {statCols.map((c) => <th key={c} className="px-2 py-2 text-center text-xs text-slate-400 uppercase tracking-widest whitespace-nowrap">{colLabels[c]}</th>)}
+                    <th className="px-2 py-2" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800">
-                  {players.map((p) => (
-                    <tr key={p.mc_uuid} className={`transition ${Object.keys(statForm[p.mc_uuid] ?? {}).length > 0 ? "bg-blue-950/20" : "hover:bg-slate-900"}`}>
-                      <td className="px-3 py-2 whitespace-nowrap"><Avatar uuid={p.mc_uuid} username={p.mc_username} /></td>
-                      {statCols.map((c) => (
-                        <td key={c} className="px-1 py-1">
-                          <input
-                            className={`rounded border border-slate-700 bg-slate-800 px-1.5 py-1 text-sm text-white focus:border-blue-500 focus:outline-none text-center ${c === "fg" || c === "three_fg" ? "w-16" : c === "minutes_played" ? "w-14" : "w-12"}`}
-                            placeholder={c === "minutes_played" ? "0:00" : c === "fg" || c === "three_fg" ? "0/0" : ""}
-                            value={statForm[p.mc_uuid]?.[c] ?? ""}
-                            onChange={(e) => setField(p.mc_uuid, c, e.target.value)}
-                          />
+                  {activeUuids.map((uuid) => {
+                    const p = players.find(pl => pl.mc_uuid === uuid);
+                    if (!p) return null;
+                    return (
+                      <tr key={uuid} className="hover:bg-slate-900/60 transition">
+                        <td className="px-3 py-2 whitespace-nowrap"><Avatar uuid={p.mc_uuid} username={p.mc_username} /></td>
+                        {statCols.map((c) => (
+                          <td key={c} className="px-1 py-1">
+                            <input
+                              className={`rounded border border-slate-700 bg-slate-800 px-1.5 py-1 text-sm text-white focus:border-blue-500 focus:outline-none text-center ${c === "fg" || c === "three_fg" ? "w-16" : c === "minutes_played" ? "w-14" : "w-12"}`}
+                              placeholder={c === "minutes_played" ? "0:00" : c === "fg" || c === "three_fg" ? "0/0" : ""}
+                              value={statForm[uuid]?.[c] ?? ""}
+                              onChange={(e) => setField(uuid, c, e.target.value)}
+                            />
+                          </td>
+                        ))}
+                        <td className="px-1 py-1">
+                          <button
+                            className="text-slate-600 hover:text-red-400 text-xs px-1 transition"
+                            title="Remove from list"
+                            onClick={() => setActiveUuids(prev => prev.filter(u => u !== uuid))}
+                          >✕</button>
                         </td>
-                      ))}
-                    </tr>
-                  ))}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
