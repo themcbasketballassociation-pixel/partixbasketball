@@ -70,7 +70,8 @@ export default function GamesPage({ params }: { params?: Promise<{ league?: stri
 
     setResetting(false);
     setResetDone(true);
-    setTimeout(() => setResetDone(false), 3000);
+    // Reload page so games reflect cleared state
+    setTimeout(() => window.location.reload(), 800);
   };
 
   return (

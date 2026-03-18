@@ -158,6 +158,42 @@ function BracketCard({ matchup }: { matchup: BracketMatchup }) {
   );
 }
 
+// Parse "East — Conf. Semifinals" → { conf: "East", display: "Conf. Semifinals" }
+function parseRoundName(name: string): { conf: string | null; display: string } {
+  const sep = " — ";
+  const idx = name.indexOf(sep);
+  if (idx !== -1) return { conf: name.slice(0, idx), display: name.slice(idx + sep.length) };
+  return { conf: null, display: name };
+}
+
+function RoundColumn({ rounds, reversed }: {
+  rounds: { name: string; matchups: BracketMatchup[] }[];
+  reversed?: boolean;
+}) {
+  const cols = reversed ? [...rounds].reverse() : rounds;
+  return (
+    <div className="flex items-stretch">
+      {cols.map((round, ri) => {
+        const gapClass = round.matchups.length >= 8 ? "gap-1" : round.matchups.length >= 4 ? "gap-4" : round.matchups.length >= 2 ? "gap-12" : "gap-0";
+        return (
+          <div key={round.name} className="flex flex-col flex-shrink-0">
+            <div className="text-center mb-2 px-2">
+              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                {parseRoundName(round.name).display}
+              </span>
+            </div>
+            <div className={`flex flex-col flex-1 items-center justify-around ${gapClass} px-2`}>
+              {round.matchups.map((m) => (
+                <BracketCard key={m.id} matchup={m} />
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function BracketView({ slug }: { slug: string }) {
   const [season, setSeason] = React.useState(SEASONS[SEASONS.length - 1]);
   const [matchups, setMatchups] = React.useState<BracketMatchup[]>([]);
@@ -172,26 +208,38 @@ function BracketView({ slug }: { slug: string }) {
       .catch(() => setLoading(false));
   }, [slug, season]);
 
-  // Build sorted rounds
-  const roundMap = new Map<string, { order: number; matchups: BracketMatchup[] }>();
+  // Detect conferences
+  const confSet = new Set<string>();
+  const confMatchups: Record<string, BracketMatchup[]> = {};
+  const nonConfMatchups: BracketMatchup[] = [];
   for (const m of matchups) {
-    if (!roundMap.has(m.round_name)) roundMap.set(m.round_name, { order: m.round_order, matchups: [] });
-    roundMap.get(m.round_name)!.matchups.push(m);
+    const { conf } = parseRoundName(m.round_name);
+    if (conf) { confSet.add(conf); if (!confMatchups[conf]) confMatchups[conf] = []; confMatchups[conf].push(m); }
+    else nonConfMatchups.push(m);
   }
-  const rounds = [...roundMap.entries()]
-    .sort((a, b) => a[1].order - b[1].order)
-    .map(([name, { matchups: ms }]) => ({
-      name,
-      matchups: [...ms].sort((a, b) => a.matchup_index - b.matchup_index),
-    }));
+  const confNames = [...confSet];
+  const hasConferences = confNames.length > 0;
 
-  // Champion = winner of the final matchup in the last round
-  const lastRound = rounds[rounds.length - 1];
+  // Build rounds for a set of matchups
+  function buildRounds(ms: BracketMatchup[]) {
+    const map = new Map<string, { order: number; matchups: BracketMatchup[] }>();
+    for (const m of ms) {
+      if (!map.has(m.round_name)) map.set(m.round_name, { order: m.round_order, matchups: [] });
+      map.get(m.round_name)!.matchups.push(m);
+    }
+    return [...map.entries()]
+      .sort((a, b) => a[1].order - b[1].order)
+      .map(([name, { matchups: rms }]) => ({ name, matchups: [...rms].sort((a, b) => a.matchup_index - b.matchup_index) }));
+  }
+
+  const allRounds = buildRounds(matchups);
+  const lastRound = allRounds[allRounds.length - 1];
   const champion = lastRound?.matchups[0]?.winner ?? null;
+
+  const finalsRounds = buildRounds(nonConfMatchups);
 
   return (
     <div className="p-4 sm:p-6">
-      {/* Season selector */}
       <div className="flex items-center gap-3 mb-6 flex-wrap">
         <label className="text-slate-400 text-sm font-medium">Season:</label>
         <select
@@ -222,40 +270,67 @@ function BracketView({ slug }: { slug: string }) {
             </div>
           )}
 
-          {/* Bracket rounds — left to right */}
-          <div className="flex items-stretch gap-0">
-            {rounds.map((round, ri) => {
-              const isLast = ri === rounds.length - 1;
-              // Spacing grows as rounds progress (fewer matchups = more space between them)
-              const gapClass = round.matchups.length >= 8 ? "gap-2" :
-                               round.matchups.length >= 4 ? "gap-6" :
-                               round.matchups.length >= 2 ? "gap-16" : "gap-0";
-              return (
-                <div key={round.name} className="flex flex-col flex-shrink-0">
-                  {/* Round label */}
-                  <div className="text-center mb-3">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap px-2">
-                      {round.name}
-                    </span>
-                  </div>
-                  {/* Matchups column */}
-                  <div className={`flex flex-col flex-1 items-center justify-around ${gapClass} px-3`}>
-                    {round.matchups.map((m) => (
-                      <div key={m.id} className="relative flex items-center">
-                        <BracketCard matchup={m} />
-                        {/* Connector line to next round */}
-                        {!isLast && (
-                          <div className="absolute right-0 translate-x-full w-3 flex flex-col items-center">
-                            <div className="w-3 h-px bg-slate-600" />
-                          </div>
-                        )}
+          {hasConferences ? (
+            /* NBA-style: Left conf → Finals ← Right conf */
+            <div className="flex items-center justify-center gap-0">
+              {confNames.map((confName, ci) => {
+                const rounds = buildRounds(confMatchups[confName] ?? []);
+                const isRight = ci === 1;
+                return (
+                  <React.Fragment key={confName}>
+                    {isRight && finalsRounds.length > 0 && (
+                      <div className="flex flex-col items-center flex-shrink-0 px-2">
+                        <div className="text-center mb-2">
+                          <span className="text-[9px] font-bold text-yellow-500 uppercase tracking-wider">Finals</span>
+                        </div>
+                        <div className="flex flex-col gap-4 items-center">
+                          {finalsRounds.flatMap(r => r.matchups).map(m => (
+                            <BracketCard key={m.id} matchup={m} />
+                          ))}
+                        </div>
                       </div>
-                    ))}
+                    )}
+                    <div className="flex flex-col items-center flex-shrink-0">
+                      <div className="text-center mb-2 px-3">
+                        <span className={`text-xs font-bold uppercase tracking-widest ${ci === 0 ? "text-blue-400" : "text-orange-400"}`}>
+                          {confName}
+                        </span>
+                      </div>
+                      <RoundColumn rounds={rounds} reversed={isRight} />
+                    </div>
+                  </React.Fragment>
+                );
+              })}
+              {/* If only 1 conference (edge case), still show Finals */}
+              {confNames.length === 1 && finalsRounds.length > 0 && (
+                <div className="flex flex-col items-center flex-shrink-0 px-2">
+                  <div className="text-center mb-2">
+                    <span className="text-[9px] font-bold text-yellow-500 uppercase tracking-wider">Finals</span>
                   </div>
+                  {finalsRounds.flatMap(r => r.matchups).map(m => <BracketCard key={m.id} matchup={m} />)}
                 </div>
-              );
-            })}
-          </div>
+              )}
+            </div>
+          ) : (
+            /* Simple linear bracket */
+            <div className="flex items-stretch gap-0">
+              {allRounds.map((round) => {
+                const gapClass = round.matchups.length >= 8 ? "gap-2" : round.matchups.length >= 4 ? "gap-6" : round.matchups.length >= 2 ? "gap-16" : "gap-0";
+                return (
+                  <div key={round.name} className="flex flex-col flex-shrink-0">
+                    <div className="text-center mb-3">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap px-2">
+                        {round.name}
+                      </span>
+                    </div>
+                    <div className={`flex flex-col flex-1 items-center justify-around ${gapClass} px-3`}>
+                      {round.matchups.map((m) => <BracketCard key={m.id} matchup={m} />)}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>

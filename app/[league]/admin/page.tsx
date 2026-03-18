@@ -1995,22 +1995,31 @@ type BracketMatchup = {
   team2?: { id: string; name: string; abbreviation: string } | null;
 };
 
+const ROUND_NAMES_FROM_END = ["Finals","Semifinals","Quarterfinals","Round of 16","Round of 32","Round of 64"];
+const CONF_NAMES_FROM_END  = ["Conf. Finals","Conf. Semifinals","First Round","Round of 16","Round of 32","Round of 64"];
+
+function buildRawCounts(n: number): number[] {
+  const counts: number[] = [];
+  let t = n;
+  while (t >= 2) { const mc = Math.ceil(t / 2); counts.push(mc); t = mc; }
+  return counts;
+}
+
 function getRoundStructure(n: number): { name: string; order: number; matchupCount: number }[] {
-  // Build rounds using ceil so odd team counts work (byes handled by leaving TBD slots)
-  const rawRounds: { matchupCount: number }[] = [];
-  let teams = n;
-  while (teams >= 2) {
-    const mc = Math.ceil(teams / 2);
-    rawRounds.push({ matchupCount: mc });
-    teams = mc;
-  }
-  // Name rounds based on their distance from the Finals (last round)
-  const total = rawRounds.length;
-  const NAMES_FROM_END = ["Finals", "Semifinals", "Quarterfinals", "Round of 16", "Round of 32", "Round of 64"];
-  return rawRounds.map((r, i) => ({
-    matchupCount: r.matchupCount,
+  const counts = buildRawCounts(n);
+  return counts.map((mc, i) => ({
+    matchupCount: mc,
     order: i,
-    name: NAMES_FROM_END[total - 1 - i] ?? `Round ${i + 1}`,
+    name: ROUND_NAMES_FROM_END[counts.length - 1 - i] ?? `Round ${i + 1}`,
+  }));
+}
+
+function getConfRoundStructure(n: number, confName: string): { name: string; order: number; matchupCount: number }[] {
+  const counts = buildRawCounts(n);
+  return counts.map((mc, i) => ({
+    matchupCount: mc,
+    order: i,
+    name: `${confName} — ${CONF_NAMES_FROM_END[counts.length - 1 - i] ?? `Round ${i + 1}`}`,
   }));
 }
 
@@ -2022,6 +2031,11 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
   const [numTeams, setNumTeams] = useState("8");
   const [generating, setGenerating] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [useConferences, setUseConferences] = useState(false);
+  const [conferences, setConferences] = useState([
+    { name: "East", teams: "4" },
+    { name: "West", teams: "4" },
+  ]);
 
   const refresh = useCallback(async () => {
     const [m, t] = await Promise.all([
@@ -2045,19 +2059,41 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
   };
 
   const generateBracket = async () => {
-    const n = parseInt(numTeams);
-    if (isNaN(n) || n < 2 || n > 128) {
-      setErr("Enter a number between 2 and 128"); return;
-    }
     if (matchups.length > 0 && !confirm(`This will overwrite the existing bracket for ${season}. Continue?`)) return;
     setGenerating(true); setErr("");
-    const rounds = getRoundStructure(n);
-    for (const rnd of rounds) {
-      for (let i = 0; i < rnd.matchupCount; i++) {
-        const ok = await upsert({ league, season, round_name: rnd.name, round_order: rnd.order, matchup_index: i });
-        if (!ok) { setGenerating(false); return; }
+
+    if (useConferences) {
+      // Validate conferences
+      for (const c of conferences) {
+        const n = parseInt(c.teams);
+        if (isNaN(n) || n < 1) { setErr(`Invalid team count for "${c.name}"`); setGenerating(false); return; }
+      }
+      let maxConfRounds = 0;
+      for (const c of conferences) {
+        const n = parseInt(c.teams);
+        const rounds = getConfRoundStructure(n, c.name);
+        maxConfRounds = Math.max(maxConfRounds, rounds.length);
+        for (const rnd of rounds) {
+          for (let i = 0; i < rnd.matchupCount; i++) {
+            const ok = await upsert({ league, season, round_name: rnd.name, round_order: rnd.order, matchup_index: i });
+            if (!ok) { setGenerating(false); return; }
+          }
+        }
+      }
+      // Finals matchup between conference winners
+      await upsert({ league, season, round_name: "Finals", round_order: maxConfRounds, matchup_index: 0 });
+    } else {
+      const n = parseInt(numTeams);
+      if (isNaN(n) || n < 2 || n > 128) { setErr("Enter a number between 2 and 128"); setGenerating(false); return; }
+      const rounds = getRoundStructure(n);
+      for (const rnd of rounds) {
+        for (let i = 0; i < rnd.matchupCount; i++) {
+          const ok = await upsert({ league, season, round_name: rnd.name, round_order: rnd.order, matchup_index: i });
+          if (!ok) { setGenerating(false); return; }
+        }
       }
     }
+
     setGenerating(false);
     refresh();
   };
@@ -2104,23 +2140,72 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
         <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">
           {matchups.length === 0 ? "Generate Bracket" : "Bracket"} — {season}
         </h3>
-        <div className="flex flex-wrap items-end gap-3">
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">Number of Teams</label>
-            <div className="flex gap-1 flex-wrap">
-              {["4","8","16","32"].map(n => (
-                <button key={n} onClick={() => setNumTeams(n)}
-                  className={`px-3 py-1.5 rounded text-sm font-medium transition border ${numTeams === n ? "bg-blue-600 border-blue-500 text-white" : "bg-slate-800 border-slate-700 text-slate-300 hover:text-white"}`}>
-                  {n}
-                </button>
-              ))}
-              <input
-                className={`${input} w-20`} type="number" min="2" max="64" placeholder="Other"
-                value={["4","8","16","32"].includes(numTeams) ? "" : numTeams}
-                onChange={(e) => setNumTeams(e.target.value)}
-              />
+
+        {/* Conference toggle */}
+        <div className="flex items-center gap-2 mb-4">
+          <button
+            onClick={() => setUseConferences(false)}
+            className={`px-3 py-1.5 rounded-l-lg border text-sm font-medium transition ${!useConferences ? "bg-blue-600 border-blue-500 text-white" : "bg-slate-800 border-slate-700 text-slate-400 hover:text-white"}`}
+          >
+            Single Bracket
+          </button>
+          <button
+            onClick={() => setUseConferences(true)}
+            className={`px-3 py-1.5 rounded-r-lg border-t border-r border-b text-sm font-medium transition ${useConferences ? "bg-blue-600 border-blue-500 text-white" : "bg-slate-800 border-slate-700 text-slate-400 hover:text-white"}`}
+          >
+            With Conferences
+          </button>
+        </div>
+
+        {!useConferences ? (
+          <div className="flex flex-wrap items-end gap-3 mb-3">
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Number of Teams</label>
+              <div className="flex gap-1 flex-wrap">
+                {["4","6","8","16"].map(n => (
+                  <button key={n} onClick={() => setNumTeams(n)}
+                    className={`px-3 py-1.5 rounded text-sm font-medium transition border ${numTeams === n ? "bg-blue-600 border-blue-500 text-white" : "bg-slate-800 border-slate-700 text-slate-300 hover:text-white"}`}>
+                    {n}
+                  </button>
+                ))}
+                <input
+                  className={`${input} w-20`} type="number" min="2" max="128" placeholder="Other"
+                  value={["4","6","8","16"].includes(numTeams) ? "" : numTeams}
+                  onChange={(e) => setNumTeams(e.target.value)}
+                />
+              </div>
             </div>
           </div>
+        ) : (
+          <div className="space-y-2 mb-4">
+            <label className="block text-xs text-slate-500">Conferences</label>
+            {conferences.map((c, ci) => (
+              <div key={ci} className="flex items-center gap-2">
+                <input
+                  className={`${input} flex-1`} placeholder="Conference name (e.g. East)"
+                  value={c.name}
+                  onChange={e => setConferences(prev => prev.map((x, i) => i === ci ? { ...x, name: e.target.value } : x))}
+                />
+                <input
+                  className={`${input} w-24`} type="number" min="1" placeholder="Teams"
+                  value={c.teams}
+                  onChange={e => setConferences(prev => prev.map((x, i) => i === ci ? { ...x, teams: e.target.value } : x))}
+                />
+                {conferences.length > 2 && (
+                  <button className={`${btnDanger} text-xs px-2 py-1`} onClick={() => setConferences(prev => prev.filter((_, i) => i !== ci))}>✕</button>
+                )}
+              </div>
+            ))}
+            <button
+              className={`${btn} text-xs`}
+              onClick={() => setConferences(prev => [...prev, { name: `Conference ${prev.length + 1}`, teams: "4" }])}
+            >
+              + Add Conference
+            </button>
+          </div>
+        )}
+
+        <div className="flex gap-2 flex-wrap">
           <button className={btnPrimary} onClick={generateBracket} disabled={generating}>
             {generating ? "Generating..." : matchups.length > 0 ? "↻ Regenerate" : "Generate Bracket"}
           </button>
@@ -2132,7 +2217,9 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
         </div>
         {matchups.length === 0 && (
           <p className="text-xs text-slate-500 mt-3">
-            Choose the number of teams → click Generate → then pick which team goes in each slot.
+            {useConferences
+              ? "Set conference names + team counts → Generate → pick teams in each slot."
+              : "Choose the number of teams → Generate → pick which team goes in each slot."}
           </p>
         )}
       </div>
