@@ -1971,7 +1971,7 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
 
   const playersWithStats = players.filter(p => allStats[p.mc_uuid]);
   const fmt1 = (v: number | null | undefined) => v != null ? v.toFixed(1) : "—";
-  const fmtPct = (v: number | null | undefined) => v != null ? `${v.toFixed(1)}%` : "—";
+  const fmtPct = (v: number | null | undefined) => v != null && v > 0 ? `${v.toFixed(1)}%` : "—";
 
   return (
     <div className="space-y-4">

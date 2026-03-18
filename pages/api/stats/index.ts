@@ -14,7 +14,10 @@ function getQuerySeasons(season: string, type: string): string[] {
 
 function mergePlayerRows(rows: Record<string, unknown>[]) {
   let gp = 0, wPts = 0, wReb = 0, wAst = 0, wStl = 0, wBlk = 0;
-  let wFg = 0, totalThree = 0, wThreePct = 0, wTo = 0, wPass = 0, wPoss = 0;
+  let totalThree = 0, wTo = 0, wPass = 0, wPoss = 0;
+  // Track fg% and 3pt% separately — only include seasons where they were actually tracked (> 0)
+  let wFg = 0, fgGames = 0;
+  let wThreePct = 0, threeGames = 0;
   for (const r of rows) {
     const g = (r.gp as number) ?? 0;
     gp += g;
@@ -23,9 +26,13 @@ function mergePlayerRows(rows: Record<string, unknown>[]) {
     wAst += ((r.apg as number) ?? 0) * g;
     wStl += ((r.spg as number) ?? 0) * g;
     wBlk += ((r.bpg as number) ?? 0) * g;
-    wFg += ((r.fg_pct as number) ?? 0) * g;
+    // Only count FG% if it was actually tracked (non-zero)
+    const fgP = (r.fg_pct as number) ?? 0;
+    if (fgP > 0) { wFg += fgP * g; fgGames += g; }
     totalThree += (r.three_pt_made as number) ?? 0;
-    wThreePct += ((r.three_pt_pct as number) ?? 0) * g;
+    // Only count 3P% if it was actually tracked (non-zero)
+    const tpP = (r.three_pt_pct as number) ?? 0;
+    if (tpP > 0) { wThreePct += tpP * g; threeGames += g; }
     wTo   += ((r.topg             as number) ?? 0) * g;
     wPass += ((r.pass_attempts_pg as number) ?? 0) * g;
     wPoss += ((r.possession_time_pg as number) ?? 0) * g;
@@ -38,10 +45,10 @@ function mergePlayerRows(rows: Record<string, unknown>[]) {
     apg: gp > 0 ? r1(wAst / gp) : null,
     spg: gp > 0 ? r1(wStl / gp) : null,
     bpg: gp > 0 ? r1(wBlk / gp) : null,
-    fg_pct: gp > 0 ? r1(wFg / gp) : null,
+    fg_pct: fgGames > 0 ? r1(wFg / fgGames) : null,
     three_pt_made: totalThree,
     tppg: gp > 0 ? r1(totalThree / gp) : null,
-    three_pt_pct: gp > 0 ? r1(wThreePct / gp) : null,
+    three_pt_pct: threeGames > 0 ? r1(wThreePct / threeGames) : null,
     topg: gp > 0 ? r1(wTo / gp) : null,
     pass_attempts_pg: gp > 0 ? r1(wPass / gp) : null,
     possession_time_pg: gp > 0 ? Math.round(wPoss / gp) : null,

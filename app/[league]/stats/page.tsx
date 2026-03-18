@@ -173,7 +173,7 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
     if (viewMode === "avg") {
       if (key === "fg_pct" || key === "three_pt_pct") {
         const v = (row as Record<string, unknown>)[key] as number | null;
-        return v == null ? "—" : `${v}%`;
+        return v == null || v === 0 ? "—" : `${v}%`;
       }
       if (key === "possession_time_pg") return String(na(row.possession_time_pg));
       if (key === "ast_pass") {
