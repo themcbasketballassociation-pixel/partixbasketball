@@ -271,6 +271,7 @@ export default function ConnectionsPage({ params }: { params?: Promise<{ league?
   const [attemptsLeft, setAttemptsLeft] = useState(4);
   const [guessHistory, setGuessHistory] = useState<number[][]>([]); // each guess = array of 4 group indices
   const [shake,       setShake]       = useState(false);
+  const [showOneAway, setShowOneAway] = useState(false);
   const [showShare,   setShowShare]   = useState(false);
   const [loading,     setLoading]     = useState(true);
   const [noData,      setNoData]      = useState(false);
@@ -330,6 +331,7 @@ export default function ConnectionsPage({ params }: { params?: Promise<{ league?
 
   const toggleTile = useCallback((uuid: string) => {
     if (isDone) return;
+    setShowOneAway(false); // clear hint when selection changes
     setSelected(prev => {
       const next = new Set(prev);
       if (next.has(uuid)) { next.delete(uuid); return next; }
@@ -337,16 +339,6 @@ export default function ConnectionsPage({ params }: { params?: Promise<{ league?
       next.add(uuid); return next;
     });
   }, [isDone]);
-
-  // Check if current selection of 4 has exactly 3 from the same group
-  const oneAway = React.useMemo(() => {
-    if (!groups || selected.size !== 4) return false;
-    const selectedArr = [...selected];
-    return groups.some(g => {
-      const matches = selectedArr.filter(uuid => g.players.some(p => p.mc_uuid === uuid));
-      return matches.length === 3;
-    });
-  }, [groups, selected]);
 
   const submitGuess = useCallback(() => {
     if (!groups || selected.size !== 4) return;
@@ -367,14 +359,20 @@ export default function ConnectionsPage({ params }: { params?: Promise<{ league?
       setFoundGroups(newFound);
       setGuessHistory(newHistory);
       setSelected(new Set());
+      setShowOneAway(false);
       if (newFound.length === 4) setTimeout(() => setShowShare(true), 600);
     } else {
-      // Wrong
+      // Wrong — check if 1 away
+      const isOneAway = groups.some(g => {
+        const matches = selectedArr.filter(uuid => g.players.some(p => p.mc_uuid === uuid));
+        return matches.length === 3;
+      });
       const newLeft = attemptsLeft - 1;
       setShake(true); setTimeout(() => setShake(false), 600);
       setGuessHistory(prev => [...prev, historyEntry]);
       setAttemptsLeft(newLeft);
       setSelected(new Set());
+      setShowOneAway(isOneAway);
       if (newLeft === 0) setTimeout(() => setShowShare(true), 600);
     }
   }, [groups, selected, foundGroups, guessHistory, attemptsLeft]);
@@ -491,7 +489,7 @@ export default function ConnectionsPage({ params }: { params?: Promise<{ league?
             {/* Submit / done */}
             {!isDone ? (
               <div className="flex flex-col items-center gap-2 pt-1">
-                {oneAway && (
+                {showOneAway && (
                   <div className="text-sm font-bold text-yellow-300 bg-yellow-900/50 border border-yellow-700 rounded-lg px-4 py-1.5 animate-pulse">
                     🔥 1 Away!
                   </div>
