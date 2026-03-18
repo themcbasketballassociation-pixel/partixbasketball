@@ -67,6 +67,9 @@ function generateGroups(
   ptArr: PlayerTeamEntry[],
   seasonRows: SeasonRow[],
   accsArr: Accolade[],
+  gpMap: Record<string, number>,
+  collegePtArr: PlayerTeamEntry[],
+  collegeAccsArr: Accolade[],
 ): Group[] | null {
   const rng = seededRng((SEASON_SEED + dayNum) * 53 + 7);
 
@@ -143,6 +146,52 @@ function generateGroups(
   for (const [awardType, awardPlayers] of Object.entries(awardMap)) {
     if (awardPlayers.length >= 4)
       candidates.push({ label: awardType, description: `Won ${awardType}`, pool: awardPlayers, type: "award" });
+  }
+
+  // ── College team groups (PCAA — 10+ PBA games required) ──────────────────
+  const byCollegeTeam: Record<string, Player[]> = {};
+  for (const pt of collegePtArr) {
+    const p = players.find(pl => pl.mc_uuid === pt.mc_uuid);
+    if (!p) continue; // not a PBA player
+    if ((gpMap[p.mc_uuid] ?? 0) < 10) continue; // need 10+ PBA games
+    const teamName = pt.teams?.name;
+    if (!teamName) continue;
+    if (!byCollegeTeam[teamName]) byCollegeTeam[teamName] = [];
+    if (!byCollegeTeam[teamName].find(pl => pl.mc_uuid === p.mc_uuid))
+      byCollegeTeam[teamName].push(p);
+  }
+  for (const [teamName, teamPlayers] of Object.entries(byCollegeTeam)) {
+    if (teamPlayers.length >= 4) {
+      candidates.push({
+        label: `${teamName} (College)`,
+        description: `Played for ${teamName} in college`,
+        pool: teamPlayers,
+        type: "team",
+      });
+    }
+  }
+
+  // ── College awards (rare — only College Rings & College MVP, ~15% chance) ─
+  const COLLEGE_AWARD_TYPES = new Set(["College Rings", "College MVP"]);
+  const collegeAwardMap: Record<string, Player[]> = {};
+  for (const a of collegeAccsArr) {
+    if (!COLLEGE_AWARD_TYPES.has(a.type)) continue;
+    const p = players.find(pl => pl.mc_uuid === a.mc_uuid);
+    if (!p) continue;
+    if ((gpMap[p.mc_uuid] ?? 0) < 10) continue;
+    if (!collegeAwardMap[a.type]) collegeAwardMap[a.type] = [];
+    if (!collegeAwardMap[a.type].find(pl => pl.mc_uuid === p.mc_uuid))
+      collegeAwardMap[a.type].push(p);
+  }
+  for (const [awardType, awardPlayers] of Object.entries(collegeAwardMap)) {
+    if (awardPlayers.length >= 4 && rng() < 0.15) {
+      candidates.push({
+        label: awardType,
+        description: `Won a ${awardType}`,
+        pool: awardPlayers,
+        type: "award",
+      });
+    }
   }
 
   // ── Played-with groups ────────────────────────────────────────────────────
@@ -286,12 +335,16 @@ export default function ConnectionsPage({ params }: { params?: Promise<{ league?
       fetch(`/api/stats/seasons?league=${slug}`).then(r => r.json()),
       fetch(`/api/accolades?league=${slug}`).then(r => r.json()),
       fetch(`/api/stats?league=${slug}&season=all&type=combined`).then(r => r.json()),
-    ]).then(([players, playerTeams, seasons, accolades, stats]) => {
-      const playersArr: Player[]          = Array.isArray(players)     ? players     : [];
-      const ptArr:      PlayerTeamEntry[] = Array.isArray(playerTeams) ? playerTeams : [];
-      const sznArr:     SeasonRow[]       = Array.isArray(seasons)     ? seasons     : [];
-      const accsArr:    Accolade[]        = Array.isArray(accolades)   ? accolades   : [];
-      const statsArr:   StatRow[]         = Array.isArray(stats)       ? stats       : [];
+      fetch(`/api/teams/players?league=pcaa`).then(r => r.json()).catch(() => []),
+      fetch(`/api/accolades?league=pcaa`).then(r => r.json()).catch(() => []),
+    ]).then(([players, playerTeams, seasons, accolades, stats, collegePT, collegeAccs]) => {
+      const playersArr:     Player[]          = Array.isArray(players)     ? players     : [];
+      const ptArr:          PlayerTeamEntry[] = Array.isArray(playerTeams) ? playerTeams : [];
+      const sznArr:         SeasonRow[]       = Array.isArray(seasons)     ? seasons     : [];
+      const accsArr:        Accolade[]        = Array.isArray(accolades)   ? accolades   : [];
+      const statsArr:       StatRow[]         = Array.isArray(stats)       ? stats       : [];
+      const collegePtArr:   PlayerTeamEntry[] = Array.isArray(collegePT)   ? collegePT   : [];
+      const collegeAccsArr: Accolade[]        = Array.isArray(collegeAccs) ? collegeAccs : [];
 
       const leagueUuids = new Set([
         ...ptArr.map(pt => pt.mc_uuid),
@@ -299,7 +352,11 @@ export default function ConnectionsPage({ params }: { params?: Promise<{ league?
       ]);
       const leaguePlayers = playersArr.filter(p => leagueUuids.has(p.mc_uuid));
 
-      const gs = generateGroups(dayNum, leaguePlayers, ptArr, sznArr, accsArr);
+      // Build total PBA GP map (used to gate college content — 10+ games required)
+      const gpMap: Record<string, number> = {};
+      for (const s of statsArr) { gpMap[s.mc_uuid] = s.gp ?? 0; }
+
+      const gs = generateGroups(dayNum, leaguePlayers, ptArr, sznArr, accsArr, gpMap, collegePtArr, collegeAccsArr);
       if (!gs) { setNoData(true); setLoading(false); return; }
 
       setGroups(gs);
