@@ -46,21 +46,25 @@ function getMostRecentTeam(uuid: string, ptArr: PlayerTeamEntry[]) {
   return sorted[0].teams ?? null;
 }
 
-/** Build a clue for a player given their stats */
-function buildClue(
+/** Build a ranked list of clues for a player (most specific first) */
+function buildClues(
   username: string, stats: StatRow | undefined, rings: number,
   team: { name: string; abbreviation: string } | null,
   maxSznPPG: number, maxPOPPG: number,
-): string {
-  if (rings > 0) return `${rings}× Finals champion`;
-  if (maxSznPPG >= 25) return `Had a ${Math.floor(maxSznPPG)}+ PPG season`;
-  if (maxPOPPG >= 20) return `${Math.floor(maxPOPPG)}+ PPG in a playoff run`;
-  if (stats && (stats.ppg ?? 0) >= 20) return `Averages ${stats.ppg?.toFixed(1)} PPG`;
-  if (stats && (stats.rpg ?? 0) >= 8)  return `Averages ${stats.rpg?.toFixed(1)} RPG`;
-  if (stats && (stats.apg ?? 0) >= 6)  return `Averages ${stats.apg?.toFixed(1)} APG`;
-  if (team) return `Played for ${team.name}`;
-  if (stats && (stats.ppg ?? 0) > 0)   return `${stats.ppg?.toFixed(1)} PPG scorer`;
-  return `Partix Basketball player (${username.length} letters)`;
+): string[] {
+  const clues: string[] = [];
+  // Specific numeric clues first (all unique per-player)
+  if (maxSznPPG >= 25) clues.push(`Had a ${Math.floor(maxSznPPG)}+ PPG season`);
+  if (maxPOPPG >= 20)  clues.push(`${Math.floor(maxPOPPG)}+ PPG in a playoff run`);
+  if (stats && (stats.ppg ?? 0) >= 20) clues.push(`Averages ${stats.ppg?.toFixed(1)} PPG`);
+  if (stats && (stats.rpg ?? 0) >= 8)  clues.push(`Averages ${stats.rpg?.toFixed(1)} RPG`);
+  if (stats && (stats.apg ?? 0) >= 6)  clues.push(`Averages ${stats.apg?.toFixed(1)} APG`);
+  if (stats && (stats.ppg ?? 0) > 0)   clues.push(`${stats.ppg?.toFixed(1)} PPG scorer`);
+  // Generic fallbacks (may be shared — used only if unique slot available)
+  if (rings > 0) clues.push(`${rings}× Finals champion`);
+  if (team)      clues.push(`Played for ${team.name}`);
+  clues.push(`${username.length}-letter Partix player`);
+  return clues;
 }
 
 // ── Crossword generator ───────────────────────────────────────────────────────
@@ -287,27 +291,39 @@ export default function CrosswordPage({ params }: { params?: Promise<{ league?: 
         ...statsArr.map(s => s.mc_uuid),
       ]);
 
-      // Filter to alpha-only names (3–11 chars) for crossword words
+      // Filter to alpha-only names (3–9 chars) for crossword words
       const candidates = playersArr
-        .filter(p => leagueUuids.has(p.mc_uuid) && /^[a-zA-Z]{3,11}$/.test(p.mc_username))
+        .filter(p => leagueUuids.has(p.mc_uuid) && /^[a-zA-Z]{3,9}$/.test(p.mc_username))
         .map(p => ({
           ...p,
           word: p.mc_username.toUpperCase(),
-          clue: buildClue(p.mc_username, statsMap[p.mc_uuid], ringMap[p.mc_uuid] ?? 0,
+          clues: buildClues(p.mc_username, statsMap[p.mc_uuid], ringMap[p.mc_uuid] ?? 0,
             getMostRecentTeam(p.mc_uuid, ptArr), maxSznPPG[p.mc_uuid] ?? 0, maxPOPPG[p.mc_uuid] ?? 0),
         }));
 
       if (candidates.length < 2) { setNoData(true); setLoading(false); return; }
 
-      // Shuffle and try to place up to 7 words
+      // Shuffle for daily variety, then prefer sweet-spot word lengths (5–8)
       const rng = seededRng((SEASON_SEED + dayNum) * 79 + 3);
       const shuffledCands = shuffled(candidates, rng);
-      // Prefer longer words (more intersections)
-      const sorted = [...shuffledCands].sort((a, b) => b.word.length - a.word.length).slice(0, 7);
+      const sweetSpot = (len: number) => len >= 5 && len <= 8 ? 0 : 1;
+      shuffledCands.sort((a, b) => {
+        const sa = sweetSpot(a.word.length), sb = sweetSpot(b.word.length);
+        if (sa !== sb) return sa - sb;
+        return Math.abs(a.word.length - 6) - Math.abs(b.word.length - 6);
+      });
 
-      const entries: WordEntry[] = sorted.map(c => ({
-        word: c.word, clue: c.clue, mc_uuid: c.mc_uuid, username: c.mc_username,
-      }));
+      // Pick up to 10 candidates with unique clues (try each clue slot, skip if already used)
+      const usedClues = new Set<string>();
+      const entries: WordEntry[] = [];
+      for (const c of shuffledCands) {
+        if (entries.length >= 10) break;
+        // Find first clue for this player that hasn't been used yet
+        const clue = c.clues.find(cl => !usedClues.has(cl));
+        if (!clue) continue; // all their clues are taken — skip
+        usedClues.add(clue);
+        entries.push({ word: c.word, clue, mc_uuid: c.mc_uuid, username: c.mc_username });
+      }
 
       const ps = generateCrossword(entries);
       if (!ps) { setNoData(true); setLoading(false); return; }
