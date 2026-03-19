@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Image from "next/image";
 
@@ -27,6 +27,7 @@ const tabs = [
 
 export default function Header() {
   const pathname = usePathname() ?? "/";
+  const router = useRouter();
   const [selected, setSelected] = useState<string>("mba");
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -73,7 +74,12 @@ export default function Header() {
           {leagues.map((l) => (
             <button
               key={l.slug}
-              onClick={() => setSelected(l.slug)}
+              onClick={() => {
+                setSelected(l.slug);
+                const currentTab = tabs.find(t => !t.global && (t.path === "" ? section === "" : section === t.path));
+                const targetPath = currentTab && !currentTab.global ? `/${l.slug}${currentTab.path}` : `/${l.slug}`;
+                router.push(targetPath);
+              }}
               className="px-3 py-1.5 rounded-lg text-xs font-bold tracking-wider transition-all duration-150"
               style={selected === l.slug
                 ? { background: l.accent, color: "white", boxShadow: `0 2px 8px ${l.accent}55` }
