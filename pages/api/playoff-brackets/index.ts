@@ -1,10 +1,12 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { supabase } from "../../../lib/supabase";
 import { requireAdmin } from "../../../lib/adminAuth";
+import { resolveLeague } from "../../../lib/leagueMapping";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === "GET") {
-    const { league, season } = req.query;
+    const { league: leagueRaw, season } = req.query;
+    const league = resolveLeague(leagueRaw);
     if (!league || !season) return res.status(400).json({ error: "league and season required" });
     const { data, error } = await supabase
       .from("playoff_brackets")

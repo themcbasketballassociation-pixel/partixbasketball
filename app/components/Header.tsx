@@ -5,9 +5,9 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 const leagues = [
-  { short: "PBA", full: "Minecraft Basketball Association", slug: "pba" },
-  { short: "PCAA", full: "College", slug: "pcaa" },
-  { short: "PBGL", full: "G League", slug: "pbgl" },
+  { short: "MBA", full: "Minecraft Basketball Association", slug: "mba" },
+  { short: "MCAA", full: "College", slug: "mcaa" },
+  { short: "MBGL", full: "G League", slug: "mbgl" },
 ];
 
 const tabs = [

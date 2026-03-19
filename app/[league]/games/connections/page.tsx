@@ -335,8 +335,8 @@ export default function ConnectionsPage({ params }: { params?: Promise<{ league?
       fetch(`/api/stats/seasons?league=${slug}`).then(r => r.json()),
       fetch(`/api/accolades?league=${slug}`).then(r => r.json()),
       fetch(`/api/stats?league=${slug}&season=all&type=combined`).then(r => r.json()),
-      fetch(`/api/teams/players?league=pcaa`).then(r => r.json()).catch(() => []),
-      fetch(`/api/accolades?league=pcaa`).then(r => r.json()).catch(() => []),
+      fetch(`/api/teams/players?league=mcaa`).then(r => r.json()).catch(() => []),
+      fetch(`/api/accolades?league=mcaa`).then(r => r.json()).catch(() => []),
     ]).then(([players, playerTeams, seasons, accolades, stats, collegePT, collegeAccs]) => {
       const playersArr:     Player[]          = Array.isArray(players)     ? players     : [];
       const ptArr:          PlayerTeamEntry[] = Array.isArray(playerTeams) ? playerTeams : [];

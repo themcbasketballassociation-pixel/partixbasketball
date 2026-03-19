@@ -1,10 +1,12 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { supabase } from "../../../lib/supabase";
 import { requireAdmin } from "../../../lib/adminAuth";
+import { resolveLeague } from "../../../lib/leagueMapping";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === "GET") {
-    const { league, season } = req.query;
+    const { league: leagueRaw, season } = req.query;
+    const league = resolveLeague(leagueRaw);
     let query = supabase
       .from("player_teams")
       .select("mc_uuid, team_id, league, season, players(mc_uuid, mc_username, discord_id), teams(id, name, abbreviation, division, logo_url)");
@@ -32,7 +34,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "DELETE") {
     const admin = await requireAdmin(req, res);
     if (!admin) return;
-    const { mc_uuid, league, season } = req.query;
+    const { mc_uuid, league: leagueRaw2, season } = req.query;
+    const league = resolveLeague(leagueRaw2);
     if (!mc_uuid || !league) return res.status(400).json({ error: "mc_uuid, league required" });
     let query = supabase.from("player_teams").delete().eq("mc_uuid", mc_uuid as string).eq("league", league as string);
     if (season) query = query.eq("season", season as string);

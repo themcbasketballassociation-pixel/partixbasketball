@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getServerSession } from "next-auth/next";
+import { resolveLeague } from "../../../lib/leagueMapping";
 import { authOptions } from "../auth/[...nextauth]";
 import { supabase } from "../../../lib/supabase";
 
@@ -11,7 +12,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!discordId) return res.status(401).json({ error: "No user ID" });
 
   if (req.method === "GET") {
-    const { league, day } = req.query;
+    const { league: leagueRaw, day } = req.query;
+    const league = resolveLeague(leagueRaw);
     if (!league || !day) return res.status(400).json({ error: "league and day required" });
 
     const { data, error } = await supabase
@@ -43,7 +45,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === "DELETE") {
-    const { league, day } = req.query;
+    const { league: leagueRaw, day } = req.query;
+    const league = resolveLeague(leagueRaw);
     if (!league || !day) return res.status(400).json({ error: "league and day required" });
     const { error } = await supabase
       .from("wordle_states")

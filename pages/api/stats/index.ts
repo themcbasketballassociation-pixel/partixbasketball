@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { supabase } from "../../../lib/supabase";
+import { resolveLeague } from "../../../lib/leagueMapping";
 
 const ALL_REGULAR_SEASONS = [
   "Season 1","Season 2","Season 3","Season 4","Season 5","Season 6","Season 7",
@@ -62,7 +63,8 @@ function mergePlayerRows(rows: Record<string, unknown>[]) {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const { league } = req.query;
+  const { league: leagueRaw } = req.query;
+  const league = resolveLeague(leagueRaw);
   if (!league) return res.status(400).json({ error: "league required" });
 
   // POST — save manual season-level stats for a player

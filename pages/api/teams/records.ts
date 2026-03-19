@@ -1,9 +1,11 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { supabase } from "../../../lib/supabase";
 import { requireAdmin } from "../../../lib/adminAuth";
+import { resolveLeague } from "../../../lib/leagueMapping";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const { league, season } = req.query;
+  const { league: leagueRaw, season } = req.query;
+  const league = resolveLeague(leagueRaw);
 
   if (req.method === "GET") {
     if (!league) return res.status(400).json({ error: "league required" });

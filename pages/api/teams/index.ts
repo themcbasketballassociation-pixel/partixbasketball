@@ -1,10 +1,12 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { supabase } from "../../../lib/supabase";
 import { requireAdmin } from "../../../lib/adminAuth";
+import { resolveLeague } from "../../../lib/leagueMapping";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === "GET") {
-    const { league, season } = req.query;
+    const { league: leagueRaw, season } = req.query;
+    const league = resolveLeague(leagueRaw);
     let query = supabase.from("teams").select("*").order("name");
     if (league) query = query.eq("league", league as string);
     if (season) query = query.eq("season", season as string);

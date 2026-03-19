@@ -1,11 +1,13 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { supabase } from "../../../lib/supabase";
 import { requireAdmin } from "../../../lib/adminAuth";
+import { resolveLeague } from "../../../lib/leagueMapping";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // GET — list champion accolades for a league (optionally filtered by season)
   if (req.method === "GET") {
-    const { league, season } = req.query;
+    const { league: leagueRaw, season } = req.query;
+    const league = resolveLeague(leagueRaw);
     if (!league) return res.status(400).json({ error: "league required" });
     let query = supabase
       .from("accolades")
@@ -66,7 +68,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "DELETE") {
     const admin = await requireAdmin(req, res);
     if (!admin) return;
-    const { league, season } = req.query;
+    const { league: leagueRaw2, season } = req.query;
+    const league = resolveLeague(leagueRaw2);
     if (!league || !season) return res.status(400).json({ error: "league, season required" });
     const { error } = await supabase
       .from("accolades")
