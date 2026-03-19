@@ -20,6 +20,11 @@
   box-sizing: border-box;
 }
 
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
 html, body {
   background: #080808;
   color: var(--foreground);

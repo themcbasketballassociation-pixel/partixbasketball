@@ -150,7 +150,7 @@ export default function StandingsPage({ params }: { params?: Promise<{ league?: 
     if (!slug || !season) return;
     setLoading(true);
     Promise.all([
-      fetch(`/api/teams?league=${slug}`).then((r) => r.json()),
+      fetch(`/api/teams?league=${slug}&season=${encodeURIComponent(season)}`).then((r) => r.json()),
       fetch(`/api/games?league=${slug}&season=${encodeURIComponent(season)}`).then((r) => r.json()),
     ]).then(([teams, gamesData]: [Team[], Game[]]) => {
       if (!Array.isArray(teams) || !Array.isArray(gamesData)) { setLoading(false); return; }
