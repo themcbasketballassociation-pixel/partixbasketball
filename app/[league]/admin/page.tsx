@@ -513,6 +513,11 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
   const [playerTeams, setPlayerTeams] = useState<{ mc_uuid: string; team_id: string; players: Player }[]>([]);
   const [addingToTeam, setAddingToTeam] = useState<Record<string, string>>({});
 
+  // Keep internal season in sync when parent season prop changes
+  useEffect(() => {
+    setSeason(SEASONS.includes(initialSeason) ? initialSeason : SEASONS[SEASONS.length - 1]);
+  }, [initialSeason]);
+
   const refresh = useCallback(async () => {
     const [teamsData, recData, playersData, ptData] = await Promise.all([
       fetch(`/api/teams?league=${league}&season=${encodeURIComponent(season)}`).then((r) => r.json()).catch(() => []),
@@ -1609,6 +1614,11 @@ function ChampionsTab({ league, season: initialSeason }: { league: string; seaso
   const [champions, setChampions] = useState<Accolade[]>([]);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
+
+  // Keep internal season in sync when parent season prop changes
+  useEffect(() => {
+    setSeason(REGULAR_SEASONS.includes(initialSeason) ? initialSeason : REGULAR_SEASONS[REGULAR_SEASONS.length - 1]);
+  }, [initialSeason]);
 
   const refreshTeams = useCallback(() => {
     fetch(`/api/teams?league=${league}&season=${encodeURIComponent(season)}`)
