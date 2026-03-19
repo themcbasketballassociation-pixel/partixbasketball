@@ -63,7 +63,7 @@ function buildClues(
   // Generic fallbacks (may be shared — used only if unique slot available)
   if (rings > 0) clues.push(`${rings}× Finals champion`);
   if (team)      clues.push(`Played for ${team.name}`);
-  clues.push(`${username.length}-letter Partix player`);
+  clues.push(`${username.length}-letter Minecraft player`);
   return clues;
 }
 

@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 const leagues = [
-  { short: "PBA", full: "Partix Basketball Association", slug: "pba" },
+  { short: "PBA", full: "Minecraft Basketball Association", slug: "pba" },
   { short: "PCAA", full: "College", slug: "pcaa" },
   { short: "PBGL", full: "G League", slug: "pbgl" },
 ];
@@ -58,7 +58,7 @@ export default function Header() {
             </svg>
           </div>
           <div>
-            <div className="text-sm font-bold text-white leading-tight">Partix Basketball</div>
+            <div className="text-sm font-bold text-white leading-tight">Minecraft Basketball</div>
             <div className="text-xs text-slate-400 leading-tight">{currentLeague.full}</div>
           </div>
         </div>

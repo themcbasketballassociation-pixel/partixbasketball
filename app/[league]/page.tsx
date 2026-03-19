@@ -1,75 +1,1576 @@
 "use client";
+import { useSession, signIn, signOut } from "next-auth/react";
+import { useEffect, useState, useCallback } from "react";
 import React from "react";
 
-const leagueNames: Record<string, string> = {
-  pba: "Partix Basketball Association",
-  pcaa: "College",
-  pbgl: "G League",
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type Player = { mc_uuid: string; mc_username: string; discord_id: string | null };
+type Team = { id: string; league: string; name: string; abbreviation: string; division: string | null; logo_url: string | null };
+type PlayerTeam = { mc_uuid: string; team_id: string; league: string; players: Player; teams: Team };
+type Game = {
+  id: string; league: string; scheduled_at: string;
+  home_team_id: string; away_team_id: string;
+  home_score: number | null; away_score: number | null;
+  status: string;
+  home_team: Team; away_team: Team;
 };
-
-type Article = {
-  id: string;
-  title: string;
-  body: string;
-  created_at: string;
+type GameStat = {
+  id: string; game_id: string; mc_uuid: string;
+  points: number; rebounds_off: number; rebounds_def: number;
+  assists: number; steals: number; blocks: number;
+  turnovers: number; minutes_played: number;
+  fg_made: number; fg_attempted: number;
+  players: Player;
 };
+type Accolade = {
+  id: string; league: string; mc_uuid: string; type: string;
+  season: string; description: string | null; players: Player;
+};
+type Article = { id: string; league: string; title: string; body: string; created_at: string };
 
-export default function LeagueHome({ params }: { params?: Promise<{ league?: string }> }) {
-  const resolved = React.use(params ?? Promise.resolve({})) as { league?: string };
-  const slug = resolved?.league ?? "";
-  const leagueName = leagueNames[slug] ?? (slug ? slug.toUpperCase() : "League");
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-  const [articles, setArticles] = React.useState<Article[]>([]);
-  const [loading, setLoading] = React.useState(true);
+const btn = "rounded-lg px-3 py-1.5 text-sm font-medium transition";
+const btnPrimary = `${btn} bg-blue-600 hover:bg-blue-500 text-white`;
+const btnDanger = `${btn} bg-red-900 hover:bg-red-800 text-red-200`;
+const btnSecondary = `${btn} bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700`;
+const input = "rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none w-full";
+const card = "rounded-xl border border-slate-700 bg-slate-950 p-4";
 
-  React.useEffect(() => {
-    if (!slug) { setLoading(false); return; }
-    fetch(`/api/articles?league=${slug}`)
-      .then((r) => r.json())
-      .then((data) => {
-        setArticles(Array.isArray(data) ? data : []);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, [slug]);
+function ErrMsg({ msg }: { msg: string }) {
+  if (!msg) return null;
+  return <p className="mt-2 text-red-400 text-sm rounded-lg bg-red-950 border border-red-900 px-3 py-2">{msg}</p>;
+}
+
+function Avatar({ uuid, username }: { uuid: string; username: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <img
+        src={`https://minotar.net/avatar/${username}/32`}
+        alt={username}
+        className="w-8 h-8 rounded ring-1 ring-slate-700 flex-shrink-0"
+        onError={(e) => { (e.target as HTMLImageElement).src = `https://minotar.net/avatar/MHF_Steve/32`; }}
+      />
+      <span className="font-semibold text-white">{username}</span>
+    </div>
+  );
+}
+
+function fmtMins(seconds: number) {
+  return `${Math.floor(seconds / 60)}:${(seconds % 60).toString().padStart(2, "0")}`;
+}
+function parseMins(str: string): number {
+  const [m, s] = (str || "0:00").split(":");
+  return (parseInt(m) || 0) * 60 + (parseInt(s) || 0);
+}
+
+// ─── Tab: Players ─────────────────────────────────────────────────────────────
+
+function PlayersTab({ league, season: initialSeason }: { league: string; season: string }) {
+  const SEASONS = ["Season 1","Season 1 Playoffs","Season 2","Season 2 Playoffs","Season 3","Season 3 Playoffs","Season 4","Season 4 Playoffs","Season 5","Season 5 Playoffs","Season 6","Season 6 Playoffs","Season 7","Season 7 Playoffs"];
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [playerTeams, setPlayerTeams] = useState<PlayerTeam[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [season, setSeason] = useState(initialSeason);
+  const [newUuid, setNewUuid] = useState("");
+  const [newDiscord, setNewDiscord] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [err, setErr] = useState("");
+
+  // Bulk paste state
+  const [bulkText, setBulkText] = useState("");
+  const [bulkOpen, setBulkOpen] = useState(true);
+  const [bulkRunning, setBulkRunning] = useState(false);
+  const [bulkResults, setBulkResults] = useState<{ uuid: string; status: "ok" | "error"; msg: string }[]>([]);
+
+  const refresh = useCallback(async () => {
+    const [p, pt, t] = await Promise.all([
+      fetch("/api/players").then((r) => r.json()),
+      fetch(`/api/teams/players?league=${league}&season=${encodeURIComponent(season)}`).then((r) => r.json()),
+      fetch(`/api/teams?league=${league}`).then((r) => r.json()),
+    ]);
+    setPlayers(Array.isArray(p) ? p : []);
+    setPlayerTeams(Array.isArray(pt) ? pt : []);
+    setTeams(Array.isArray(t) ? t : []);
+  }, [league, season]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const [newName, setNewName] = useState("");
+  const [newUuidField, setNewUuidField] = useState("");
+
+  const addPlayer = async () => {
+    if (!newName.trim()) return;
+    setAdding(true); setErr("");
+    // If UUID provided use it, otherwise generate one from name
+    let uuid = newUuidField.trim();
+    if (!uuid) {
+      // Generate offline UUID from name so it's consistent
+      const name = newName.trim();
+      const enc = new TextEncoder();
+      const data = enc.encode("OfflinePlayer:" + name);
+      const buf = await crypto.subtle.digest("MD5", data).catch(() => null);
+      // MD5 not available in SubtleCrypto — use a simple hash fallback
+      // Just use the name as a fake uuid-shaped string
+      uuid = "00000000-0000-3000-8000-" + Array.from(enc.encode(name)).map(b => b.toString(16).padStart(2,"0")).join("").slice(0, 12).padEnd(12,"0");
+    }
+    const r = await fetch("/api/players", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mc_uuid: uuid, mc_username_override: newName.trim(), discord_id: newDiscord.trim() || null }),
+    });
+    const data = await r.json();
+    if (!r.ok) { setErr(data.error ?? "Failed to add player"); setAdding(false); return; }
+    setNewName(""); setNewUuidField(""); setNewDiscord(""); setAdding(false);
+    refresh();
+  };
+
+  const bulkAdd = async () => {
+    const names = bulkText
+      .split(/[\n,]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (names.length === 0) return;
+    setBulkRunning(true);
+    setBulkResults([]);
+    const results: typeof bulkResults = [];
+    for (const name of names) {
+      // Generate a consistent UUID-shaped ID from the name
+      const enc = new TextEncoder();
+      const bytes = enc.encode(name);
+      const uuid = "00000000-0000-3000-8000-" + Array.from(bytes).map(b => b.toString(16).padStart(2,"0")).join("").slice(0,12).padEnd(12,"0");
+      const r = await fetch("/api/players", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mc_uuid: uuid, mc_username_override: name, discord_id: null }),
+      });
+      const data = await r.json();
+      results.push({
+        uuid: name,
+        status: r.ok ? "ok" : "error",
+        msg: r.ok ? (data.mc_username ?? name) : (data.error ?? "Failed"),
+      });
+      setBulkResults([...results]);
+    }
+    setBulkRunning(false);
+    refresh();
+  };
+
+  const deletePlayer = async (uuid: string) => {
+    if (!confirm(`Delete player ${uuid}? This will remove all their stats.`)) return;
+    const r = await fetch(`/api/players/${uuid}`, { method: "DELETE" });
+    if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Delete failed"); return; }
+    refresh();
+  };
+
+  const deleteAllPlayers = async () => {
+    if (!confirm(`Delete ALL ${players.length} players? This will remove all their stats and team assignments. This cannot be undone.`)) return;
+    setErr("");
+    for (const p of players) {
+      const r = await fetch(`/api/players/${p.mc_uuid}`, { method: "DELETE" });
+      if (!r.ok) { const d = await r.json(); setErr(d.error ?? `Failed to delete ${p.mc_username}`); return; }
+    }
+    refresh();
+  };
+
+  const assignTeam = async (mc_uuid: string, team_id: string) => {
+    if (!team_id) {
+      await fetch(`/api/teams/players?mc_uuid=${mc_uuid}&league=${league}&season=${encodeURIComponent(season)}`, { method: "DELETE" });
+    } else {
+      const r = await fetch("/api/teams/players", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mc_uuid, team_id, league, season }),
+      });
+      if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Assign failed"); return; }
+    }
+    refresh();
+  };
+
+  const teamForPlayer = (uuid: string) => playerTeams.find((pt) => pt.mc_uuid === uuid)?.team_id ?? "";
 
   return (
-    <div className="space-y-6">
-      {/* League header */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg px-6 py-5">
-        <h2 className="text-2xl font-bold text-white">{leagueName}</h2>
-        <p className="text-slate-400 text-sm mt-1">
-          Use the tabs above to view teams, standings, schedule, box scores, stats, and accolades.
-        </p>
+    <div className="space-y-5">
+      <div className={card}>
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Add Player</h3>
+        <div className="flex gap-2 flex-wrap">
+          <input
+            className={`${input} flex-1 min-w-[180px]`}
+            placeholder="Display name (e.g. AshtonJeanty)"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addPlayer()}
+          />
+          <input
+            className={`${input} flex-1 min-w-[260px]`}
+            placeholder="UUID (optional — leave blank to use Steve skin)"
+            value={newUuidField}
+            onChange={(e) => setNewUuidField(e.target.value)}
+          />
+          <input
+            className={`${input} w-44`}
+            placeholder="Discord ID (optional)"
+            value={newDiscord}
+            onChange={(e) => setNewDiscord(e.target.value)}
+          />
+          <button className={btnPrimary} onClick={addPlayer} disabled={adding || !newName.trim()}>
+            Add Player
+          </button>
+        </div>
+        <p className="text-xs text-slate-600 mt-2">Name is required. UUID is optional — without it, player will show a Steve skin.</p>
+        <ErrMsg msg={err} />
       </div>
 
-      {/* Articles / Announcements */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-800">
-          <h3 className="text-lg font-bold text-white">Announcements</h3>
-        </div>
+      {/* Bulk Paste Card */}
+      <div className={card}>
+        <button
+          className="w-full flex items-center justify-between text-xs font-semibold text-slate-400 uppercase tracking-widest"
+          onClick={() => { setBulkOpen((v) => !v); setBulkResults([]); }}
+        >
+          <span>Bulk Add Players by Username</span>
+          <span className="text-slate-500 text-base leading-none">{bulkOpen ? "▲" : "▼"}</span>
+        </button>
 
-        {loading ? (
-          <div className="p-8 text-center text-slate-500 text-sm">Loading...</div>
-        ) : articles.length === 0 ? (
-          <div className="p-8 text-center text-slate-600 text-sm">No announcements yet.</div>
+        {bulkOpen && (
+          <div className="mt-3 space-y-3">
+            <p className="text-slate-500 text-xs">Paste one display name per line. Players are added instantly with Steve skin — you can add UUIDs individually afterward if needed.</p>
+            <textarea
+              className={`${input} h-36 resize-y font-mono text-xs`}
+              placeholder={"Notch\nDream\nTechnoblade\n..."}
+              value={bulkText}
+              onChange={(e) => setBulkText(e.target.value)}
+              disabled={bulkRunning}
+            />
+            <div className="flex items-center gap-3">
+              <button
+                className={btnPrimary}
+                onClick={bulkAdd}
+                disabled={bulkRunning || !bulkText.trim()}
+              >
+                {bulkRunning ? "Adding..." : "Add All"}
+              </button>
+              {bulkResults.length > 0 && !bulkRunning && (
+                <span className="text-xs text-slate-400">
+                  {bulkResults.filter((r) => r.status === "ok").length} added ·{" "}
+                  {bulkResults.filter((r) => r.status === "error").length} failed
+                </span>
+              )}
+            </div>
+
+            {bulkResults.length > 0 && (
+              <div className="rounded-lg border border-slate-800 bg-slate-900 divide-y divide-slate-800 max-h-52 overflow-y-auto">
+                {bulkResults.map((r) => (
+                  <div key={r.uuid} className="flex items-center gap-3 px-3 py-2 text-xs">
+                    <span className={r.status === "ok" ? "text-green-400" : "text-red-400"}>
+                      {r.status === "ok" ? "✓" : "✗"}
+                    </span>
+                    <span className="font-mono text-slate-400 truncate flex-1">{r.uuid}</span>
+                    <span className={r.status === "ok" ? "text-green-300 font-semibold" : "text-red-300"}>
+                      {r.msg}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className={card}>
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Players ({players.length})</h3>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-slate-500">Season roster:</label>
+            <select
+              className="rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none"
+              value={season}
+              onChange={(e) => setSeason(e.target.value)}
+            >
+              {SEASONS.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+            {players.length > 0 && (
+              <button className={btnDanger} onClick={deleteAllPlayers}>Delete All</button>
+            )}
+          </div>
+        </div>
+        {players.length === 0 ? (
+          <p className="text-slate-600 text-sm">No players yet.</p>
         ) : (
-          <div className="divide-y divide-slate-800">
-            {articles.map((a) => (
-              <div key={a.id} className="px-6 py-5 hover:bg-slate-950 transition">
-                <div className="flex items-start justify-between gap-4">
-                  <h4 className="font-semibold text-white text-base">{a.title}</h4>
-                  <span className="text-slate-500 text-xs flex-shrink-0 mt-0.5">
-                    {new Date(a.created_at).toLocaleDateString(undefined, {
-                      month: "short", day: "numeric", year: "numeric",
-                    })}
-                  </span>
+          <div className="space-y-2">
+            {players.map((p) => (
+              <div key={p.mc_uuid} className="flex items-center justify-between gap-4 rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 hover:border-slate-700 transition">
+                <Avatar uuid={p.mc_uuid} username={p.mc_username} />
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <select
+                    className="rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none"
+                    value={teamForPlayer(p.mc_uuid)}
+                    onChange={(e) => assignTeam(p.mc_uuid, e.target.value)}
+                  >
+                    <option value="">No Team</option>
+                    {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                  <button className={btnDanger} onClick={() => deletePlayer(p.mc_uuid)}>Delete</button>
                 </div>
-                <p className="mt-2 text-slate-300 text-sm whitespace-pre-wrap leading-relaxed">{a.body}</p>
               </div>
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Tab: Teams ───────────────────────────────────────────────────────────────
+
+function TeamLogoAdmin({ team }: { team: Team }) {
+  if (team.logo_url) {
+    return <img src={team.logo_url} alt={team.abbreviation} className="w-9 h-9 rounded object-contain border border-slate-700 flex-shrink-0" />;
+  }
+  return (
+    <div className="w-9 h-9 rounded bg-slate-800 border border-slate-700 flex items-center justify-center flex-shrink-0">
+      <span className="text-xs font-bold text-slate-400">{team.abbreviation}</span>
+    </div>
+  );
+}
+
+function TeamsTab({ league }: { league: string }) {
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [newName, setNewName] = useState("");
+  const [newAbbr, setNewAbbr] = useState("");
+  const [newDivision, setNewDivision] = useState("");
+  const [editing, setEditing] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editAbbr, setEditAbbr] = useState("");
+  const [editDivision, setEditDivision] = useState("");
+  const [uploadingLogo, setUploadingLogo] = useState<string | null>(null);
+  const [showBulk, setShowBulk] = useState(false);
+  const [bulkText, setBulkText] = useState("");
+  const [bulkParsed, setBulkParsed] = useState<{ name: string; abbr: string; division: string }[] | null>(null);
+  const [bulkImporting, setBulkImporting] = useState(false);
+  const [err, setErr] = useState("");
+
+  const refresh = useCallback(async () => {
+    const data = await fetch(`/api/teams?league=${league}`).then((r) => r.json());
+    setTeams(Array.isArray(data) ? data : []);
+  }, [league]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const addTeam = async () => {
+    if (!newName.trim() || !newAbbr.trim()) { setErr("Name and abbreviation are required."); return; }
+    setErr("");
+    const r = await fetch("/api/teams", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ league, name: newName.trim(), abbreviation: newAbbr.trim().toUpperCase(), division: newDivision || null }),
+    });
+    const data = await r.json();
+    if (!r.ok) { setErr(data.error ?? "Failed to add team"); return; }
+    setNewName(""); setNewAbbr(""); setNewDivision(""); refresh();
+  };
+
+  const saveEdit = async (id: string) => {
+    const r = await fetch(`/api/teams/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: editName, abbreviation: editAbbr.toUpperCase(), division: editDivision || null }),
+    });
+    const data = await r.json();
+    if (!r.ok) { setErr(data.error ?? "Failed to save"); return; }
+    setEditing(null); refresh();
+  };
+
+  const deleteTeam = async (id: string) => {
+    if (!confirm("Delete this team? Players will become unassigned.")) return;
+    const r = await fetch(`/api/teams/${id}`, { method: "DELETE" });
+    if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Delete failed"); return; }
+    refresh();
+  };
+
+  const uploadLogo = async (teamId: string, file: File) => {
+    setUploadingLogo(teamId);
+    const ext = file.name.split(".").pop() ?? "png";
+    const base64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const result = (e.target?.result as string).split(",")[1];
+        resolve(result);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    const r = await fetch("/api/teams/logo", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ team_id: teamId, base64, mime: file.type, ext }),
+    });
+    const data = await r.json();
+    if (!r.ok) { setErr(data.error ?? "Logo upload failed"); }
+    setUploadingLogo(null);
+    refresh();
+  };
+
+  const parseBulk = () => {
+    const lines = bulkText.split("\n").map((l) => l.trim()).filter(Boolean);
+    const result: { name: string; abbr: string; division: string }[] = [];
+    for (const line of lines) {
+      const parts = line.split(",").map((p) => p.trim());
+      if (parts.length < 2) continue;
+      const name = parts[0];
+      const abbr = parts[1].toUpperCase();
+      const division = parts[2] ?? "";
+      if (name && abbr) result.push({ name, abbr, division });
+    }
+    setBulkParsed(result);
+  };
+
+  const runBulkImport = async () => {
+    if (!bulkParsed?.length) return;
+    setBulkImporting(true); setErr("");
+    for (const t of bulkParsed) {
+      const r = await fetch("/api/teams", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ league, name: t.name, abbreviation: t.abbr, division: t.division || null }),
+      });
+      if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Import failed"); setBulkImporting(false); return; }
+    }
+    setBulkImporting(false); setBulkText(""); setBulkParsed(null); setShowBulk(false);
+    refresh();
+  };
+
+  return (
+    <div className="space-y-5">
+      {/* Bulk Import */}
+      <div className={card}>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Bulk Import Teams</h3>
+          <button className={btnSecondary} onClick={() => { setShowBulk(!showBulk); setBulkParsed(null); }}>
+            {showBulk ? "Cancel" : "Paste Teams"}
+          </button>
+        </div>
+        {showBulk && (
+          <div className="space-y-3">
+            <p className="text-xs text-slate-500">One team per line: <span className="font-mono text-slate-400">Name, ABV, Division</span> (Division optional: East or West)</p>
+            <textarea
+              className={`${input} h-36 font-mono text-xs resize-y`}
+              placeholder={"Miami Falcons, MIA, East\nLA Lakers, LAL, West\nChicago Bulls, CHI"}
+              value={bulkText}
+              onChange={(e) => { setBulkText(e.target.value); setBulkParsed(null); }}
+            />
+            <button className={btnPrimary} onClick={parseBulk} disabled={!bulkText.trim()}>Preview Import</button>
+            {bulkParsed && (
+              <div className="mt-2 space-y-2">
+                {bulkParsed.map((t, i) => (
+                  <div key={i} className="flex items-center gap-3 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm">
+                    <span className="font-semibold text-white">{t.name}</span>
+                    <span className="rounded bg-slate-800 px-1.5 py-0.5 text-xs font-mono text-slate-400">{t.abbr}</span>
+                    {t.division && <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${t.division === "East" ? "bg-orange-950 text-orange-400" : "bg-blue-950 text-blue-400"}`}>{t.division}</span>}
+                  </div>
+                ))}
+                <button className={btnPrimary} onClick={runBulkImport} disabled={bulkImporting || !bulkParsed.length}>
+                  {bulkImporting ? "Importing..." : `Import ${bulkParsed.length} Teams`}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Add Single Team */}
+      <div className={card}>
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Add Team</h3>
+        <div className="flex gap-2 flex-wrap">
+          <input className={`${input} flex-1 min-w-[160px]`} placeholder="Team name (e.g. Miami Falcons)" value={newName} onChange={(e) => { setNewName(e.target.value); setErr(""); }} onKeyDown={(e) => e.key === "Enter" && addTeam()} />
+          <input className={`${input} w-24`} placeholder="ABV" value={newAbbr} onChange={(e) => { setNewAbbr(e.target.value); setErr(""); }} maxLength={5} />
+          <select className={`${input} w-32`} value={newDivision} onChange={(e) => setNewDivision(e.target.value)}>
+            <option value="">No Division</option>
+            <option value="East">East</option>
+            <option value="West">West</option>
+          </select>
+          <button className={btnPrimary} onClick={addTeam}>Add Team</button>
+        </div>
+        <ErrMsg msg={err} />
+      </div>
+
+      {/* Teams List */}
+      <div className={card}>
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Teams ({teams.length})</h3>
+        {teams.length === 0 ? (
+          <p className="text-slate-600 text-sm">No teams yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {teams.map((t) => (
+              <div key={t.id} className="rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 hover:border-slate-700 transition">
+                {editing === t.id ? (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <input className={`${input} flex-1 min-w-[140px]`} value={editName} onChange={(e) => setEditName(e.target.value)} />
+                    <input className={`${input} w-24`} value={editAbbr} onChange={(e) => setEditAbbr(e.target.value)} maxLength={5} />
+                    <select className={`${input} w-32`} value={editDivision} onChange={(e) => setEditDivision(e.target.value)}>
+                      <option value="">No Division</option>
+                      <option value="East">East</option>
+                      <option value="West">West</option>
+                    </select>
+                    <button className={btnPrimary} onClick={() => saveEdit(t.id)}>Save</button>
+                    <button className={btnSecondary} onClick={() => setEditing(null)}>Cancel</button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-3">
+                      <TeamLogoAdmin team={t} />
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-white">{t.name}</span>
+                          <span className="rounded bg-slate-800 px-1.5 py-0.5 text-xs font-mono text-slate-400">{t.abbreviation}</span>
+                          {t.division && (
+                            <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${t.division === "East" ? "bg-orange-950 text-orange-400" : "bg-blue-950 text-blue-400"}`}>{t.division}</span>
+                          )}
+                        </div>
+                        {t.logo_url && <p className="text-xs text-slate-600 mt-0.5">Logo uploaded</p>}
+                      </div>
+                    </div>
+                    <div className="flex gap-2 items-center flex-wrap">
+                      {/* Logo upload */}
+                      <label className={`${btnSecondary} cursor-pointer`}>
+                        {uploadingLogo === t.id ? "Uploading..." : "Upload Logo"}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          disabled={uploadingLogo === t.id}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) uploadLogo(t.id, file);
+                            e.target.value = "";
+                          }}
+                        />
+                      </label>
+                      <button className={btnSecondary} onClick={() => { setEditing(t.id); setEditName(t.name); setEditAbbr(t.abbreviation); setEditDivision(t.division ?? ""); setErr(""); }}>Edit</button>
+                      <button className={btnDanger} onClick={() => deleteTeam(t.id)}>Delete</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Schedule parser helpers ──────────────────────────────────────────────────
+
+const DAY_OFFSETS: Record<string, number> = {
+  monday: -3, tuesday: -2, wednesday: -1,
+  thursday: 0, friday: 1, saturday: 2, sunday: 3,
+};
+
+function parseScheduleText(text: string) {
+  const results: Array<{ week: number; day: string; time: string; home: string; away: string }> = [];
+  const sections = text.split(/Week\s+(\d+)/i);
+  for (let i = 1; i < sections.length; i += 2) {
+    const weekNum = parseInt(sections[i]);
+    const lines = (sections[i + 1] ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
+    let currentDay = "Thursday";
+    let currentTime = "7:00 PM";
+    for (const line of lines) {
+      // Update current day if line starts with a day name
+      const dayM = line.match(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b/i);
+      if (dayM) currentDay = dayM[1];
+      // Update current time if line contains a time
+      const timeM = line.match(/(\d+:\d+\s*[AP]M)/i);
+      if (timeM) currentTime = timeM[1].trim();
+      // Parse "Team A vs Team B"
+      const vsM = line.match(/^(.+?)\s+vs\s+(.+)$/i);
+      if (vsM) {
+        let home = vsM[1]
+          .replace(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s+/i, "")
+          .replace(/\d+:\d+\s*[AP]M\s*/i, "")
+          .trim();
+        const away = vsM[2].trim();
+        if (home && away) results.push({ week: weekNum, day: currentDay, time: currentTime, home, away });
+      }
+    }
+  }
+  return results;
+}
+
+function buildGameDate(startThursday: string, weekNum: number, day: string, timeStr: string): string {
+  const base = new Date(startThursday + "T00:00:00");
+  const offset = (weekNum - 1) * 7 + (DAY_OFFSETS[day.toLowerCase()] ?? 0);
+  base.setDate(base.getDate() + offset);
+  const tm = timeStr.match(/(\d+):(\d+)\s*([AP]M)/i);
+  if (tm) {
+    let h = parseInt(tm[1]); const min = parseInt(tm[2]); const ap = tm[3].toUpperCase();
+    if (ap === "PM" && h !== 12) h += 12;
+    if (ap === "AM" && h === 12) h = 0;
+    base.setHours(h, min, 0, 0);
+  }
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${base.getFullYear()}-${pad(base.getMonth() + 1)}-${pad(base.getDate())}T${pad(base.getHours())}:${pad(base.getMinutes())}`;
+}
+
+function matchTeam(teams: Team[], name: string): Team | undefined {
+  const n = name.toLowerCase().trim();
+  return (
+    teams.find((t) => t.name.toLowerCase() === n) ||
+    teams.find((t) => t.name.toLowerCase().endsWith(n)) ||
+    teams.find((t) => t.name.toLowerCase().includes(n)) ||
+    teams.find((t) => n.includes(t.name.toLowerCase())) ||
+    teams.find((t) => t.abbreviation.toLowerCase() === n)
+  );
+}
+
+type ParsedGame = { week: number; day: string; time: string; home: string; away: string; homeTeam?: Team; awayTeam?: Team; date: string };
+
+// ─── Tab: Schedule ────────────────────────────────────────────────────────────
+
+function ScheduleTab({ league, season }: { league: string; season: string }) {
+  const [games, setGames] = useState<Game[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [newDate, setNewDate] = useState("");
+  const [newHome, setNewHome] = useState("");
+  const [newAway, setNewAway] = useState("");
+  const [completingId, setCompletingId] = useState<string | null>(null);
+  const [homeScore, setHomeScore] = useState("");
+  const [awayScore, setAwayScore] = useState("");
+  const [err, setErr] = useState("");
+  const [showImport, setShowImport] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [importStart, setImportStart] = useState("");
+  const [parsed, setParsed] = useState<ParsedGame[] | null>(null);
+  const [importing, setImporting] = useState(false);
+
+  const refresh = useCallback(async () => {
+    const [g, t] = await Promise.all([
+      fetch(`/api/games?league=${league}`).then((r) => r.json()),
+      fetch(`/api/teams?league=${league}`).then((r) => r.json()),
+    ]);
+    setGames(Array.isArray(g) ? g : []);
+    setTeams(Array.isArray(t) ? t : []);
+  }, [league]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const addGame = async () => {
+    if (!newDate || !newHome || !newAway) { setErr("All fields are required."); return; }
+    setErr("");
+    const r = await fetch("/api/games", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ league, scheduled_at: newDate, home_team_id: newHome, away_team_id: newAway }),
+    });
+    const data = await r.json();
+    if (!r.ok) { setErr(data.error ?? "Failed to add game"); return; }
+    setNewDate(""); setNewHome(""); setNewAway(""); refresh();
+  };
+
+  const markCompleted = async (id: string) => {
+    if (!homeScore || !awayScore) { setErr("Both scores are required."); return; }
+    setErr("");
+    const r = await fetch(`/api/games/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "completed", home_score: parseInt(homeScore), away_score: parseInt(awayScore) }),
+    });
+    const data = await r.json();
+    if (!r.ok) { setErr(data.error ?? "Failed to save score"); return; }
+    setCompletingId(null); setHomeScore(""); setAwayScore(""); refresh();
+  };
+
+  const deleteGame = async (id: string) => {
+    if (!confirm("Delete this game? Box scores will also be deleted.")) return;
+    const r = await fetch(`/api/games/${id}`, { method: "DELETE" });
+    if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Delete failed"); return; }
+    refresh();
+  };
+
+  const parseImport = () => {
+    if (!importText.trim() || !importStart) return;
+    const raw = parseScheduleText(importText);
+    setParsed(raw.map((g) => ({
+      ...g,
+      date: buildGameDate(importStart, g.week, g.day, g.time),
+      homeTeam: matchTeam(teams, g.home),
+      awayTeam: matchTeam(teams, g.away),
+    })));
+  };
+
+  const runImport = async () => {
+    if (!parsed) return;
+    const valid = parsed.filter((g) => g.homeTeam && g.awayTeam);
+    if (!valid.length) return;
+    setImporting(true); setErr("");
+    for (const g of valid) {
+      const r = await fetch("/api/games", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ league, scheduled_at: g.date, home_team_id: g.homeTeam!.id, away_team_id: g.awayTeam!.id }),
+      });
+      if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Import failed"); setImporting(false); return; }
+    }
+    setImporting(false); setImportText(""); setImportStart(""); setParsed(null); setShowImport(false);
+    refresh();
+  };
+
+  const grouped = games.reduce<Record<string, Game[]>>((acc, g) => {
+    const d = new Date(g.scheduled_at);
+    const dow = d.getDay();
+    const daysToThu = dow >= 4 ? dow - 4 : dow + 3;
+    const thu = new Date(d); thu.setDate(d.getDate() - daysToThu);
+    const key = thu.toISOString().slice(0, 10);
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(g);
+    return acc;
+  }, {});
+  const weekKeys = Object.keys(grouped).sort();
+
+  return (
+    <div className="space-y-5">
+      <ErrMsg msg={err} />
+
+      {/* Bulk Import */}
+      <div className={card}>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Bulk Import from Text</h3>
+          <button className={btnSecondary} onClick={() => { setShowImport(!showImport); setParsed(null); }}>
+            {showImport ? "Cancel" : "Paste Schedule"}
+          </button>
+        </div>
+        {showImport && (
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Week 1 Thursday Date</label>
+              <input type="date" className={`${input} w-48`} value={importStart} onChange={(e) => setImportStart(e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Paste full schedule here</label>
+              <textarea
+                className={`${input} h-48 font-mono text-xs resize-y`}
+                placeholder={"Week 1\nThursday7:30 PMFalcons vs Wolves\n..."}
+                value={importText}
+                onChange={(e) => { setImportText(e.target.value); setParsed(null); }}
+              />
+            </div>
+            <button className={btnPrimary} onClick={parseImport} disabled={!importText.trim() || !importStart}>Parse Schedule</button>
+            {parsed && (
+              <div className="mt-2">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-slate-300">
+                    <span className="font-bold text-white">{parsed.length}</span> games ·{" "}
+                    <span className="text-green-400">{parsed.filter(g => g.homeTeam && g.awayTeam).length} matched</span>
+                    {parsed.filter(g => !g.homeTeam || !g.awayTeam).length > 0 && (
+                      <span className="text-red-400 ml-1">· {parsed.filter(g => !g.homeTeam || !g.awayTeam).length} unmatched</span>
+                    )}
+                  </span>
+                  <button className={btnPrimary} onClick={runImport} disabled={importing || !parsed.filter(g => g.homeTeam && g.awayTeam).length}>
+                    {importing ? "Importing..." : `Import ${parsed.filter(g => g.homeTeam && g.awayTeam).length} Games`}
+                  </button>
+                </div>
+                {Array.from(new Set(parsed.map(g => g.week))).sort((a,b) => a-b).map(week => (
+                  <div key={week} className="mb-3">
+                    <div className="text-xs font-semibold text-blue-400 uppercase tracking-widest mb-1">Week {week}</div>
+                    <div className="space-y-1">
+                      {parsed.filter(g => g.week === week).map((g, i) => (
+                        <div key={i} className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm ${g.homeTeam && g.awayTeam ? "bg-slate-900 border border-slate-800" : "bg-red-950 border border-red-900"}`}>
+                          <span className="text-slate-500 w-28 flex-shrink-0">{g.day} {g.time}</span>
+                          <span className={g.homeTeam ? "text-white font-semibold" : "text-red-400 font-semibold"}>{g.homeTeam ? g.homeTeam.name : `⚠ ${g.home}`}</span>
+                          <span className="text-slate-500">vs</span>
+                          <span className={g.awayTeam ? "text-white font-semibold" : "text-red-400 font-semibold"}>{g.awayTeam ? g.awayTeam.name : `⚠ ${g.away}`}</span>
+                          <span className="text-slate-600 text-xs ml-auto">{new Date(g.date).toLocaleDateString(undefined, {month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Single game */}
+      <div className={card}>
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Add Single Game</h3>
+        <div className="flex gap-2 flex-wrap items-end">
+          <div className="flex-1 min-w-[180px]">
+            <label className="block text-xs text-slate-500 mb-1">Date & Time</label>
+            <input type="datetime-local" className={input} value={newDate} onChange={(e) => { setNewDate(e.target.value); setErr(""); }} />
+          </div>
+          <div className="flex-1 min-w-[140px]">
+            <label className="block text-xs text-slate-500 mb-1">Home Team</label>
+            <select className={input} value={newHome} onChange={(e) => { setNewHome(e.target.value); setErr(""); }}>
+              <option value="">Select...</option>
+              {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+          <div className="flex-1 min-w-[140px]">
+            <label className="block text-xs text-slate-500 mb-1">Away Team</label>
+            <select className={input} value={newAway} onChange={(e) => { setNewAway(e.target.value); setErr(""); }}>
+              <option value="">Select...</option>
+              {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+          <button className={`${btnPrimary} self-end`} onClick={addGame}>Schedule</button>
+        </div>
+      </div>
+
+      {/* Games list */}
+      <div className={card}>
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">All Games ({games.length})</h3>
+        {games.length === 0 ? (
+          <p className="text-slate-600 text-sm">No games yet.</p>
+        ) : (
+          <div className="space-y-5">
+            {weekKeys.map((wk, wi) => (
+              <div key={wk}>
+                <div className="text-xs font-semibold text-blue-400 uppercase tracking-widest mb-2">Week {wi + 1}</div>
+                <div className="space-y-2">
+                  {grouped[wk].sort((a,b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()).map((g) => (
+                    <div key={g.id} className="rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 hover:border-slate-700 transition">
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <span className="font-semibold text-white">{g.home_team?.name ?? "?"} vs {g.away_team?.name ?? "?"}</span>
+                          <span className="text-slate-500 text-xs">{new Date(g.scheduled_at).toLocaleString(undefined, {weekday:"short",month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})}</span>
+                          {g.status === "completed" && <span className="font-bold text-green-400">{g.home_score} – {g.away_score}</span>}
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${g.status === "completed" ? "bg-green-900 text-green-300" : "bg-yellow-900 text-yellow-300"}`}>{g.status === "completed" ? "Final" : "Scheduled"}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {g.status !== "completed" && (
+                            <button className={btnSecondary} onClick={() => { setCompletingId(completingId === g.id ? null : g.id); setErr(""); }}>
+                              {completingId === g.id ? "Cancel" : "Enter Score"}
+                            </button>
+                          )}
+                          <button className={btnDanger} onClick={() => deleteGame(g.id)}>Delete</button>
+                        </div>
+                      </div>
+                      {completingId === g.id && (
+                        <div className="mt-3 flex gap-2 items-center flex-wrap">
+                          <input className="rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none w-28" type="number" placeholder={`${g.home_team?.abbreviation} score`} value={homeScore} onChange={(e) => setHomeScore(e.target.value)} />
+                          <span className="text-slate-400">–</span>
+                          <input className="rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none w-28" type="number" placeholder={`${g.away_team?.abbreviation} score`} value={awayScore} onChange={(e) => setAwayScore(e.target.value)} />
+                          <button className={btnPrimary} onClick={() => markCompleted(g.id)}>Save</button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Stat block parser ────────────────────────────────────────────────────────
+
+type ParsedStat = { name: string; matched: Player | null; fields: Record<string, string> };
+
+function parseStatBlock(text: string, players: Player[]): ParsedStat[] {
+  const results: ParsedStat[] = [];
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    if (!line || line.startsWith("===") || line.startsWith("//")) continue;
+    if (!line.includes("|")) continue;
+    const parts = line.split("|").map((p) => p.trim());
+    const name = parts[0];
+    if (!name) continue;
+
+    let fields: Record<string, string>;
+
+    if (/\bPTS\b/i.test(line)) {
+      // Labeled format: "PlayerName | MIN 0:14 | PTS 2 | FG 1/2 | OREB 0 | ..."
+      const ext = (pat: RegExp) => line.match(pat)?.[1] ?? "0";
+      const fgM = line.match(/\bFG\s+(\d+)\/(\d+)/i);
+      fields = {
+        minutes_played: ext(/\bMIN\s+(\d+:\d+)/i),
+        points: ext(/\bPTS\s+(\d+)/i),
+        fg_made: fgM?.[1] ?? "0",
+        fg_attempted: fgM?.[2] ?? "0",
+        assists: ext(/\bAST(?:\/PASS)?\s+(\d+)/i),
+        rebounds_off: ext(/\bOREB\s+(\d+)/i),
+        rebounds_def: ext(/\bDREB\s+(\d+)/i),
+        steals: ext(/\bSTL\s+(\d+)/i),
+        blocks: ext(/\bBLK\s+(\d+)/i),
+        turnovers: ext(/\bTOV\s+(\d+)/i),
+      };
+    } else {
+      // Positional format: "Name | Min | PTS | FGM/FGA | ORB | DRB | AST | STL | BLK | TOV"
+      const fgParts = (parts[3] ?? "0/0").split("/");
+      fields = {
+        minutes_played: parts[1] ?? "0:00",
+        points: parts[2] ?? "0",
+        fg_made: fgParts[0] ?? "0",
+        fg_attempted: fgParts[1] ?? "0",
+        rebounds_off: parts[4] ?? "0",
+        rebounds_def: parts[5] ?? "0",
+        assists: parts[6] ?? "0",
+        steals: parts[7] ?? "0",
+        blocks: parts[8] ?? "0",
+        turnovers: parts[9] ?? "0",
+      };
+    }
+
+    const n = name.toLowerCase().trim();
+    const matched =
+      players.find((p) => p.mc_uuid === name.trim()) ??
+      players.find((p) => p.mc_uuid.toLowerCase() === n) ??
+      players.find((p) => p.mc_username.toLowerCase() === n) ??
+      players.find((p) => p.mc_username.toLowerCase().includes(n)) ??
+      players.find((p) => n.includes(p.mc_username.toLowerCase())) ??
+      null;
+
+    results.push({ name, matched, fields });
+  }
+  return results;
+}
+
+// ─── Tab: Box Scores ──────────────────────────────────────────────────────────
+
+function BoxScoresTab({ league, season }: { league: string; season: string }) {
+  const [games, setGames] = useState<Game[]>([]);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [selectedGameId, setSelectedGameId] = useState<string>("");
+  const [statForm, setStatForm] = useState<Record<string, Record<string, string>>>({});
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+  const [showPaste, setShowPaste] = useState(false);
+  const [pasteText, setPasteText] = useState("");
+  const [pastePreview, setPastePreview] = useState<ParsedStat[] | null>(null);
+
+  useEffect(() => {
+    Promise.all([
+      fetch(`/api/games?league=${league}`).then((r) => r.json()),
+      fetch("/api/players").then((r) => r.json()),
+    ]).then(([g, p]) => {
+      setGames(Array.isArray(g) ? g.filter((x: Game) => x.status === "completed") : []);
+      setPlayers(Array.isArray(p) ? p : []);
+    });
+  }, [league]);
+
+  useEffect(() => {
+    if (!selectedGameId) return;
+    fetch(`/api/game-stats?game_id=${selectedGameId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        const form: Record<string, Record<string, string>> = {};
+        for (const s of (Array.isArray(data) ? data : []) as GameStat[]) {
+          form[s.mc_uuid] = {
+            points: String(s.points), rebounds_off: String(s.rebounds_off), rebounds_def: String(s.rebounds_def),
+            assists: String(s.assists), steals: String(s.steals), blocks: String(s.blocks),
+            turnovers: String(s.turnovers), minutes_played: fmtMins(s.minutes_played),
+            fg_made: String(s.fg_made), fg_attempted: String(s.fg_attempted),
+          };
+        }
+        setStatForm(form);
+      });
+  }, [selectedGameId]);
+
+  const setField = (uuid: string, field: string, val: string) =>
+    setStatForm((prev) => ({ ...prev, [uuid]: { ...(prev[uuid] ?? {}), [field]: val } }));
+
+  const saveStats = async () => {
+    setSaving(true); setErr("");
+    for (const [uuid, fields] of Object.entries(statForm)) {
+      const r = await fetch("/api/game-stats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          game_id: selectedGameId, mc_uuid: uuid,
+          points: parseInt(fields.points) || 0, rebounds_off: parseInt(fields.rebounds_off) || 0,
+          rebounds_def: parseInt(fields.rebounds_def) || 0, assists: parseInt(fields.assists) || 0,
+          steals: parseInt(fields.steals) || 0, blocks: parseInt(fields.blocks) || 0,
+          turnovers: parseInt(fields.turnovers) || 0, minutes_played: parseMins(fields.minutes_played || "0:00"),
+          fg_made: parseInt(fields.fg_made) || 0, fg_attempted: parseInt(fields.fg_attempted) || 0,
+        }),
+      });
+      if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Save failed"); setSaving(false); return; }
+    }
+    setSaving(false);
+    alert("Box scores saved!");
+  };
+
+  const statCols = ["points","rebounds_off","rebounds_def","assists","steals","blocks","turnovers","minutes_played","fg_made","fg_attempted"] as const;
+  const colLabels: Record<string, string> = { points:"PTS", rebounds_off:"ORB", rebounds_def:"DRB", assists:"AST", steals:"STL", blocks:"BLK", turnovers:"TO", minutes_played:"MIN", fg_made:"FGM", fg_attempted:"FGA" };
+
+  const applyPastePreview = () => {
+    if (!pastePreview) return;
+    for (const entry of pastePreview) {
+      if (!entry.matched) continue;
+      setStatForm((prev) => ({ ...prev, [entry.matched!.mc_uuid]: entry.fields }));
+    }
+    setShowPaste(false);
+    setPasteText("");
+    setPastePreview(null);
+  };
+
+  return (
+    <div className="space-y-5">
+      <ErrMsg msg={err} />
+      <div className={card}>
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Select Completed Game</h3>
+        <select className={input} value={selectedGameId} onChange={(e) => { setSelectedGameId(e.target.value); setShowPaste(false); setPastePreview(null); }}>
+          <option value="">Choose a game...</option>
+          {games.map((g) => (
+            <option key={g.id} value={g.id}>{g.home_team?.abbreviation} {g.home_score}–{g.away_score} {g.away_team?.abbreviation} · {new Date(g.scheduled_at).toLocaleDateString()}</option>
+          ))}
+        </select>
+        {games.length === 0 && <p className="mt-2 text-slate-600 text-sm">No completed games yet. Mark games as completed in the Schedule tab.</p>}
+      </div>
+
+      {selectedGameId && (
+        <>
+          {/* Paste Stats panel */}
+          <div className={card}>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Paste Stats</h3>
+                {!showPaste && <p className="text-xs text-slate-600 mt-0.5">Paste your stat block to auto-fill the form</p>}
+              </div>
+              <button className={btnSecondary} onClick={() => { setShowPaste(!showPaste); setPastePreview(null); }}>
+                {showPaste ? "Cancel" : "Paste Stats"}
+              </button>
+            </div>
+            {showPaste && (
+              <div className="space-y-3">
+                <div className="rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-xs text-slate-400 font-mono space-y-0.5">
+                  <div className="text-slate-300 mb-1 font-semibold not-italic" style={{fontFamily:'inherit'}}>Use player names — they'll be matched to your playerbase automatically:</div>
+                  <div>Notch | 0:14 | 2 | 1/2 | 0 | 0 | 3 | 0 | 0 | 1</div>
+                  <div className="text-slate-600 mt-1">— or labeled format —</div>
+                  <div>Notch | MIN 0:14 | PTS 2 | FG 1/2 | OREB 0 | DREB 0 | AST 3 | STL 0 | BLK 0 | TOV 1</div>
+                  <div className="text-slate-600 mt-1">Order (positional): Name | MIN | PTS | FGM/FGA | ORB | DRB | AST | STL | BLK | TOV</div>
+                </div>
+                <textarea
+                  className={`${input} h-44 font-mono text-xs resize-y`}
+                  placeholder="Paste your stat block here..."
+                  value={pasteText}
+                  onChange={(e) => { setPasteText(e.target.value); setPastePreview(null); }}
+                />
+                <button className={btnPrimary} onClick={() => setPastePreview(parseStatBlock(pasteText, players))} disabled={!pasteText.trim()}>
+                  Parse Stats
+                </button>
+                {pastePreview && (
+                  <div className="space-y-2 mt-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-slate-300">
+                        <span className="text-green-400 font-semibold">{pastePreview.filter(e => e.matched).length} matched</span>
+                        {pastePreview.filter(e => !e.matched).length > 0 && (
+                          <span className="text-red-400 ml-2">{pastePreview.filter(e => !e.matched).length} unmatched</span>
+                        )}
+                      </span>
+                      <button className={btnPrimary} onClick={applyPastePreview} disabled={!pastePreview.some(e => e.matched)}>
+                        Apply to Form
+                      </button>
+                    </div>
+                    {pastePreview.map((entry, i) => (
+                      <div key={i} className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-sm ${entry.matched ? "border-slate-800 bg-slate-900" : "border-red-900 bg-red-950"}`}>
+                        {entry.matched ? (
+                          <>
+                            <img src={`https://minotar.net/avatar/${entry.matched.mc_username}/24`} className="w-6 h-6 rounded" alt="" />
+                            <span className="text-green-400 font-semibold">{entry.matched.mc_username}</span>
+                            <span className="text-slate-600 text-xs">← {entry.name}</span>
+                          </>
+                        ) : (
+                          <span className="text-red-400 font-semibold">⚠ {entry.name} — no match found</span>
+                        )}
+                        <span className="ml-auto text-xs text-slate-600 font-mono">
+                          {entry.fields.points}pts {entry.fields.fg_made}/{entry.fields.fg_attempted}fg {entry.fields.minutes_played}min
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Stats table */}
+          <div className={`${card} overflow-x-auto`}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Player Stats</h3>
+              <button className={btnPrimary} onClick={saveStats} disabled={saving}>{saving ? "Saving..." : "Save All"}</button>
+            </div>
+            {players.length === 0 ? <p className="text-slate-600 text-sm">No players. Add players in the Players tab first.</p> : (
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-800">
+                    <th className="px-3 py-2 text-left text-xs text-slate-400 uppercase tracking-widest">Player</th>
+                    {statCols.map((c) => <th key={c} className="px-2 py-2 text-center text-xs text-slate-400 uppercase tracking-widest whitespace-nowrap">{colLabels[c]}</th>)}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {players.map((p) => (
+                    <tr key={p.mc_uuid} className={`transition ${Object.keys(statForm[p.mc_uuid] ?? {}).length > 0 ? "bg-blue-950/20" : "hover:bg-slate-900"}`}>
+                      <td className="px-3 py-2 whitespace-nowrap"><Avatar uuid={p.mc_uuid} username={p.mc_username} /></td>
+                      {statCols.map((c) => (
+                        <td key={c} className="px-1 py-1">
+                          <input className="rounded border border-slate-700 bg-slate-800 px-1.5 py-1 text-sm text-white focus:border-blue-500 focus:outline-none w-14 text-center" placeholder={c === "minutes_played" ? "0:00" : "0"} value={statForm[p.mc_uuid]?.[c] ?? ""} onChange={(e) => setField(p.mc_uuid, c, e.target.value)} />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Tab: Accolades ───────────────────────────────────────────────────────────
+
+function AccoladesTab({ league, season: initialSeason }: { league: string; season: string }) {
+  const [accolades, setAccolades] = useState<Accolade[]>([]);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [newPlayer, setNewPlayer] = useState("");
+  const [newType, setNewType] = useState("");
+  const [newSeason, setNewSeason] = useState(initialSeason);
+  const [newDesc, setNewDesc] = useState("");
+  const [err, setErr] = useState("");
+
+  const refresh = useCallback(async () => {
+    const [a, p] = await Promise.all([
+      fetch(`/api/accolades?league=${league}`).then((r) => r.json()),
+      fetch("/api/players").then((r) => r.json()),
+    ]);
+    setAccolades(Array.isArray(a) ? a : []);
+    setPlayers(Array.isArray(p) ? p : []);
+  }, [league]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const addAccolade = async () => {
+    if (!newPlayer || !newType || !newSeason) { setErr("Player, type, and season are required."); return; }
+    setErr("");
+    const r = await fetch("/api/accolades", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ league, mc_uuid: newPlayer, type: newType, season: newSeason, description: newDesc || null }),
+    });
+    const data = await r.json();
+    if (!r.ok) { setErr(data.error ?? "Failed to add accolade"); return; }
+    setNewPlayer(""); setNewType(""); setNewSeason(""); setNewDesc(""); refresh();
+  };
+
+  const deleteAccolade = async (id: string) => {
+    if (!confirm("Delete this accolade?")) return;
+    const r = await fetch(`/api/accolades/${id}`, { method: "DELETE" });
+    if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Delete failed"); return; }
+    refresh();
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className={card}>
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Add Accolade</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+          <div><label className="block text-xs text-slate-500 mb-1">Player</label>
+            <select className={input} value={newPlayer} onChange={(e) => { setNewPlayer(e.target.value); setErr(""); }}>
+              <option value="">Select...</option>
+              {players.map((p) => <option key={p.mc_uuid} value={p.mc_uuid}>{p.mc_username}</option>)}
+            </select></div>
+          <div><label className="block text-xs text-slate-500 mb-1">Award Type</label>
+            <input className={input} placeholder="MVP, All-Star, etc." value={newType} onChange={(e) => { setNewType(e.target.value); setErr(""); }} /></div>
+          <div><label className="block text-xs text-slate-500 mb-1">Season</label>
+            <select className={input} value={newSeason} onChange={(e) => { setNewSeason(e.target.value); setErr(""); }}>
+              <option value="">Select season...</option>
+              {["Season 1","Season 1 Playoffs","Season 2","Season 2 Playoffs","Season 3","Season 3 Playoffs","Season 4","Season 4 Playoffs","Season 5","Season 5 Playoffs","Season 6","Season 6 Playoffs","Season 7","Season 7 Playoffs"].map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select></div>
+          <div><label className="block text-xs text-slate-500 mb-1">Description (optional)</label>
+            <input className={input} placeholder="Additional notes" value={newDesc} onChange={(e) => setNewDesc(e.target.value)} /></div>
+        </div>
+        <button className={`${btnPrimary} mt-3`} onClick={addAccolade}>Add Accolade</button>
+        <ErrMsg msg={err} />
+      </div>
+      <div className={card}>
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Accolades ({accolades.length})</h3>
+        {accolades.length === 0 ? <p className="text-slate-600 text-sm">No accolades yet.</p> : (
+          <div className="space-y-2">
+            {accolades.map((a) => (
+              <div key={a.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 hover:border-slate-700 transition">
+                <div className="flex items-center gap-3">
+                  <Avatar uuid={a.mc_uuid} username={(a as any).players?.mc_username ?? a.mc_uuid} />
+                  <div>
+                    <span className="font-semibold text-blue-300">{a.type}</span>
+                    <span className="ml-2 text-slate-400 text-sm">{a.season}</span>
+                    {a.description && <span className="ml-2 text-slate-500 text-sm">— {a.description}</span>}
+                  </div>
+                </div>
+                <button className={btnDanger} onClick={() => deleteAccolade(a.id)}>Delete</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Tab: Articles ────────────────────────────────────────────────────────────
+
+function ArticlesTab({ league }: { league: string }) {
+  const [articles, setArticles] = useState<Article[]>([]);
+  const [newTitle, setNewTitle] = useState("");
+  const [newBody, setNewBody] = useState("");
+  const [err, setErr] = useState("");
+  const [posting, setPosting] = useState(false);
+
+  const refresh = useCallback(async () => {
+    const data = await fetch(`/api/articles?league=${league}`).then((r) => r.json());
+    setArticles(Array.isArray(data) ? data : []);
+  }, [league]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const addArticle = async () => {
+    if (!newTitle.trim() || !newBody.trim()) { setErr("Title and body are required."); return; }
+    setErr(""); setPosting(true);
+    const r = await fetch("/api/articles", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ league, title: newTitle.trim(), body: newBody.trim() }),
+    });
+    const data = await r.json();
+    if (!r.ok) { setErr(data.error ?? "Failed to post"); setPosting(false); return; }
+    setNewTitle(""); setNewBody(""); setPosting(false); refresh();
+  };
+
+  const deleteArticle = async (id: string) => {
+    if (!confirm("Delete this announcement?")) return;
+    const r = await fetch(`/api/articles/${id}`, { method: "DELETE" });
+    if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Delete failed"); return; }
+    refresh();
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className={card}>
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Post Announcement</h3>
+        <div className="space-y-2">
+          <input className={input} placeholder="Title" value={newTitle} onChange={(e) => { setNewTitle(e.target.value); setErr(""); }} />
+          <textarea className={`${input} h-28 resize-y`} placeholder="Write your announcement here..." value={newBody} onChange={(e) => { setNewBody(e.target.value); setErr(""); }} />
+        </div>
+        <button className={`${btnPrimary} mt-3`} onClick={addArticle} disabled={posting}>{posting ? "Posting..." : "Post"}</button>
+        <ErrMsg msg={err} />
+      </div>
+
+      <div className={card}>
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Announcements ({articles.length})</h3>
+        {articles.length === 0 ? <p className="text-slate-600 text-sm">No announcements yet.</p> : (
+          <div className="space-y-2">
+            {articles.map((a) => (
+              <div key={a.id} className="rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 hover:border-slate-700 transition">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-white">{a.title}</span>
+                      <span className="text-slate-500 text-xs">{new Date(a.created_at).toLocaleDateString()}</span>
+                    </div>
+                    <p className="mt-1 text-slate-400 text-sm line-clamp-2">{a.body}</p>
+                  </div>
+                  <button className={btnDanger} onClick={() => deleteArticle(a.id)}>Delete</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Tab: Stats (read-only) ───────────────────────────────────────────────────
+
+function StatsViewTab({ league, season: initialSeason }: { league: string; season: string }) {
+  const STAT_FIELDS = [
+    { key: "gp",     label: "GP",   hint: "Games Played",      decimal: false },
+    { key: "ppg",    label: "PPG",  hint: "Points Per Game",    decimal: true  },
+    { key: "rpg",    label: "RPG",  hint: "Rebounds Per Game",  decimal: true  },
+    { key: "apg",    label: "APG",  hint: "Assists Per Game",   decimal: true  },
+    { key: "spg",    label: "SPG",  hint: "Steals Per Game",    decimal: true  },
+    { key: "bpg",    label: "BPG",  hint: "Blocks Per Game",    decimal: true  },
+    { key: "fg_pct", label: "FG%",  hint: "Field Goal %",       decimal: true  },
+  ];
+
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [selectedUuid, setSelectedUuid] = useState("");
+  const [fields, setFields] = useState<Record<string, string>>({});
+  const [savedPlayers, setSavedPlayers] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    fetch("/api/players")
+      .then((r) => r.json())
+      .then((p) => { setPlayers(Array.isArray(p) ? p : []); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [league]);
+
+  // When player is selected, load their existing stats for this season
+  useEffect(() => {
+    if (!selectedUuid) return;
+    setFields({});
+    fetch(`/api/stats?league=${league}&season=${encodeURIComponent(initialSeason)}&mc_uuid=${selectedUuid}`)
+      .then((r) => r.json())
+      .then((data) => {
+        const row = Array.isArray(data) ? data[0] : data;
+        if (row && row.mc_uuid) {
+          setFields({
+            gp: String(row.gp ?? ""),
+            ppg: String(row.ppg ?? ""),
+            rpg: String(row.rpg ?? ""),
+            apg: String(row.apg ?? ""),
+            spg: String(row.spg ?? ""),
+            bpg: String(row.bpg ?? ""),
+            fg_pct: String(row.fg_pct ?? ""),
+          });
+        }
+      })
+      .catch(() => {});
+  }, [selectedUuid, league, initialSeason]);
+
+  const savePlayer = async () => {
+    if (!selectedUuid) return;
+    setSaving(true); setErr("");
+    const r = await fetch("/api/stats", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        league, season: initialSeason, mc_uuid: selectedUuid,
+        gp:     parseInt(fields.gp)     || 0,
+        ppg:    parseFloat(fields.ppg)  || 0,
+        rpg:    parseFloat(fields.rpg)  || 0,
+        apg:    parseFloat(fields.apg)  || 0,
+        spg:    parseFloat(fields.spg)  || 0,
+        bpg:    parseFloat(fields.bpg)  || 0,
+        fg_pct: parseFloat(fields.fg_pct) || 0,
+      }),
+    });
+    setSaving(false);
+    if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Save failed"); return; }
+    setSaved(true);
+    setSavedPlayers((prev) => new Set([...prev, selectedUuid]));
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const selectedPlayer = players.find((p) => p.mc_uuid === selectedUuid);
+
+  if (loading) return <div className={`${card} text-slate-500 text-sm`}>Loading...</div>;
+
+  return (
+    <div className="space-y-4">
+      {/* Player picker */}
+      <div className={card}>
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">
+          Add / Edit Player Stats — {initialSeason}
+        </h3>
+        <div className="flex gap-3 flex-wrap items-end">
+          <div className="flex-1 min-w-[200px]">
+            <label className="block text-xs text-slate-500 mb-1">Select Player</label>
+            <select
+              className={input}
+              value={selectedUuid}
+              onChange={(e) => { setSelectedUuid(e.target.value); setErr(""); setSaved(false); }}
+            >
+              <option value="">Choose a player...</option>
+              {players.map((p) => (
+                <option key={p.mc_uuid} value={p.mc_uuid}>
+                  {p.mc_username}{savedPlayers.has(p.mc_uuid) ? " ✓" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Stat entry form */}
+      {selectedPlayer && (
+        <div className={card}>
+          <div className="flex items-center gap-3 mb-5">
+            <img
+              src={`https://minotar.net/avatar/${selectedPlayer.mc_username}/40`}
+              alt={selectedPlayer.mc_username}
+              className="w-10 h-10 rounded ring-1 ring-slate-700"
+              onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/40"; }}
+            />
+            <div>
+              <div className="font-bold text-white text-lg">{selectedPlayer.mc_username}</div>
+              <div className="text-xs text-slate-500">{initialSeason}</div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 mb-5">
+            {STAT_FIELDS.map(({ key, label, hint }) => (
+              <div key={key}>
+                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1">
+                  {label} <span className="text-slate-600 normal-case font-normal">— {hint}</span>
+                </label>
+                <input
+                  className={input}
+                  placeholder="0"
+                  value={fields[key] ?? ""}
+                  onChange={(e) => setFields((prev) => ({ ...prev, [key]: e.target.value }))}
+                />
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button className={btnPrimary} onClick={savePlayer} disabled={saving}>
+              {saving ? "Saving..." : saved ? "✓ Saved" : `Save ${selectedPlayer.mc_username}'s Stats`}
+            </button>
+            <button className={btnSecondary} onClick={() => { setFields({}); setSaved(false); }}>
+              Clear
+            </button>
+          </div>
+          <ErrMsg msg={err} />
+        </div>
+      )}
+
+      {/* Summary of who has stats saved */}
+      {savedPlayers.size > 0 && (
+        <div className={card}>
+          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Saved This Session</h3>
+          <div className="flex flex-wrap gap-2">
+            {[...savedPlayers].map((uuid) => {
+              const p = players.find((x) => x.mc_uuid === uuid);
+              return p ? (
+                <div key={uuid} className="flex items-center gap-1.5 rounded-full bg-green-950 border border-green-800 px-3 py-1 text-xs text-green-300">
+                  <span>✓</span>
+                  <span>{p.mc_username}</span>
+                </div>
+              ) : null;
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main Admin Page ──────────────────────────────────────────────────────────
+
+const TABS = ["Players", "Teams", "Schedule", "Box Scores", "Accolades", "Articles", "Stats"] as const;
+type Tab = typeof TABS[number];
+const SEASONS = ["Season 1","Season 1 Playoffs","Season 2","Season 2 Playoffs","Season 3","Season 3 Playoffs","Season 4","Season 4 Playoffs","Season 5","Season 5 Playoffs","Season 6","Season 6 Playoffs","Season 7","Season 7 Playoffs"];
+
+export default function AdminPage({ params }: { params?: Promise<{ league?: string }> }) {
+  const resolved = React.use(params ?? Promise.resolve({})) as { league?: string };
+  const league = resolved.league ?? "";
+
+  const { data: session, status } = useSession();
+  const [authorized, setAuthorized] = useState<boolean | null>(null);
+  const [activeTab, setActiveTab] = useState<Tab>("Players");
+  const [dbError, setDbError] = useState("");
+  const [season, setSeason] = useState("Season 7");
+
+  useEffect(() => {
+    if (status === "authenticated") {
+      fetch("/api/admin/check")
+        .then((r) => r.json())
+        .then((data) => setAuthorized(data.authorized));
+    }
+  }, [status]);
+
+  useEffect(() => {
+    if (!league) return;
+    fetch(`/api/teams?league=${league}`)
+      .then((r) => {
+        if (!r.ok) setDbError("Database unreachable — make sure your Supabase project is active at supabase.com and tables have been created.");
+        else setDbError("");
+      })
+      .catch(() => setDbError("Database unreachable — make sure your Supabase project is active at supabase.com and tables have been created."));
+  }, [league]);
+
+  if (status === "loading") return <div className="rounded-2xl border border-slate-800 bg-slate-900 p-10 text-center text-slate-500">Loading...</div>;
+
+  if (status !== "authenticated") {
+    return (
+      <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
+        <div className="px-6 py-5 border-b border-slate-800">
+          <h2 className="text-2xl font-bold text-white">Admin Login</h2>
+          <p className="text-slate-400 text-sm mt-0.5">Sign in with Discord to access admin tools.</p>
+        </div>
+        <div className="p-8">
+          <button className={`${btnPrimary} text-base px-6 py-3`} onClick={() => signIn("discord")}>Sign in with Discord</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (authorized === false) {
+    return (
+      <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
+        <div className="px-6 py-5 border-b border-slate-800"><h2 className="text-2xl font-bold text-white">Access Denied</h2></div>
+        <div className="p-8">
+          <p className="text-slate-400 mb-4">Your Discord account is not authorized for admin access.</p>
+          <button className={btnSecondary} onClick={() => signOut()}>Sign out</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (authorized === null) return <div className="rounded-2xl border border-slate-800 bg-slate-900 p-10 text-center text-slate-500">Checking access...</div>;
+
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
+      {dbError && (
+        <div className="px-6 py-3 bg-red-950 border-b border-red-800 flex items-center gap-2">
+          <span className="text-red-300 text-sm">⚠ {dbError}</span>
+        </div>
+      )}
+
+      <div className="px-6 py-5 border-b border-slate-800 flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h2 className="text-2xl font-bold text-white">Admin Dashboard</h2>
+          <p className="text-slate-400 text-sm mt-0.5">{league.toUpperCase()} · {session.user?.name}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-slate-400 font-medium">Season:</label>
+            <select
+              className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none"
+              value={season}
+              onChange={(e) => setSeason(e.target.value)}
+            >
+              {SEASONS.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <button className={btnSecondary} onClick={() => signOut()}>Sign out</button>
+        </div>
+      </div>
+
+      <div className="flex border-b border-slate-800 bg-slate-950 overflow-x-auto">
+        {TABS.map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`px-5 py-3.5 text-sm font-medium transition whitespace-nowrap border-b-2 ${activeTab === tab ? "border-blue-500 text-white" : "border-transparent text-slate-400 hover:text-white hover:border-slate-600"}`}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+
+      <div className="p-6">
+        {activeTab === "Players" && <PlayersTab league={league} season={season} />}
+        {activeTab === "Teams" && <TeamsTab league={league} />}
+        {activeTab === "Schedule" && <ScheduleTab league={league} season={season} />}
+        {activeTab === "Box Scores" && <BoxScoresTab league={league} season={season} />}
+        {activeTab === "Accolades" && <AccoladesTab league={league} season={season} />}
+        {activeTab === "Articles" && <ArticlesTab league={league} />}
+        {activeTab === "Stats" && <StatsViewTab league={league} season={season} />}
       </div>
     </div>
   );

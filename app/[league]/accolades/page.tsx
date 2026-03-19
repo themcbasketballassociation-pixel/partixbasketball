@@ -2,7 +2,7 @@
 import React from "react";
 
 const leagueNames: Record<string, string> = {
-  pba: "Partix Basketball Association",
+  pba: "Minecraft Basketball Association",
   pcaa: "College",
   pbgl: "G League",
 };

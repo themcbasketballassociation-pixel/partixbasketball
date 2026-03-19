@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Partix Basketball",
+  title: "Minecraft Basketball",
   description: "League management dashboard",
 };
 
