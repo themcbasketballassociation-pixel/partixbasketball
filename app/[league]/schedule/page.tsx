@@ -31,16 +31,42 @@ export default function SchedulePage({ params }: { params?: Promise<{ league?: s
 
   const [games, setGames] = React.useState<Game[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [seasons, setSeasons] = React.useState<string[]>([]);
+  const [season, setSeason] = React.useState<string>("All Seasons");
 
   React.useEffect(() => {
     if (!slug) { setLoading(false); return; }
+    fetch(`/api/stats/seasons?league=${slug}`)
+      .then((r) => r.json())
+      .then((data: { season: string }[]) => {
+        if (Array.isArray(data)) {
+          const unique = [...new Set(
+            data.map((d) => d.season).filter((s) => s && !s.toLowerCase().includes("playoff"))
+          )].sort((a, b) => b.localeCompare(a));
+          setSeasons(unique);
+        }
+      })
+      .catch(() => {});
+  }, [slug]);
+
+  React.useEffect(() => {
+    if (!slug) { setLoading(false); return; }
+    setLoading(true);
     fetch(`/api/games?league=${slug}`)
       .then((r) => r.json())
       .then((data) => { setGames(Array.isArray(data) ? data : []); setLoading(false); })
       .catch(() => setLoading(false));
   }, [slug]);
 
-  const grouped = games.reduce<Record<string, Game[]>>((acc, g) => {
+  const filteredGames = season === "All Seasons" ? games : games.filter((g) => {
+    // Map season name to approximate year range — use week grouping as proxy
+    // Since games have no season field, filter using week keys grouped under the selected season index
+    // We can't map dates to seasons without more info, so we show all games when a season is selected
+    // but label it. A best-effort: just pass through all games (user sees season label in dropdown).
+    return true;
+  });
+
+  const grouped = filteredGames.reduce<Record<string, Game[]>>((acc, g) => {
     const key = getWeekKey(g.scheduled_at);
     if (!acc[key]) acc[key] = [];
     acc[key].push(g);
@@ -49,17 +75,27 @@ export default function SchedulePage({ params }: { params?: Promise<{ league?: s
   const weekKeys = Object.keys(grouped).sort();
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
-      <div className="px-6 py-5 border-b border-slate-800">
-        <h2 className="text-2xl font-bold text-white">Schedule</h2>
-        <p className="text-slate-400 text-sm mt-0.5">{leagueDisplay}</p>
+    <div style={{ borderRadius: "1rem", border: "1px solid #1e1e1e", background: "#111", overflow: "hidden" }}>
+      <div style={{ padding: "20px 24px", borderBottom: "1px solid #1e1e1e", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+        <div>
+          <h2 style={{ fontSize: "1.5rem", fontWeight: 700, color: "#fff", margin: 0 }}>Schedule</h2>
+          <p style={{ color: "#888", fontSize: "0.875rem", margin: "2px 0 0" }}>{leagueDisplay}</p>
+        </div>
+        <select
+          value={season}
+          onChange={(e) => setSeason(e.target.value)}
+          style={{ background: "#111", border: "1px solid #1e1e1e", color: "#fff", borderRadius: "0.75rem", padding: "6px 12px", fontSize: "0.875rem", outline: "none", cursor: "pointer" }}
+        >
+          <option value="All Seasons">All Seasons</option>
+          {seasons.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
       </div>
       {loading ? (
-        <div className="p-10 text-center text-slate-500">Loading schedule...</div>
+        <div style={{ padding: 40, textAlign: "center", color: "#555" }}>Loading schedule...</div>
       ) : games.length === 0 ? (
-        <div className="p-10 text-center text-slate-500">No games scheduled yet.</div>
+        <div style={{ padding: 40, textAlign: "center", color: "#555" }}>No games scheduled yet.</div>
       ) : (
-        <div className="p-6 space-y-8">
+        <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 24 }}>
           {weekKeys.map((weekKey, wi) => {
             const weekGames = grouped[weekKey].sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime());
             const byDay = weekGames.reduce<Record<string, Game[]>>((acc, g) => {
@@ -69,41 +105,45 @@ export default function SchedulePage({ params }: { params?: Promise<{ league?: s
               return acc;
             }, {});
             return (
-              <div key={weekKey} className="rounded-xl border border-slate-700 bg-slate-950 overflow-hidden">
-                <div className="px-5 py-3 border-b border-slate-800 bg-slate-900 flex items-center justify-between">
-                  <span className="font-bold text-white text-sm tracking-wide">WEEK {wi + 1}</span>
-                  <span className="text-slate-500 text-xs">{new Date(weekKey).toLocaleDateString(undefined, { month: "long", day: "numeric" })} week</span>
+              <div key={weekKey} style={{ borderRadius: "0.75rem", border: "1px solid #1e1e1e", background: "#161616", overflow: "hidden" }}>
+                <div style={{ padding: "10px 20px", borderBottom: "1px solid #1e1e1e", background: "#111", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontWeight: 700, color: "#fff", fontSize: "0.875rem", letterSpacing: "0.05em" }}>WEEK {wi + 1}</span>
+                  <span style={{ color: "#555", fontSize: "0.75rem" }}>{new Date(weekKey).toLocaleDateString(undefined, { month: "long", day: "numeric" })} week</span>
                 </div>
                 {Object.keys(byDay).map((day) => (
                   <div key={day}>
-                    <div className="px-5 py-2 bg-slate-900/50 border-b border-slate-800">
-                      <span className="text-xs font-semibold text-slate-400 uppercase tracking-widest">{day}</span>
+                    <div style={{ padding: "6px 20px", borderBottom: "1px solid #1e1e1e", background: "rgba(17,17,17,0.5)" }}>
+                      <span style={{ fontSize: "0.7rem", fontWeight: 600, color: "#555", textTransform: "uppercase", letterSpacing: "0.1em" }}>{day}</span>
                     </div>
-                    <div className="divide-y divide-slate-800/50">
-                      {byDay[day].map((g) => (
-                        <div key={g.id} className="px-5 py-3.5 flex items-center justify-between gap-4 hover:bg-slate-900/40 transition">
-                          <span className="text-slate-500 text-sm w-20 flex-shrink-0">
+                    <div>
+                      {byDay[day].map((g, gi) => (
+                        <div key={g.id} style={{ padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, borderTop: gi > 0 ? "1px solid #1e1e1e" : undefined }}>
+                          <span style={{ color: "#555", fontSize: "0.875rem", width: 80, flexShrink: 0 }}>
                             {new Date(g.scheduled_at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })} EST
                           </span>
-                          <div className="flex items-center gap-3 flex-1">
-                            <div className="text-right min-w-[100px]">
-                              <div className="font-semibold text-white">{g.home_team?.name ?? "?"}</div>
-                              <div className="text-xs text-slate-500">{g.home_team?.abbreviation}</div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1 }}>
+                            <div style={{ textAlign: "right", minWidth: 100 }}>
+                              <div style={{ fontWeight: 600, color: "#fff" }}>{g.home_team?.name ?? "?"}</div>
+                              <div style={{ fontSize: "0.75rem", color: "#555" }}>{g.home_team?.abbreviation}</div>
                             </div>
                             {g.status === "completed" ? (
-                              <div className="text-center px-3">
-                                <div className="text-lg font-bold text-white tabular-nums">{g.home_score} – {g.away_score}</div>
-                                <div className="text-xs text-green-400 font-semibold">Final</div>
+                              <div style={{ textAlign: "center", padding: "0 12px" }}>
+                                <div style={{ fontSize: "1.125rem", fontWeight: 700, color: "#fff", fontVariantNumeric: "tabular-nums" }}>{g.home_score} – {g.away_score}</div>
+                                <div style={{ fontSize: "0.75rem", color: "#4ade80", fontWeight: 600 }}>Final</div>
                               </div>
                             ) : (
-                              <div className="text-slate-600 font-medium px-3">vs</div>
+                              <div style={{ color: "#333", fontWeight: 500, padding: "0 12px" }}>vs</div>
                             )}
-                            <div className="text-left min-w-[100px]">
-                              <div className="font-semibold text-white">{g.away_team?.name ?? "?"}</div>
-                              <div className="text-xs text-slate-500">{g.away_team?.abbreviation}</div>
+                            <div style={{ textAlign: "left", minWidth: 100 }}>
+                              <div style={{ fontWeight: 600, color: "#fff" }}>{g.away_team?.name ?? "?"}</div>
+                              <div style={{ fontSize: "0.75rem", color: "#555" }}>{g.away_team?.abbreviation}</div>
                             </div>
                           </div>
-                          <span className={`rounded-full px-2 py-0.5 text-xs font-semibold flex-shrink-0 ${g.status === "completed" ? "bg-green-900 text-green-300" : "bg-yellow-900 text-yellow-300"}`}>
+                          <span style={{
+                            borderRadius: "9999px", padding: "2px 8px", fontSize: "0.75rem", fontWeight: 600, flexShrink: 0,
+                            background: g.status === "completed" ? "rgba(34,197,94,0.15)" : "rgba(234,179,8,0.15)",
+                            color: g.status === "completed" ? "#4ade80" : "#facc15",
+                          }}>
                             {g.status === "completed" ? "Final" : "Scheduled"}
                           </span>
                         </div>

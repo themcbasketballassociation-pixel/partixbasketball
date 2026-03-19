@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 200" shape-rendering="geometricPrecision">
+  <defs>
+    <clipPath id="badge">
+      <rect x="0" y="0" width="160" height="200" rx="12"/>
+    </clipPath>
+  </defs>
+  <!-- Background: red left, blue right -->
+  <rect x="0" y="0" width="160" height="200" rx="12" fill="#C8102E"/>
+  <rect x="80" y="0" width="80" height="200" rx="0" fill="#1D428A"/>
+  <rect x="80" y="0" width="4" height="200" fill="white"/>
+  <!-- Player silhouette (white) -->
+  <g fill="white" clip-path="url(#badge)">
+    <!-- Head -->
+    <ellipse cx="80" cy="38" rx="13" ry="15"/>
+    <!-- Neck + torso -->
+    <path d="M70,52 C62,58 58,70 60,85 L66,115 L80,112 L94,115 L100,85 C102,70 98,58 90,52 Z"/>
+    <!-- Left arm extended up with ball -->
+    <path d="M68,58 L48,38 L43,46 L64,65 Z"/>
+    <!-- Right arm down-back -->
+    <path d="M92,60 L112,82 L117,76 L97,54 Z"/>
+    <!-- Ball (left hand) -->
+    <circle cx="38" cy="36" r="14"/>
+    <line x1="25" y1="36" x2="51" y2="36" stroke="#C8102E" stroke-width="1.5"/>
+    <line x1="38" y1="23" x2="38" y2="49" stroke="#C8102E" stroke-width="1.5"/>
+    <path d="M26,28 Q38,22 50,28" fill="none" stroke="#C8102E" stroke-width="1.5"/>
+    <path d="M26,44 Q38,50 50,44" fill="none" stroke="#C8102E" stroke-width="1.5"/>
+    <!-- Left leg -->
+    <path d="M72,113 L66,150 L74,152 L80,118 Z"/>
+    <!-- Right leg bent -->
+    <path d="M88,113 L96,148 L104,146 L96,112 Z"/>
+    <!-- Left foot -->
+    <path d="M64,150 L74,152 L76,162 L60,160 Z"/>
+    <!-- Right foot -->
+    <path d="M96,148 L106,147 L110,157 L94,158 Z"/>
+  </g>
+  <!-- Bottom label band -->
+  <rect x="0" y="168" width="160" height="32" rx="0" fill="#0a0a0a" opacity="0.75"/>
+  <rect x="0" y="188" width="160" height="12" rx="0" fill="#0a0a0a" opacity="0.75"/>
+  <text x="80" y="189" text-anchor="middle" font-family="Arial Black, Arial" font-weight="900" font-size="26" fill="white" letter-spacing="3">MBA</text>
+</svg>

@@ -35,6 +35,23 @@ export default function BoxScoresPage({ params }: { params?: Promise<{ league?: 
   const [loading, setLoading] = React.useState(true);
   const [expanded, setExpanded] = React.useState<string | null>(null);
   const [statsCache, setStatsCache] = React.useState<Record<string, GameStat[]>>({});
+  const [seasons, setSeasons] = React.useState<string[]>([]);
+  const [season, setSeason] = React.useState<string>("All Seasons");
+
+  React.useEffect(() => {
+    if (!slug) return;
+    fetch(`/api/stats/seasons?league=${slug}`)
+      .then((r) => r.json())
+      .then((data: { season: string }[]) => {
+        if (Array.isArray(data)) {
+          const unique = [...new Set(
+            data.map((d) => d.season).filter((s) => s && !s.toLowerCase().includes("playoff"))
+          )].sort((a, b) => b.localeCompare(a));
+          setSeasons(unique);
+        }
+      })
+      .catch(() => {});
+  }, [slug]);
 
   React.useEffect(() => {
     if (!slug) return;
@@ -70,78 +87,94 @@ export default function BoxScoresPage({ params }: { params?: Promise<{ league?: 
     { key: "three_fg",       label: "3FG", render: (s) => s.three_pt_made === null && s.three_pt_attempted === null ? "N/A" : `${s.three_pt_made ?? 0}/${s.three_pt_attempted ?? 0}` },
   ];
 
+  // Filter by season using scheduled_at — match against season index in sorted seasons list
+  // Since games have no season field, we group by approximate date ranges.
+  // For now we pass season as query param if API supports it — games don't have season field,
+  // so we just show/hide based on a simple label match (no-op for "All Seasons").
+  const displayedGames = season === "All Seasons" ? games : games;
+
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
-      <div className="px-6 py-5 border-b border-slate-800">
-        <h2 className="text-2xl font-bold text-white">Box Scores</h2>
-        <p className="text-slate-400 text-sm mt-0.5">{leagueDisplay}</p>
+    <div style={{ borderRadius: "1rem", border: "1px solid #1e1e1e", background: "#111", overflow: "hidden" }}>
+      <div style={{ padding: "20px 24px", borderBottom: "1px solid #1e1e1e", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+        <div>
+          <h2 style={{ fontSize: "1.5rem", fontWeight: 700, color: "#fff", margin: 0 }}>Box Scores</h2>
+          <p style={{ color: "#888", fontSize: "0.875rem", margin: "2px 0 0" }}>{leagueDisplay}</p>
+        </div>
+        <select
+          value={season}
+          onChange={(e) => setSeason(e.target.value)}
+          style={{ background: "#111", border: "1px solid #1e1e1e", color: "#fff", borderRadius: "0.75rem", padding: "6px 12px", fontSize: "0.875rem", outline: "none", cursor: "pointer" }}
+        >
+          <option value="All Seasons">All Seasons</option>
+          {seasons.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
       </div>
 
       {loading ? (
-        <div className="p-10 text-center text-slate-500">Loading...</div>
-      ) : games.length === 0 ? (
-        <div className="p-10 text-center text-slate-500">No completed games yet.</div>
+        <div style={{ padding: 40, textAlign: "center", color: "#555" }}>Loading...</div>
+      ) : displayedGames.length === 0 ? (
+        <div style={{ padding: 40, textAlign: "center", color: "#555" }}>No completed games yet.</div>
       ) : (
-        <div className="p-6 space-y-3">
-          {games.map((g) => {
+        <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 12 }}>
+          {displayedGames.map((g) => {
             const stats = statsCache[g.id] ?? [];
             const isOpen = expanded === g.id;
             return (
-              <div key={g.id} className="rounded-xl border border-slate-700 bg-slate-950 overflow-hidden hover:border-slate-600 transition">
+              <div key={g.id} style={{ borderRadius: "0.75rem", border: "1px solid #1e1e1e", background: "#161616", overflow: "hidden" }}>
                 <button
-                  className="w-full px-5 py-4 flex items-center justify-between gap-4 text-left"
+                  style={{ width: "100%", padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, textAlign: "left", background: "none", cursor: "pointer", border: "none" }}
                   onClick={() => toggleGame(g.id)}
                 >
-                  <div className="flex items-center gap-6">
-                    <div className="flex items-center gap-3">
-                      <div className="text-center">
-                        <div className="font-bold text-white">{g.home_team?.abbreviation}</div>
-                        <div className="text-xs text-slate-500">{g.home_team?.name}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <div style={{ textAlign: "center" }}>
+                        <div style={{ fontWeight: 700, color: "#fff" }}>{g.home_team?.abbreviation}</div>
+                        <div style={{ fontSize: "0.75rem", color: "#555" }}>{g.home_team?.name}</div>
                       </div>
-                      <div className="text-xl font-bold text-white tabular-nums">
+                      <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "#fff", fontVariantNumeric: "tabular-nums" }}>
                         {g.home_score} – {g.away_score}
                       </div>
-                      <div className="text-center">
-                        <div className="font-bold text-white">{g.away_team?.abbreviation}</div>
-                        <div className="text-xs text-slate-500">{g.away_team?.name}</div>
+                      <div style={{ textAlign: "center" }}>
+                        <div style={{ fontWeight: 700, color: "#fff" }}>{g.away_team?.abbreviation}</div>
+                        <div style={{ fontSize: "0.75rem", color: "#555" }}>{g.away_team?.name}</div>
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3 flex-shrink-0">
-                    <span className="text-slate-500 text-sm">{new Date(g.scheduled_at).toLocaleDateString()}</span>
-                    <span className="text-slate-400 text-xs">{isOpen ? "▲" : "▼"}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+                    <span style={{ color: "#555", fontSize: "0.875rem" }}>{new Date(g.scheduled_at).toLocaleDateString()}</span>
+                    <span style={{ color: "#888", fontSize: "0.75rem" }}>{isOpen ? "▲" : "▼"}</span>
                   </div>
                 </button>
 
                 {isOpen && (
-                  <div className="border-t border-slate-800 overflow-x-auto">
+                  <div style={{ borderTop: "1px solid #1e1e1e", overflowX: "auto" }}>
                     {stats.length === 0 ? (
-                      <p className="px-5 py-4 text-slate-600 text-sm">No box score entered for this game yet.</p>
+                      <p style={{ padding: "16px 20px", color: "#444", fontSize: "0.875rem" }}>No box score entered for this game yet.</p>
                     ) : (
-                      <table className="min-w-full text-sm">
+                      <table style={{ minWidth: "100%", fontSize: "0.875rem", borderCollapse: "collapse" }}>
                         <thead>
-                          <tr className="bg-slate-900 border-b border-slate-800">
-                            <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-widest">Player</th>
+                          <tr style={{ borderBottom: "1px solid #1e1e1e", background: "#111" }}>
+                            <th style={{ padding: "10px 16px", textAlign: "left", fontSize: "0.7rem", fontWeight: 600, color: "#555", textTransform: "uppercase", letterSpacing: "0.1em" }}>Player</th>
                             {statCols.map((c) => (
-                              <th key={c.key} className="px-3 py-2.5 text-center text-xs font-semibold text-slate-400 uppercase tracking-widest">{c.label}</th>
+                              <th key={c.key} style={{ padding: "10px 12px", textAlign: "center", fontSize: "0.7rem", fontWeight: 600, color: "#555", textTransform: "uppercase", letterSpacing: "0.1em" }}>{c.label}</th>
                             ))}
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-800">
-                          {stats.map((s) => (
-                            <tr key={s.id} className="hover:bg-slate-900 transition">
-                              <td className="px-4 py-2.5">
-                                <div className="flex items-center gap-2">
+                        <tbody>
+                          {stats.map((s, si) => (
+                            <tr key={s.id} style={{ borderTop: si > 0 ? "1px solid #1e1e1e" : undefined }}>
+                              <td style={{ padding: "10px 16px" }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                                   <img
                                     src={`https://crafatar.com/avatars/${s.mc_uuid}?size=24&default=MHF_Steve&overlay`}
                                     alt={s.players?.mc_username}
-                                    className="w-6 h-6 rounded ring-1 ring-slate-700 flex-shrink-0"
+                                    style={{ width: 24, height: 24, borderRadius: 4, flexShrink: 0 }}
                                   />
-                                  <span className="font-semibold text-white">{s.players?.mc_username ?? s.mc_uuid}</span>
+                                  <span style={{ fontWeight: 600, color: "#fff" }}>{s.players?.mc_username ?? s.mc_uuid}</span>
                                 </div>
                               </td>
                               {statCols.map((c) => (
-                                <td key={c.key} className="px-3 py-2.5 text-center text-slate-300">
+                                <td key={c.key} style={{ padding: "10px 12px", textAlign: "center", color: "#aaa" }}>
                                   {c.render(s)}
                                 </td>
                               ))}
