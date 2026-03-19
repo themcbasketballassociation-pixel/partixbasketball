@@ -12,16 +12,17 @@ const leagues = [
 ];
 
 const tabs = [
-  { label: "Home",       path: "" },
-  { label: "Teams",      path: "/teams" },
-  { label: "Standings",  path: "/standings" },
-  { label: "Schedule",   path: "/schedule" },
-  { label: "Box Scores", path: "/boxscores" },
-  { label: "Stats",      path: "/stats" },
-  { label: "Players",    path: "/players" },
-  { label: "Accolades",  path: "/accolades" },
-  { label: "Games",      path: "/games" },
-  { label: "Admin",      path: "/admin" },
+  { label: "Home",       path: "",           global: false },
+  { label: "Teams",      path: "/teams",     global: false },
+  { label: "Standings",  path: "/standings", global: false },
+  { label: "Schedule",   path: "/schedule",  global: false },
+  { label: "Box Scores", path: "/boxscores", global: false },
+  { label: "Stats",      path: "/stats",     global: false },
+  { label: "Players",    path: "/players",   global: false },
+  { label: "Accolades",  path: "/accolades", global: false },
+  { label: "Games",      path: "/games",     global: false },
+  { label: "Links",      path: "/links",     global: true  },
+  { label: "Admin",      path: "/admin",     global: false },
 ];
 
 export default function Header() {
@@ -89,9 +90,10 @@ export default function Header() {
       <div className="overflow-x-auto" style={{ background: "#0a0a0a", borderTop: "1px solid #181818" }}>
         <div className="mx-auto max-w-7xl px-4 sm:px-6 flex">
           {tabs.map((tab) => {
-            const href = `/${selected}${tab.path}`;
-            const isActive =
-              tab.path === ""
+            const href = tab.global ? tab.path : `/${selected}${tab.path}`;
+            const isActive = tab.global
+              ? pathname === tab.path
+              : tab.path === ""
                 ? section === "" || section === undefined
                 : section === tab.path;
             return (
