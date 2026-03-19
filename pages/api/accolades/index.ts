@@ -17,7 +17,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "POST") {
     const admin = await requireAdmin(req, res);
     if (!admin) return;
-    const { league, mc_uuid, type, season, description } = req.body;
+    const { league: leagueRaw, mc_uuid, type, season, description } = req.body;
+    const league = resolveLeague(leagueRaw);
     if (!league || !mc_uuid || !type || !season) return res.status(400).json({ error: "league, mc_uuid, type, season required" });
     const { data, error } = await supabase.from("accolades").insert([{ league, mc_uuid, type, season, description: description ?? null }]).select("*, players(mc_uuid, mc_username)").single();
     if (error) return res.status(500).json({ error: error.message });

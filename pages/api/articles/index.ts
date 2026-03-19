@@ -17,7 +17,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "POST") {
     const admin = await requireAdmin(req, res);
     if (!admin) return;
-    const { league, title, body } = req.body;
+    const { league: leagueRaw, title, body } = req.body;
+    const league = resolveLeague(leagueRaw);
     if (!league || !title || !body) return res.status(400).json({ error: "league, title, and body are required" });
     const { data, error } = await supabase.from("articles").insert([{ league, title, body }]).select().single();
     if (error) return res.status(500).json({ error: error.message });

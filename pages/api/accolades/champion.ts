@@ -25,7 +25,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "POST") {
     const admin = await requireAdmin(req, res);
     if (!admin) return;
-    const { league, season, team_id } = req.body;
+    const { league: leagueRaw, season, team_id } = req.body;
+    const league = resolveLeague(leagueRaw);
     if (!league || !season || !team_id)
       return res.status(400).json({ error: "league, season, team_id required" });
 

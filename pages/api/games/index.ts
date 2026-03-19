@@ -21,7 +21,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "POST") {
     const admin = await requireAdmin(req, res);
     if (!admin) return;
-    const { league, scheduled_at, home_team_id, away_team_id, season } = req.body;
+    const { league: leagueRaw, scheduled_at, home_team_id, away_team_id, season } = req.body;
+    const league = resolveLeague(leagueRaw);
     if (!league || !scheduled_at || !home_team_id || !away_team_id) return res.status(400).json({ error: "league, scheduled_at, home_team_id, away_team_id required" });
     const { data, error } = await supabase
       .from("games")
