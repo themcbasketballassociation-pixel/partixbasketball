@@ -4,11 +4,8 @@
       <rect x="0" y="0" width="160" height="200" rx="12"/>
     </clipPath>
   </defs>
-  <!-- Background: red -->
-  <rect x="0" y="0" width="160" height="200" rx="12" fill="#C8102E"/>
-  <!-- Accent stripe -->
-  <rect x="0" y="0" width="160" height="8" rx="0" fill="#FF7A8A"/>
-  <rect x="0" y="192" width="160" height="8" rx="0" fill="#FF7A8A"/>
+  <!-- Background: black -->
+  <rect x="0" y="0" width="160" height="200" rx="12" fill="#0d0d0d"/>
   <!-- Player silhouette (white) -->
   <g fill="white" clip-path="url(#badge3)">
     <!-- Head -->
@@ -21,10 +18,10 @@
     <path d="M92,64 L114,84 L119,78 L97,58 Z"/>
     <!-- Ball -->
     <circle cx="36" cy="41" r="14"/>
-    <line x1="23" y1="41" x2="49" y2="41" stroke="#C8102E" stroke-width="1.5"/>
-    <line x1="36" y1="28" x2="36" y2="54" stroke="#C8102E" stroke-width="1.5"/>
-    <path d="M24,33 Q36,27 48,33" fill="none" stroke="#C8102E" stroke-width="1.5"/>
-    <path d="M24,49 Q36,55 48,49" fill="none" stroke="#C8102E" stroke-width="1.5"/>
+    <line x1="23" y1="41" x2="49" y2="41" stroke="#0d0d0d" stroke-width="1.5"/>
+    <line x1="36" y1="28" x2="36" y2="54" stroke="#0d0d0d" stroke-width="1.5"/>
+    <path d="M24,33 Q36,27 48,33" fill="none" stroke="#0d0d0d" stroke-width="1.5"/>
+    <path d="M24,49 Q36,55 48,49" fill="none" stroke="#0d0d0d" stroke-width="1.5"/>
     <!-- Left leg -->
     <path d="M72,117 L66,154 L74,156 L80,122 Z"/>
     <!-- Right leg -->
@@ -34,6 +31,6 @@
     <path d="M96,152 L106,151 L110,161 L94,162 Z"/>
   </g>
   <!-- Bottom label -->
-  <rect x="0" y="168" width="160" height="32" rx="0" fill="#7B0000" opacity="0.9"/>
+  <rect x="0" y="168" width="160" height="32" rx="0" fill="#1a1a1a"/>
   <text x="80" y="191" text-anchor="middle" font-family="Arial Black, Arial" font-weight="900" font-size="22" fill="white" letter-spacing="2">MBGL</text>
 </svg>
