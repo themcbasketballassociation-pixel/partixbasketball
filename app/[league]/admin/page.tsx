@@ -2195,60 +2195,85 @@ function getRoundNames(total: number): string[] {
   });
 }
 
-// ── Seed picker ───────────────────────────────────────────────────────────────
-function SeedPicker({ allTeams, seeded, onChange }: { allTeams: Team[]; seeded: Team[]; onChange: (t: Team[]) => void }) {
-  const seededIds = new Set(seeded.map(t => t.id));
-  const available = allTeams.filter(t => !seededIds.has(t.id));
-  const add  = (team: Team) => onChange([...seeded, team]);
-  const remove = (i: number) => onChange(seeded.filter((_, j) => j !== i));
-  const moveUp = (i: number) => { if (i === 0) return; const a = [...seeded]; [a[i-1],a[i]]=[a[i],a[i-1]]; onChange(a); };
-  const moveDown = (i: number) => { if (i === seeded.length-1) return; const a=[...seeded]; [a[i],a[i+1]]=[a[i+1],a[i]]; onChange(a); };
+// ── Conference-aware Seed Picker ──────────────────────────────────────────────
+function ConferenceSeedPicker({
+  allTeams, eastSeeds, westSeeds, onChangeEast, onChangeWest
+}: {
+  allTeams: Team[]; eastSeeds: Team[]; westSeeds: Team[];
+  onChangeEast: (t: Team[]) => void; onChangeWest: (t: Team[]) => void;
+}) {
+  const assigned = new Set([...eastSeeds, ...westSeeds].map(t => t.id));
+  const available = allTeams.filter(t => !assigned.has(t.id));
+  const addE = (team: Team) => onChangeEast([...eastSeeds, team]);
+  const addW = (team: Team) => onChangeWest([...westSeeds, team]);
+  const removeE = (i: number) => onChangeEast(eastSeeds.filter((_, j) => j !== i));
+  const removeW = (i: number) => onChangeWest(westSeeds.filter((_, j) => j !== i));
+  const moveE = (i: number, d: -1|1) => { const a=[...eastSeeds]; [a[i],a[i+d]]=[a[i+d],a[i]]; onChangeEast(a); };
+  const moveW = (i: number, d: -1|1) => { const a=[...westSeeds]; [a[i],a[i+d]]=[a[i+d],a[i]]; onChangeWest(a); };
+  const PE = eastSeeds.length >= 1 ? nextPow2(eastSeeds.length) : 0;
+  const PW = westSeeds.length >= 1 ? nextPow2(westSeeds.length) : 0;
+  const byesE = PE - eastSeeds.length, byesW = PW - westSeeds.length;
 
-  const N = seeded.length;
-  const P = N >= 2 ? nextPow2(N) : 0;
-  const byes = P - N;
+  function SeedList({ seeds, byes, conf, onMove, onRemove }: {
+    seeds: Team[]; byes: number; conf: "E"|"W";
+    onMove: (i: number, d: -1|1) => void; onRemove: (i: number) => void;
+  }) {
+    const accent = conf === "E" ? "#3b82f6" : "#ef4444";
+    if (seeds.length === 0) return <div style={{ color:"#444", fontSize:"0.8rem", padding:"10px 0" }}>None yet</div>;
+    return (
+      <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+        {seeds.map((team, i) => (
+          <div key={team.id} style={{ display:"flex", alignItems:"center", gap:8, background:"#161616", border:"1px solid #222", borderRadius:8, padding:"6px 10px" }}>
+            <span style={{ fontSize:"0.7rem", fontWeight:700, color:accent, width:22, textAlign:"center", flexShrink:0 }}>#{i+1}</span>
+            {team.logo_url && <img src={team.logo_url} style={{ width:20, height:20, objectFit:"contain", borderRadius:3, flexShrink:0 }} alt="" />}
+            <span style={{ flex:1, fontSize:"0.85rem", color:"#ddd", fontWeight:600 }}>{team.name}</span>
+            {i < byes && <span style={{ fontSize:"0.6rem", color:"#facc15", background:"rgba(234,179,8,0.08)", border:"1px solid rgba(234,179,8,0.2)", borderRadius:4, padding:"1px 5px", flexShrink:0 }}>BYE</span>}
+            <div style={{ display:"flex", flexDirection:"column" }}>
+              <button onClick={() => onMove(i,-1)} disabled={i===0} style={{ background:"none", border:"none", color:i===0?"#2a2a2a":"#555", cursor:i===0?"default":"pointer", padding:"0 3px", fontSize:"0.55rem", lineHeight:1.4 }}>▲</button>
+              <button onClick={() => onMove(i,1)} disabled={i===seeds.length-1} style={{ background:"none", border:"none", color:i===seeds.length-1?"#2a2a2a":"#555", cursor:i===seeds.length-1?"default":"pointer", padding:"0 3px", fontSize:"0.55rem", lineHeight:1.4 }}>▼</button>
+            </div>
+            <button onClick={() => onRemove(i)} style={{ background:"none", border:"none", color:"#3a1a1a", cursor:"pointer", fontSize:"0.75rem", padding:"0 2px" }} onMouseEnter={e=>(e.currentTarget.style.color="#f87171")} onMouseLeave={e=>(e.currentTarget.style.color="#3a1a1a")}>✕</button>
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
-    <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-      {/* Left: seeded list */}
-      <div style={{ flex: "1 1 260px" }}>
-        <div style={{ fontSize: "0.7rem", fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>
-          Playoff Seeds
-          {N >= 2 && <span style={{ color: "#444", fontWeight: 400, marginLeft: 8 }}>{N} teams · {P}-team bracket · {byes} bye{byes !== 1 ? "s" : ""}</span>}
+    <div style={{ display:"flex", gap:20, flexWrap:"wrap" }}>
+      {/* East Conference */}
+      <div style={{ flex:"1 1 210px" }}>
+        <div style={{ fontSize:"0.7rem", fontWeight:700, color:"#3b82f6", textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:10 }}>
+          🔵 East Conference
+          {eastSeeds.length>=1 && <span style={{ color:"#444", fontWeight:400, marginLeft:8 }}>{eastSeeds.length} teams · {byesE} bye{byesE!==1?"s":""}</span>}
         </div>
-        {seeded.length === 0
-          ? <div style={{ color: "#444", fontSize: "0.8rem", padding: "12px 0" }}>No teams yet — add from the right →</div>
-          : <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-              {seeded.map((team, i) => (
-                <div key={team.id} style={{ display: "flex", alignItems: "center", gap: 8, background: "#161616", border: "1px solid #222", borderRadius: 8, padding: "6px 10px" }}>
-                  <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#555", width: 22, textAlign: "center", flexShrink: 0 }}>#{i+1}</span>
-                  {team.logo_url && <img src={team.logo_url} style={{ width: 20, height: 20, objectFit: "contain", borderRadius: 3, flexShrink: 0 }} alt="" />}
-                  <span style={{ flex: 1, fontSize: "0.85rem", color: "#ddd", fontWeight: 600 }}>{team.name}</span>
-                  {i < byes && <span style={{ fontSize: "0.6rem", color: "#facc15", background: "rgba(234,179,8,0.08)", border: "1px solid rgba(234,179,8,0.2)", borderRadius: 4, padding: "1px 5px", flexShrink: 0 }}>BYE</span>}
-                  <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-                    <button onClick={() => moveUp(i)} disabled={i === 0} style={{ background: "none", border: "none", color: i===0?"#2a2a2a":"#555", cursor: i===0?"default":"pointer", padding: "0 3px", fontSize: "0.55rem", lineHeight: 1.4 }}>▲</button>
-                    <button onClick={() => moveDown(i)} disabled={i===seeded.length-1} style={{ background: "none", border: "none", color: i===seeded.length-1?"#2a2a2a":"#555", cursor: i===seeded.length-1?"default":"pointer", padding: "0 3px", fontSize: "0.55rem", lineHeight: 1.4 }}>▼</button>
-                  </div>
-                  <button onClick={() => remove(i)} style={{ background: "none", border: "none", color: "#3a1a1a", cursor: "pointer", fontSize: "0.75rem", padding: "0 2px" }} onMouseEnter={e=>(e.currentTarget.style.color="#f87171")} onMouseLeave={e=>(e.currentTarget.style.color="#3a1a1a")}>✕</button>
-                </div>
-              ))}
-            </div>
-        }
+        <SeedList seeds={eastSeeds} byes={byesE} conf="E" onMove={moveE} onRemove={removeE} />
       </div>
-      {/* Right: available teams */}
-      <div style={{ flex: "1 1 200px" }}>
-        <div style={{ fontSize: "0.7rem", fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>Add Team</div>
-        {available.length === 0
-          ? <div style={{ color: "#444", fontSize: "0.8rem" }}>All teams added.</div>
-          : <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      {/* West Conference */}
+      <div style={{ flex:"1 1 210px" }}>
+        <div style={{ fontSize:"0.7rem", fontWeight:700, color:"#ef4444", textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:10 }}>
+          🔴 West Conference
+          {westSeeds.length>=1 && <span style={{ color:"#444", fontWeight:400, marginLeft:8 }}>{westSeeds.length} teams · {byesW} bye{byesW!==1?"s":""}</span>}
+        </div>
+        <SeedList seeds={westSeeds} byes={byesW} conf="W" onMove={moveW} onRemove={removeW} />
+      </div>
+      {/* Available teams */}
+      <div style={{ flex:"1 1 160px" }}>
+        <div style={{ fontSize:"0.7rem", fontWeight:700, color:"#555", textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:10 }}>Add Team</div>
+        {available.length===0
+          ? <div style={{ color:"#444", fontSize:"0.8rem" }}>All assigned.</div>
+          : <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
               {available.map(team => (
-                <button key={team.id} onClick={() => add(team)} style={{ display: "flex", alignItems: "center", gap: 8, background: "transparent", border: "1px solid #1e1e1e", borderRadius: 8, padding: "7px 10px", cursor: "pointer", textAlign: "left", color: "#777" }}
-                  onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.borderColor="#333";(e.currentTarget as HTMLElement).style.color="#fff";}}
-                  onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.borderColor="#1e1e1e";(e.currentTarget as HTMLElement).style.color="#777";}}>
-                  {team.logo_url && <img src={team.logo_url} style={{ width: 20, height: 20, objectFit: "contain", borderRadius: 3 }} alt="" />}
-                  <span style={{ flex: 1, fontSize: "0.85rem", fontWeight: 600 }}>{team.name}</span>
-                  <span style={{ fontSize: "0.75rem", opacity: 0.4 }}>+</span>
-                </button>
+                <div key={team.id} style={{ background:"#111", border:"1px solid #1e1e1e", borderRadius:8, padding:"7px 10px" }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:7, marginBottom:5 }}>
+                    {team.logo_url && <img src={team.logo_url} style={{ width:18, height:18, objectFit:"contain" }} alt="" />}
+                    <span style={{ fontSize:"0.82rem", fontWeight:600, color:"#aaa" }}>{team.name}</span>
+                  </div>
+                  <div style={{ display:"flex", gap:5 }}>
+                    <button onClick={() => addE(team)} style={{ flex:1, background:"rgba(59,130,246,0.08)", border:"1px solid rgba(59,130,246,0.2)", borderRadius:5, color:"#3b82f6", fontSize:"0.7rem", fontWeight:700, padding:"3px 0", cursor:"pointer" }}>+ East</button>
+                    <button onClick={() => addW(team)} style={{ flex:1, background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.2)", borderRadius:5, color:"#ef4444", fontSize:"0.7rem", fontWeight:700, padding:"3px 0", cursor:"pointer" }}>+ West</button>
+                  </div>
+                </div>
               ))}
             </div>
         }
@@ -2263,45 +2288,46 @@ function BracketTeamRow({ matchup, side, teams, saving, onUpdate, isBye }: {
   saving: boolean; onUpdate: (p: object) => void; isBye?: boolean;
 }) {
   if (isBye) return (
-    <div style={{ display: "flex", alignItems: "center", padding: "8px 10px", height: 48, opacity: 0.3 }}>
-      <span style={{ fontSize: "0.72rem", color: "#888", fontStyle: "italic" }}>BYE</span>
+    <div style={{ display:"flex", alignItems:"center", padding:"8px 10px", height:48, opacity:0.3 }}>
+      <span style={{ fontSize:"0.72rem", color:"#888", fontStyle:"italic" }}>BYE</span>
     </div>
   );
-  const idKey    = side === "team1" ? "team1_id"    : "team2_id";
-  const scoreKey = side === "team1" ? "team1_score" : "team2_score";
+  const idKey    = side==="team1"?"team1_id":"team2_id";
+  const scoreKey = side==="team1"?"team1_score":"team2_score";
   const teamId   = matchup[idKey];
   const score    = matchup[scoreKey];
   const team     = (matchup[side] ?? teams.find(t => t.id === teamId)) as Team | null;
   const isWinner = !!(matchup.winner_id && teamId && matchup.winner_id === teamId);
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px", height: 48, background: isWinner ? "rgba(22,163,74,0.10)" : "transparent" }}>
-      <div style={{ width: 24, height: 24, borderRadius: 4, flexShrink: 0, overflow: "hidden", background: "#1e1e1e", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.6rem", fontWeight: 700, color: "#666" }}>
-        {team?.logo_url ? <img src={team.logo_url} style={{ width: "100%", height: "100%", objectFit: "contain" }} alt="" /> : (team?.abbreviation?.[0] ?? "—")}
+    <div style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 10px", height:48, background:isWinner?"rgba(22,163,74,0.10)":"transparent" }}>
+      <div style={{ width:24, height:24, borderRadius:4, flexShrink:0, overflow:"hidden", background:"#1e1e1e", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.6rem", fontWeight:700, color:"#666" }}>
+        {team?.logo_url ? <img src={team.logo_url} style={{ width:"100%", height:"100%", objectFit:"contain" }} alt="" /> : (team?.abbreviation?.[0] ?? "—")}
       </div>
-      <select value={teamId ?? ""} onChange={e => onUpdate({ [idKey]: e.target.value||null, winner_id: null })} disabled={saving}
-        style={{ flex: 1, minWidth: 0, background: "#0d0d0d", border: "none", outline: "none", color: teamId?"#e5e5e5":"#444", fontSize: "0.75rem", cursor: "pointer" }}>
+      <select value={teamId ?? ""} onChange={e => onUpdate({ [idKey]: e.target.value||null, winner_id:null })} disabled={saving}
+        style={{ flex:1, minWidth:0, background:"#0d0d0d", border:"none", outline:"none", color:teamId?"#e5e5e5":"#444", fontSize:"0.75rem", cursor:"pointer" }}>
         <option value="">— TBD —</option>
         {teams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.abbreviation})</option>)}
       </select>
       <input type="number" min="0" placeholder="—" value={score ?? ""} onChange={e => onUpdate({ [scoreKey]: e.target.value!==""?parseInt(e.target.value):null })}
-        style={{ width: 36, background: "transparent", border: "none", outline: "none", borderBottom: "1px solid #2a2a2a", color: "#fff", fontSize: "0.8rem", textAlign: "center" }} />
-      {isWinner && <span style={{ fontSize: "0.75rem" }}>🏆</span>}
+        style={{ width:36, background:"transparent", border:"none", outline:"none", borderBottom:"1px solid #2a2a2a", color:"#fff", fontSize:"0.8rem", textAlign:"center" }} />
+      {isWinner && <span style={{ fontSize:"0.75rem" }}>🏆</span>}
     </div>
   );
 }
 
 // ── Main PlayoffsTab ──────────────────────────────────────────────────────────
 function PlayoffsTab({ league, season }: { league: string; season: string }) {
-  const [matchups, setMatchups]       = useState<BracketMatchup[]>([]);
-  const [teams, setTeams]             = useState<Team[]>([]);
-  const [seededTeams, setSeededTeams] = useState<Team[]>([]);
-  const [view, setView]               = useState<"setup"|"bracket">("setup");
-  const [err, setErr]                 = useState("");
-  const [saving, setSaving]           = useState<string|null>(null);
-  const [generating, setGenerating]   = useState(false);
-  const [clearing, setClearing]       = useState(false);
-  const [connectors, setConnectors]   = useState<{d:string;key:string}[]>([]);
-
+  const [matchups, setMatchups]     = useState<BracketMatchup[]>([]);
+  const [teams, setTeams]           = useState<Team[]>([]);
+  const [eastSeeds, setEastSeeds]   = useState<Team[]>([]);
+  const [westSeeds, setWestSeeds]   = useState<Team[]>([]);
+  const [view, setView]             = useState<"setup"|"bracket">("setup");
+  const [err, setErr]               = useState("");
+  const [saving, setSaving]         = useState<string|null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [clearing, setClearing]     = useState(false);
+  const [connectors, setConnectors] = useState<{d:string;key:string}[]>([]);
+  const seedsInit = useRef(false);
   const innerRef   = useRef<HTMLDivElement>(null);
   const matchupEls = useRef<Map<string,HTMLElement>>(new Map());
 
@@ -2318,6 +2344,28 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
 
   useEffect(() => { refresh(); }, [refresh]);
 
+  // Auto-populate seeds from team division field (once per load)
+  useEffect(() => {
+    if (!seedsInit.current && teams.length > 0) {
+      setEastSeeds(teams.filter(t => t.division === "East"));
+      setWestSeeds(teams.filter(t => t.division === "West"));
+      seedsInit.current = true;
+    }
+  }, [teams]);
+
+  // Reset when season changes
+  useEffect(() => {
+    seedsInit.current = false;
+    setEastSeeds([]); setWestSeeds([]);
+    setMatchups([]); setView("setup");
+  }, [season]);
+
+  // Detect conference-style bracket
+  const isConferenceBracket = useMemo(() =>
+    matchups.some(m => m.round_name.startsWith("East ") || m.round_name.startsWith("West ")),
+  [matchups]);
+
+  // Flat bracket rounds
   const rounds = useMemo(() => {
     const map = new Map<string,{name:string;order:number;matchups:BracketMatchup[]}>();
     for (const m of matchups) {
@@ -2329,26 +2377,63 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
     return arr;
   }, [matchups]);
 
+  // Conference bracket columns (by round_order, split East/West/Finals)
+  const confColumns = useMemo(() => {
+    if (!isConferenceBracket) return null;
+    const map = new Map<number,{order:number;east:BracketMatchup[];west:BracketMatchup[];finals:BracketMatchup[]}>();
+    for (const m of matchups) {
+      if (!map.has(m.round_order)) map.set(m.round_order, {order:m.round_order, east:[], west:[], finals:[]});
+      const col = map.get(m.round_order)!;
+      if (m.round_name.startsWith("East ")) col.east.push(m);
+      else if (m.round_name.startsWith("West ")) col.west.push(m);
+      else col.finals.push(m);
+    }
+    const cols = [...map.values()].sort((a,b)=>a.order-b.order);
+    for (const col of cols) {
+      col.east.sort((a,b)=>a.matchup_index-b.matchup_index);
+      col.west.sort((a,b)=>a.matchup_index-b.matchup_index);
+    }
+    return cols;
+  }, [matchups, isConferenceBracket]);
+
   const recalcConnectors = useCallback(() => {
     const inner = innerRef.current; if (!inner) return;
     const ir = inner.getBoundingClientRect();
     const paths: {d:string;key:string}[] = [];
-    for (let ri = 0; ri < rounds.length-1; ri++) {
-      const cur=rounds[ri], next=rounds[ri+1];
-      for (let mi = 0; mi < cur.matchups.length; mi++) {
-        const m=cur.matchups[mi], nextM=next.matchups[Math.floor(mi/2)];
-        if (!nextM) continue;
-        const fe=matchupEls.current.get(m.id), te=matchupEls.current.get(nextM.id);
-        if (!fe||!te) continue;
-        const fr=fe.getBoundingClientRect(), tr=te.getBoundingClientRect();
-        const fx=fr.right-ir.left+inner.scrollLeft, fy=fr.top+fr.height/2-ir.top+inner.scrollTop;
-        const tx=tr.left-ir.left+inner.scrollLeft,  ty=tr.top+tr.height/2-ir.top+inner.scrollTop;
-        const mx=fx+(tx-fx)*0.5;
-        paths.push({d:`M ${fx} ${fy} H ${mx} V ${ty} H ${tx}`, key:`${m.id}-${nextM.id}`});
+    const drawPath = (fromEl: HTMLElement, toEl: HTMLElement, key: string, toFrac=0.5) => {
+      const fr=fromEl.getBoundingClientRect(), tr=toEl.getBoundingClientRect();
+      const fx=fr.right-ir.left+inner.scrollLeft, fy=fr.top+fr.height/2-ir.top+inner.scrollTop;
+      const tx=tr.left-ir.left+inner.scrollLeft,  ty=tr.top+tr.height*toFrac-ir.top+inner.scrollTop;
+      const mx=fx+(tx-fx)*0.5;
+      paths.push({d:`M ${fx} ${fy} H ${mx} V ${ty} H ${tx}`, key});
+    };
+    if (isConferenceBracket && confColumns) {
+      const eastNames=[...new Set(matchups.filter(m=>m.round_name.startsWith("East ")).sort((a,b)=>a.round_order-b.round_order).map(m=>m.round_name))];
+      const westNames=[...new Set(matchups.filter(m=>m.round_name.startsWith("West ")).sort((a,b)=>a.round_order-b.round_order).map(m=>m.round_name))];
+      const finalsM=matchups.find(m=>m.round_name==="Finals");
+      for (let ri=0;ri<eastNames.length-1;ri++) {
+        const curMs=matchups.filter(m=>m.round_name===eastNames[ri]).sort((a,b)=>a.matchup_index-b.matchup_index);
+        const nextMs=matchups.filter(m=>m.round_name===eastNames[ri+1]).sort((a,b)=>a.matchup_index-b.matchup_index);
+        for (let mi=0;mi<curMs.length;mi++) { const nM=nextMs[Math.floor(mi/2)]; if(!nM) continue; const fe=matchupEls.current.get(curMs[mi].id),te=matchupEls.current.get(nM.id); if(fe&&te) drawPath(fe,te,`${curMs[mi].id}-${nM.id}`); }
+      }
+      if (finalsM&&eastNames.length>0) { const lE=matchups.filter(m=>m.round_name===eastNames[eastNames.length-1]); for(const m of lE){const fe=matchupEls.current.get(m.id),te=matchupEls.current.get(finalsM.id);if(fe&&te)drawPath(fe,te,`${m.id}-fe`,0.25);} }
+      for (let ri=0;ri<westNames.length-1;ri++) {
+        const curMs=matchups.filter(m=>m.round_name===westNames[ri]).sort((a,b)=>a.matchup_index-b.matchup_index);
+        const nextMs=matchups.filter(m=>m.round_name===westNames[ri+1]).sort((a,b)=>a.matchup_index-b.matchup_index);
+        for (let mi=0;mi<curMs.length;mi++) { const nM=nextMs[Math.floor(mi/2)]; if(!nM) continue; const fe=matchupEls.current.get(curMs[mi].id),te=matchupEls.current.get(nM.id); if(fe&&te) drawPath(fe,te,`${curMs[mi].id}-${nM.id}`); }
+      }
+      if (finalsM&&westNames.length>0) { const lW=matchups.filter(m=>m.round_name===westNames[westNames.length-1]); for(const m of lW){const fe=matchupEls.current.get(m.id),te=matchupEls.current.get(finalsM.id);if(fe&&te)drawPath(fe,te,`${m.id}-fw`,0.75);} }
+    } else {
+      for (let ri=0;ri<rounds.length-1;ri++) {
+        const cur=rounds[ri],next=rounds[ri+1];
+        for (let mi=0;mi<cur.matchups.length;mi++) {
+          const m=cur.matchups[mi],nM=next.matchups[Math.floor(mi/2)]; if(!nM) continue;
+          const fe=matchupEls.current.get(m.id),te=matchupEls.current.get(nM.id); if(fe&&te) drawPath(fe,te,`${m.id}-${nM.id}`);
+        }
       }
     }
     setConnectors(paths);
-  }, [rounds]);
+  }, [rounds, matchups, isConferenceBracket, confColumns]);
 
   useLayoutEffect(() => { const t=setTimeout(recalcConnectors,40); return ()=>clearTimeout(t); }, [recalcConnectors]);
 
@@ -2365,45 +2450,91 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
   };
 
   const generateBracket = async () => {
-    if (seededTeams.length < 2) { setErr("Add at least 2 teams."); return; }
-    if (matchups.length > 0 && !confirm("Overwrite existing bracket?")) return;
+    const NE=eastSeeds.length, NW=westSeeds.length;
+    if (NE<1||NW<1) { setErr("Each conference needs at least 1 team."); return; }
+    if (matchups.length>0 && !confirm("Overwrite existing bracket?")) return;
     setGenerating(true); setErr("");
     for (const m of matchups) await fetch(`/api/playoff-brackets?id=${m.id}`,{method:"DELETE"});
-    const N=seededTeams.length, P=nextPow2(N);
-    const slots=buildBracketSlots(P);
-    const totalRounds=Math.log2(P);
-    const names=getRoundNames(totalRounds);
-    // Round 1 from seeding
-    for (let i=0;i<P/2;i++) {
-      const s1=slots[i*2], s2=slots[i*2+1];
-      const t1=s1<=N?seededTeams[s1-1]:null;
-      const t2=s2<=N?seededTeams[s2-1]:null;
-      await upsert({league,season,round_name:names[0],round_order:0,matchup_index:i,team1_id:t1?.id??null,team2_id:t2?.id??null,winner_id:!t2&&t1?t1.id:null,team1_score:null,team2_score:null});
+
+    const PE=nextPow2(NE), PW=nextPow2(NW);
+    const rE=Math.log2(PE), rW=Math.log2(PW);
+    const maxConf=Math.max(rE,rW);
+    const eastNames=Array.from({length:rE},(_,i)=>{const f=rE-i;return f===1?"East Finals":f===2?"East Semifinals":`East Round ${i+1}`;});
+    const westNames=Array.from({length:rW},(_,i)=>{const f=rW-i;return f===1?"West Finals":f===2?"West Semifinals":`West Round ${i+1}`;});
+
+    // East R1 (seeded matchups)
+    const slotsE=buildBracketSlots(PE);
+    for (let i=0;i<PE/2;i++) {
+      const s1=slotsE[i*2],s2=slotsE[i*2+1];
+      const t1=s1<=NE?eastSeeds[s1-1]:null, t2=s2<=NE?eastSeeds[s2-1]:null;
+      await upsert({league,season,round_name:eastNames[0],round_order:0,matchup_index:i,team1_id:t1?.id??null,team2_id:t2?.id??null,winner_id:!t2&&t1?t1.id:null,team1_score:null,team2_score:null});
     }
-    // Subsequent empty rounds
-    for (let r=1;r<totalRounds;r++) {
-      const mc=P>>( r+1);
-      for (let i=0;i<mc;i++) await upsert({league,season,round_name:names[r],round_order:r,matchup_index:i});
+    for (let r=1;r<rE;r++) { const mc=PE>>(r+1); for(let i=0;i<mc;i++) await upsert({league,season,round_name:eastNames[r],round_order:r,matchup_index:i,team1_id:null,team2_id:null,winner_id:null,team1_score:null,team2_score:null}); }
+
+    // West R1 (seeded matchups)
+    const slotsW=buildBracketSlots(PW);
+    for (let i=0;i<PW/2;i++) {
+      const s1=slotsW[i*2],s2=slotsW[i*2+1];
+      const t1=s1<=NW?westSeeds[s1-1]:null, t2=s2<=NW?westSeeds[s2-1]:null;
+      await upsert({league,season,round_name:westNames[0],round_order:0,matchup_index:i,team1_id:t1?.id??null,team2_id:t2?.id??null,winner_id:!t2&&t1?t1.id:null,team1_score:null,team2_score:null});
     }
-    setGenerating(false); setView("bracket"); refresh();
+    for (let r=1;r<rW;r++) { const mc=PW>>(r+1); for(let i=0;i<mc;i++) await upsert({league,season,round_name:westNames[r],round_order:r,matchup_index:i,team1_id:null,team2_id:null,winner_id:null,team1_score:null,team2_score:null}); }
+
+    // Championship Finals
+    await upsert({league,season,round_name:"Finals",round_order:maxConf,matchup_index:0,team1_id:null,team2_id:null,winner_id:null,team1_score:null,team2_score:null});
+
+    setGenerating(false);
+    await refresh();
+    setView("bracket");
   };
 
   const clearBracket = async () => {
     if (!confirm("Delete the entire bracket? This cannot be undone.")) return;
     setClearing(true); setErr("");
     for (const m of matchups) await fetch(`/api/playoff-brackets?id=${m.id}`,{method:"DELETE"});
-    setClearing(false); setMatchups([]); setSeededTeams([]); setView("setup");
+    setClearing(false); setMatchups([]); setEastSeeds([]); setWestSeeds([]); setView("setup");
+    seedsInit.current = false;
   };
 
   const canvasH = useMemo(() => {
-    let max=200;
-    for (let ri=0;ri<rounds.length;ri++) {
-      const n=rounds[ri].matchups.length;
-      const h=topOffsetForRound(ri)+n*MATCHUP_H+Math.max(0,n-1)*gapForRound(ri);
-      if (h>max) max=h;
+    if (isConferenceBracket && confColumns) {
+      const maxE=Math.max(...confColumns.map(c=>c.east.length), 1);
+      const maxW=Math.max(...confColumns.map(c=>c.west.length), 1);
+      return maxE*MATCHUP_H + Math.max(0,maxE-1)*12 + 48 + MATCHUP_H*2+8 + 48 + maxW*MATCHUP_H + Math.max(0,maxW-1)*12 + 80;
     }
+    let max=200;
+    for (let ri=0;ri<rounds.length;ri++) { const n=rounds[ri].matchups.length; const h=topOffsetForRound(ri)+n*MATCHUP_H+Math.max(0,n-1)*gapForRound(ri); if(h>max) max=h; }
     return max+80;
-  }, [rounds]);
+  }, [rounds, isConferenceBracket, confColumns]);
+
+  // Reusable matchup card
+  const MatchupCard = ({ m }: { m: BracketMatchup }) => {
+    const t1=(m.team1??teams.find(t=>t.id===m.team1_id)) as Team|null;
+    const t2=(m.team2??teams.find(t=>t.id===m.team2_id)) as Team|null;
+    const isByeMatchup=!m.team2_id&&!!m.winner_id&&m.round_order===0;
+    return (
+      <div ref={el=>{ if(el) matchupEls.current.set(m.id,el); else matchupEls.current.delete(m.id); }}
+        style={{ borderRadius:10, border:`1px solid ${isByeMatchup?"#181818":"#242424"}`, background:"#141414", overflow:"hidden", flexShrink:0, opacity:isByeMatchup?0.7:1 }}>
+        <BracketTeamRow matchup={m} side="team1" teams={teams} saving={saving===m.id} onUpdate={p=>updateMatchup(m,p)} />
+        <div style={{ height:1, background:"#1e1e1e" }}/>
+        <BracketTeamRow matchup={m} side="team2" teams={teams} saving={saving===m.id} onUpdate={p=>updateMatchup(m,p)} isBye={isByeMatchup} />
+        {!isByeMatchup && (
+          <div style={{ padding:"5px 8px", borderTop:"1px solid #181818", display:"flex", alignItems:"center", gap:4, background:"#0f0f0f" }}>
+            {([{id:m.team1_id,team:t1},{id:m.team2_id,team:t2}] as const).map(({id,team},wi)=>
+              id?(
+                <button key={wi} onClick={()=>updateMatchup(m,{winner_id:m.winner_id===id?null:id})}
+                  style={{ fontSize:"0.65rem", padding:"2px 7px", borderRadius:4, border:"1px solid", background:m.winner_id===id?"rgba(22,163,74,0.15)":"transparent", borderColor:m.winner_id===id?"#16a34a":"#2a2a2a", color:m.winner_id===id?"#4ade80":"#555", cursor:"pointer" }}>
+                  {team?.abbreviation??`T${wi+1}`} 🏆
+                </button>
+              ):null
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const hasEnoughTeams = eastSeeds.length>=1 && westSeeds.length>=1;
 
   return (
     <div>
@@ -2419,15 +2550,16 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
               </button>
             )}
           </div>
-          <SeedPicker allTeams={teams} seeded={seededTeams} onChange={setSeededTeams} />
+          <ConferenceSeedPicker
+            allTeams={teams} eastSeeds={eastSeeds} westSeeds={westSeeds}
+            onChangeEast={setEastSeeds} onChangeWest={setWestSeeds}
+          />
           <div style={{ marginTop:20, paddingTop:16, borderTop:"1px solid #1e1e1e", display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
-            <button
-              onClick={generateBracket} disabled={generating||seededTeams.length<2}
-              style={{ background:seededTeams.length<2?"#1a1a1a":"#2563eb", border:"none", borderRadius:8, color:seededTeams.length<2?"#444":"#fff", fontWeight:700, fontSize:"0.85rem", padding:"8px 20px", cursor:seededTeams.length<2?"default":"pointer", transition:"background 0.15s" }}
-            >
+            <button onClick={generateBracket} disabled={generating||!hasEnoughTeams}
+              style={{ background:!hasEnoughTeams?"#1a1a1a":"#2563eb", border:"none", borderRadius:8, color:!hasEnoughTeams?"#444":"#fff", fontWeight:700, fontSize:"0.85rem", padding:"8px 20px", cursor:!hasEnoughTeams?"default":"pointer", transition:"background 0.15s" }}>
               {generating ? "Generating…" : matchups.length>0 ? "↻ Regenerate Bracket" : "Generate Bracket →"}
             </button>
-            {seededTeams.length<2 && <span style={{ color:"#444", fontSize:"0.75rem" }}>Select at least 2 teams</span>}
+            {!hasEnoughTeams && <span style={{ color:"#444", fontSize:"0.75rem" }}>Add at least 1 team per conference</span>}
           </div>
         </div>
       ) : (
@@ -2437,7 +2569,7 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
             <button onClick={()=>setView("setup")} style={{ background:"transparent", border:"1px solid #2a2a2a", borderRadius:8, color:"#888", fontSize:"0.8rem", padding:"5px 12px", cursor:"pointer" }}>
               ← Edit Teams
             </button>
-            <span style={{ color:"#555", fontSize:"0.75rem" }}>{rounds.length} rounds · {matchups.length} matchups · {season}</span>
+            <span style={{ color:"#555", fontSize:"0.75rem" }}>{matchups.length} matchups · {season}</span>
             <button onClick={clearBracket} disabled={clearing} style={{ background:"#2a0a0a", border:"1px solid #5a1a1a", borderRadius:8, color:"#f87171", fontSize:"0.8rem", padding:"5px 12px", cursor:"pointer" }}>
               {clearing ? "Clearing…" : "Clear Bracket"}
             </button>
@@ -2446,49 +2578,77 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
           {/* Bracket canvas */}
           <div style={{ overflowX:"auto", background:"#0a0a0a", borderRadius:"1rem", border:"1px solid #1e1e1e" }}>
             <div ref={innerRef} style={{ position:"relative", minWidth:"max-content", height:canvasH, padding:"28px 36px" }}>
-              {/* SVG lines */}
               <svg style={{ position:"absolute", inset:0, width:"100%", height:"100%", pointerEvents:"none", overflow:"visible", zIndex:1 }}>
                 {connectors.map(c=><path key={c.key} d={c.d} fill="none" stroke="#2a2a2a" strokeWidth={2}/>)}
               </svg>
-              {/* Round columns */}
-              <div style={{ display:"flex", gap:52, alignItems:"flex-start", position:"relative", zIndex:2 }}>
-                {rounds.map((round,ri)=>(
-                  <div key={round.name} style={{ width:234, flexShrink:0 }}>
-                    <div style={{ fontSize:"0.7rem", fontWeight:700, color:"#555", textTransform:"uppercase", letterSpacing:"0.12em", marginBottom:14, paddingBottom:8, borderBottom:"1px solid #1e1e1e", textAlign:"center" }}>
-                      {round.name}
-                    </div>
-                    <div style={{ display:"flex", flexDirection:"column", paddingTop:topOffsetForRound(ri), gap:gapForRound(ri) }}>
-                      {round.matchups.map(m=>{
-                        const t1=(m.team1??teams.find(t=>t.id===m.team1_id)) as Team|null;
-                        const t2=(m.team2??teams.find(t=>t.id===m.team2_id)) as Team|null;
-                        const isByeMatchup=!m.team2_id&&!!m.winner_id&&m.round_order===0;
-                        return (
-                          <div key={m.id}
-                            ref={el=>{ if(el) matchupEls.current.set(m.id,el); else matchupEls.current.delete(m.id); }}
-                            style={{ borderRadius:10, border:`1px solid ${isByeMatchup?"#181818":"#242424"}`, background:"#141414", overflow:"hidden", flexShrink:0, opacity:isByeMatchup?0.7:1 }}>
-                            <BracketTeamRow matchup={m} side="team1" teams={teams} saving={saving===m.id} onUpdate={p=>updateMatchup(m,p)} />
-                            <div style={{ height:1, background:"#1e1e1e" }}/>
-                            <BracketTeamRow matchup={m} side="team2" teams={teams} saving={saving===m.id} onUpdate={p=>updateMatchup(m,p)} isBye={isByeMatchup} />
-                            {/* Footer: winner buttons */}
-                            {!isByeMatchup && (
-                              <div style={{ padding:"5px 8px", borderTop:"1px solid #181818", display:"flex", alignItems:"center", gap:4, background:"#0f0f0f" }}>
-                                {([{id:m.team1_id,team:t1},{id:m.team2_id,team:t2}] as const).map(({id,team},wi)=>
-                                  id?(
-                                    <button key={wi} onClick={()=>updateMatchup(m,{winner_id:m.winner_id===id?null:id})}
-                                      style={{ fontSize:"0.65rem", padding:"2px 7px", borderRadius:4, border:"1px solid", background:m.winner_id===id?"rgba(22,163,74,0.15)":"transparent", borderColor:m.winner_id===id?"#16a34a":"#2a2a2a", color:m.winner_id===id?"#4ade80":"#555", cursor:"pointer" }}>
-                                      {team?.abbreviation??`T${wi+1}`} 🏆
-                                    </button>
-                                  ):null
-                                )}
+
+              {isConferenceBracket && confColumns ? (
+                /* Conference bracket: East on top, West on bottom, Finals centered */
+                <div style={{ display:"flex", gap:52, alignItems:"flex-start", position:"relative", zIndex:2 }}>
+                  {confColumns.map(col => {
+                    const maxE=Math.max(...confColumns.map(c=>c.east.length),1);
+                    const maxW=Math.max(...confColumns.map(c=>c.west.length),1);
+                    const eastSecH=maxE*MATCHUP_H+Math.max(0,maxE-1)*12;
+                    const westSecH=maxW*MATCHUP_H+Math.max(0,maxW-1)*12;
+                    const finalsSecH=MATCHUP_H*2+8+48;
+                    return (
+                      <div key={col.order} style={{ width:234, flexShrink:0, display:"flex", flexDirection:"column" }}>
+                        {/* East section */}
+                        <div style={{ height:eastSecH, display:"flex", alignItems:"center" }}>
+                          {col.east.length>0 && (
+                            <div style={{ width:"100%" }}>
+                              <div style={{ fontSize:"0.62rem", color:"#3b82f6", fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase", marginBottom:8, textAlign:"center" }}>
+                                {col.east[0].round_name}
                               </div>
-                            )}
-                          </div>
-                        );
-                      })}
+                              <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+                                {col.east.map(m=><MatchupCard key={m.id} m={m} />)}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        {/* Center: Finals or divider */}
+                        <div style={{ height:finalsSecH, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                          {col.finals.length>0 ? (
+                            <div style={{ width:"100%" }}>
+                              <div style={{ fontSize:"0.65rem", color:"#facc15", fontWeight:700, letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:8, textAlign:"center" }}>🏆 Finals</div>
+                              {col.finals.map(m=><MatchupCard key={m.id} m={m} />)}
+                            </div>
+                          ) : (
+                            <div style={{ width:"80%", height:1, background:"#181818" }} />
+                          )}
+                        </div>
+                        {/* West section */}
+                        <div style={{ height:westSecH, display:"flex", alignItems:"center" }}>
+                          {col.west.length>0 && (
+                            <div style={{ width:"100%" }}>
+                              <div style={{ fontSize:"0.62rem", color:"#ef4444", fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase", marginBottom:8, textAlign:"center" }}>
+                                {col.west[0].round_name}
+                              </div>
+                              <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+                                {col.west.map(m=><MatchupCard key={m.id} m={m} />)}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                /* Flat bracket */
+                <div style={{ display:"flex", gap:52, alignItems:"flex-start", position:"relative", zIndex:2 }}>
+                  {rounds.map((round,ri)=>(
+                    <div key={round.name} style={{ width:234, flexShrink:0 }}>
+                      <div style={{ fontSize:"0.7rem", fontWeight:700, color:"#555", textTransform:"uppercase", letterSpacing:"0.12em", marginBottom:14, paddingBottom:8, borderBottom:"1px solid #1e1e1e", textAlign:"center" }}>
+                        {round.name}
+                      </div>
+                      <div style={{ display:"flex", flexDirection:"column", paddingTop:topOffsetForRound(ri), gap:gapForRound(ri) }}>
+                        {round.matchups.map(m=><MatchupCard key={m.id} m={m} />)}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

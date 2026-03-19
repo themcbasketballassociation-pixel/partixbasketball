@@ -28,9 +28,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const admin = await requireAdmin(req, res);
     if (!admin) return;
     const {
-      league, season, round_name, round_order, matchup_index,
+      league: leagueRaw, season, round_name, round_order, matchup_index,
       team1_id, team2_id, team1_score, team2_score, winner_id,
     } = req.body;
+    const league = resolveLeague(leagueRaw);
     if (!league || !season || !round_name || matchup_index === undefined)
       return res.status(400).json({ error: "league, season, round_name, matchup_index required" });
     const { data, error } = await supabase
