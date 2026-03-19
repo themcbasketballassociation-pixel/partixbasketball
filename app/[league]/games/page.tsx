@@ -42,37 +42,6 @@ export default function GamesPage({ params }: { params?: Promise<{ league?: stri
   const slug = resolved.league ?? "";
   const day = getDayNum();
   const { data: session, status } = useSession();
-  const [resetting, setResetting] = React.useState(false);
-  const [resetDone, setResetDone] = React.useState(false);
-
-  const resetToday = async () => {
-    if (!confirm("Clear all your progress for today's games? You'll be able to play them fresh.")) return;
-    setResetting(true);
-    setResetDone(false);
-
-    // Clear localStorage keys for this league+day
-    const keysToRemove: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k && STORAGE_PREFIXES.some(p => k.startsWith(p + `:${slug}:`))) {
-        // Remove all keys for this league (any day) so stale state is gone
-        keysToRemove.push(k);
-      }
-    }
-    keysToRemove.forEach(k => localStorage.removeItem(k));
-
-    // Also clear server-side wordle state for today
-    if (status === "authenticated") {
-      await fetch(`/api/wordle/state?league=${encodeURIComponent(slug)}&day=${day}`, {
-        method: "DELETE",
-      }).catch(() => {});
-    }
-
-    setResetting(false);
-    setResetDone(true);
-    // Reload page so games reflect cleared state
-    setTimeout(() => window.location.reload(), 800);
-  };
 
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
@@ -82,19 +51,6 @@ export default function GamesPage({ params }: { params?: Promise<{ league?: stri
           <p className="text-slate-400 text-sm mt-0.5">Daily mini-games — Day #{day} · resets at 10 AM EST</p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
-          {status === "authenticated" && (
-            <button
-              onClick={resetToday}
-              disabled={resetting}
-              className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition ${
-                resetDone
-                  ? "bg-green-900 border-green-700 text-green-300"
-                  : "bg-slate-800 border-slate-700 text-slate-400 hover:text-white hover:border-slate-500"
-              }`}
-            >
-              {resetDone ? "✓ Reset!" : resetting ? "Resetting..." : "↺ Reset Today's Games"}
-            </button>
-          )}
           {status !== "authenticated" && (
             <span className="text-xs text-slate-600 font-medium">🔐 Sign in with Discord to play</span>
           )}

@@ -263,7 +263,7 @@ function ShareModal({ groups, guessHistory, foundOrder, dayNum, onClose }: {
   const colorForGroup = (gi: number) => groups[gi]?.color ?? "yellow";
 
   const lines = [
-    `Partix Basketball Connections – Day #${dayNum}`,
+    `Minecraft Basketball Connections – Day #${dayNum}`,
     `${foundOrder.length}/4 groups found`,
     "",
     ...guessHistory.map(guess =>

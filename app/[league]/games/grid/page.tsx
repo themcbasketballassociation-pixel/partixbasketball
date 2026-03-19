@@ -337,7 +337,7 @@ function GridShareModal({
   const solved = cells.filter(c => c.status === "correct").length;
 
   const text = [
-    `Partix Basketball Grid – Day #${dayNum}`,
+    `Minecraft Basketball Grid – Day #${dayNum}`,
     `${solved}/9 cells · ${guessesUsed}/${TOTAL_GUESSES} guesses`,
     "",
     cells.slice(0, 3).map(CELL_EMOJI).join(""),

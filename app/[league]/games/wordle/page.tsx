@@ -91,7 +91,7 @@ function buildShareText(guesses: GuessResult[], gameState: string, dayNum: numbe
   const result = gameState === "won"
     ? `${guesses.length}/${MAX_GUESSES} 🏀`
     : `X/${MAX_GUESSES} 💀`;
-  const lines = [`Partix Basketball Wordle – Day #${dayNum}`, result, ""];
+  const lines = [`Minecraft Basketball Wordle – Day #${dayNum}`, result, ""];
   for (const g of guesses) {
     lines.push([g.team, g.division, g.ppg, g.rpg, g.apg, g.rings]
       .map(c => COLOR_EMOJI[c.color]).join(""));
