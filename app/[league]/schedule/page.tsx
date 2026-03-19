@@ -2,9 +2,9 @@
 import React from "react";
 
 const leagueNames: Record<string, string> = {
-  pba: "Minecraft Basketball Association",
-  pcaa: "College",
-  pbgl: "G League",
+  mba: "Minecraft Basketball Association",
+  mcaa: "College",
+  mbgl: "G League",
 };
 
 type Team = { id: string; name: string; abbreviation: string };
@@ -32,7 +32,7 @@ export default function SchedulePage({ params }: { params?: Promise<{ league?: s
   const [games, setGames] = React.useState<Game[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [seasons, setSeasons] = React.useState<string[]>([]);
-  const [season, setSeason] = React.useState<string>("All Seasons");
+  const [season, setSeason] = React.useState<string>("");
 
   React.useEffect(() => {
     if (!slug) { setLoading(false); return; }
@@ -44,27 +44,22 @@ export default function SchedulePage({ params }: { params?: Promise<{ league?: s
             data.map((d) => d.season).filter((s) => s && !s.toLowerCase().includes("playoff"))
           )].sort((a, b) => b.localeCompare(a));
           setSeasons(unique);
+          if (unique.length > 0) setSeason(unique[0]);
         }
       })
       .catch(() => {});
   }, [slug]);
 
   React.useEffect(() => {
-    if (!slug) { setLoading(false); return; }
+    if (!slug || !season) { setLoading(false); return; }
     setLoading(true);
-    fetch(`/api/games?league=${slug}`)
+    fetch(`/api/games?league=${slug}&season=${encodeURIComponent(season)}`)
       .then((r) => r.json())
       .then((data) => { setGames(Array.isArray(data) ? data : []); setLoading(false); })
       .catch(() => setLoading(false));
-  }, [slug]);
+  }, [slug, season]);
 
-  const filteredGames = season === "All Seasons" ? games : games.filter((g) => {
-    // Map season name to approximate year range — use week grouping as proxy
-    // Since games have no season field, filter using week keys grouped under the selected season index
-    // We can't map dates to seasons without more info, so we show all games when a season is selected
-    // but label it. A best-effort: just pass through all games (user sees season label in dropdown).
-    return true;
-  });
+  const filteredGames = games;
 
   const grouped = filteredGames.reduce<Record<string, Game[]>>((acc, g) => {
     const key = getWeekKey(g.scheduled_at);
@@ -81,14 +76,15 @@ export default function SchedulePage({ params }: { params?: Promise<{ league?: s
           <h2 style={{ fontSize: "1.5rem", fontWeight: 700, color: "#fff", margin: 0 }}>Schedule</h2>
           <p style={{ color: "#888", fontSize: "0.875rem", margin: "2px 0 0" }}>{leagueDisplay}</p>
         </div>
-        <select
-          value={season}
-          onChange={(e) => setSeason(e.target.value)}
-          style={{ background: "#111", border: "1px solid #1e1e1e", color: "#fff", borderRadius: "0.75rem", padding: "6px 12px", fontSize: "0.875rem", outline: "none", cursor: "pointer" }}
-        >
-          <option value="All Seasons">All Seasons</option>
-          {seasons.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
+        {seasons.length > 0 && (
+          <select
+            value={season}
+            onChange={(e) => setSeason(e.target.value)}
+            style={{ background: "#111", border: "1px solid #1e1e1e", color: "#fff", borderRadius: "0.75rem", padding: "6px 12px", fontSize: "0.875rem", outline: "none", cursor: "pointer" }}
+          >
+            {seasons.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        )}
       </div>
       {loading ? (
         <div style={{ padding: 40, textAlign: "center", color: "#555" }}>Loading schedule...</div>

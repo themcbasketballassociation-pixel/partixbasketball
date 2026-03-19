@@ -2,9 +2,9 @@
 import React from "react";
 
 const leagueNames: Record<string, string> = {
-  pba: "Minecraft Basketball Association",
-  pcaa: "College",
-  pbgl: "G League",
+  mba: "Minecraft Basketball Association",
+  mcaa: "College",
+  mbgl: "G League",
 };
 
 type Team = { id: string; name: string; abbreviation: string; division: string | null; logo_url: string | null };
@@ -20,10 +20,10 @@ export default function TeamsPage({ params }: { params?: Promise<{ league?: stri
   const [playerTeams, setPlayerTeams] = React.useState<PlayerTeam[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [seasons, setSeasons] = React.useState<string[]>([]);
-  const [season, setSeason] = React.useState<string>("All Seasons");
+  const [season, setSeason] = React.useState<string>("");
 
   React.useEffect(() => {
-    if (!slug) return;
+    if (!slug) { setLoading(false); return; }
     fetch(`/api/stats/seasons?league=${slug}`)
       .then((r) => r.json())
       .then((data: { season: string }[]) => {
@@ -32,16 +32,18 @@ export default function TeamsPage({ params }: { params?: Promise<{ league?: stri
             data.map((d) => d.season).filter((s) => s && !s.toLowerCase().includes("playoff"))
           )].sort((a, b) => b.localeCompare(a));
           setSeasons(unique);
+          if (unique.length > 0) setSeason(unique[0]);
         }
       })
       .catch(() => {});
   }, [slug]);
 
   React.useEffect(() => {
-    if (!slug) { setLoading(false); return; }
+    if (!slug || !season) { setLoading(false); return; }
+    setLoading(true);
     Promise.all([
-      fetch(`/api/teams?league=${slug}`).then((r) => r.json()),
-      fetch(`/api/teams/players?league=${slug}`).then((r) => r.json()),
+      fetch(`/api/teams?league=${slug}&season=${encodeURIComponent(season)}`).then((r) => r.json()),
+      fetch(`/api/teams/players?league=${slug}&season=${encodeURIComponent(season)}`).then((r) => r.json()),
     ])
       .then(([t, pt]) => {
         setTeams(Array.isArray(t) ? t : []);
@@ -49,7 +51,7 @@ export default function TeamsPage({ params }: { params?: Promise<{ league?: stri
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, [slug]);
+  }, [slug, season]);
 
   const playersForTeam = (teamId: string) => playerTeams.filter((pt) => pt.team_id === teamId);
   const divisions = [...new Set(teams.map((t) => t.division).filter(Boolean))] as string[];
@@ -97,14 +99,15 @@ export default function TeamsPage({ params }: { params?: Promise<{ league?: stri
           <h2 style={{ fontSize: "1.5rem", fontWeight: 700, color: "#fff", margin: 0 }}>Teams</h2>
           <p style={{ color: "#888", fontSize: "0.875rem", margin: "2px 0 0" }}>{leagueDisplay} · {teams.length} teams</p>
         </div>
-        <select
-          value={season}
-          onChange={(e) => setSeason(e.target.value)}
-          style={{ background: "#111", border: "1px solid #1e1e1e", color: "#fff", borderRadius: "0.75rem", padding: "6px 12px", fontSize: "0.875rem", outline: "none", cursor: "pointer" }}
-        >
-          <option value="All Seasons">All Seasons</option>
-          {seasons.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
+        {seasons.length > 0 && (
+          <select
+            value={season}
+            onChange={(e) => setSeason(e.target.value)}
+            style={{ background: "#111", border: "1px solid #1e1e1e", color: "#fff", borderRadius: "0.75rem", padding: "6px 12px", fontSize: "0.875rem", outline: "none", cursor: "pointer" }}
+          >
+            {seasons.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        )}
       </div>
       {loading ? (
         <div style={{ padding: 40, textAlign: "center", color: "#555" }}>Loading teams...</div>

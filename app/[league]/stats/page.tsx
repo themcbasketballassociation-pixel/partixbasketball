@@ -2,9 +2,9 @@
 import React from "react";
 
 const leagueNames: Record<string, string> = {
-  pba: "Minecraft Basketball Association",
-  pcaa: "College",
-  pbgl: "G League",
+  mba: "Minecraft Basketball Association",
+  mcaa: "College",
+  mbgl: "G League",
 };
 
 const SEASONS = ["Season 1","Season 1 Playoffs","Season 2","Season 2 Playoffs","Season 3","Season 3 Playoffs","Season 4","Season 4 Playoffs","Season 5","Season 5 Playoffs","Season 6","Season 6 Playoffs","Season 7","Season 7 Playoffs"];
@@ -39,7 +39,7 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
           <p className="text-slate-400 text-sm mt-0.5">{leagueDisplay}</p>
         </div>
         <select
-          className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none"
+          className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-white focus:border-zinc-500 focus:outline-none"
           value={season}
           onChange={(e) => setSeason(e.target.value)}
         >

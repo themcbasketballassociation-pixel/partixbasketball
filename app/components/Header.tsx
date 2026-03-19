@@ -6,9 +6,9 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 
 const leagues = [
-  { short: "MBA",  full: "Minecraft Basketball Association", slug: "mba",  logo: "/logos/mba.svg",  accent: "#C8102E" },
-  { short: "MCAA", full: "College",                          slug: "mcaa", logo: "/logos/mcaa.svg", accent: "#003087" },
-  { short: "MBGL", full: "G League",                         slug: "mbgl", logo: "/logos/mbgl.svg", accent: "#BB3430" },
+  { short: "MBA",  full: "Minecraft Basketball Association", slug: "mba",  logo: "/logos/mba.webp",  accent: "#C8102E" },
+  { short: "MCAA", full: "College",                          slug: "mcaa", logo: "/logos/mcaa.webp", accent: "#003087" },
+  { short: "MBGL", full: "G League",                         slug: "mbgl", logo: "/logos/mbgl.svg",  accent: "#BB3430" },
 ];
 
 const tabs = [

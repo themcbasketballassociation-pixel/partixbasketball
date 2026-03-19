@@ -2,9 +2,9 @@
 import React from "react";
 
 const leagueNames: Record<string, string> = {
-  pba: "Minecraft Basketball Association",
-  pcaa: "College",
-  pbgl: "G League",
+  mba: "Minecraft Basketball Association",
+  mcaa: "College",
+  mbgl: "G League",
 };
 
 type Team = { id: string; name: string; abbreviation: string; division: string | null; logo_url: string | null };

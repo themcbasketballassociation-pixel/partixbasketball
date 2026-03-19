@@ -2,9 +2,9 @@
 import React from "react";
 
 const leagueNames: Record<string, string> = {
-  pba: "Minecraft Basketball Association",
-  pcaa: "College",
-  pbgl: "G League",
+  mba: "Minecraft Basketball Association",
+  mcaa: "College",
+  mbgl: "G League",
 };
 
 type Player = { mc_uuid: string; mc_username: string; discord_id: string | null };
@@ -171,7 +171,7 @@ function PlayerCard({
               <div className="space-y-2">
                 {otherAccolades.map((a) => (
                   <div key={a.id} className="flex items-center justify-between rounded-lg bg-slate-950 border border-slate-800 px-3 py-2">
-                    <span className="font-semibold text-blue-300 text-sm">{a.type}</span>
+                    <span className="font-semibold text-zinc-300 text-sm">{a.type}</span>
                     <div className="text-right">
                       <div className="text-xs text-slate-500">{a.season}</div>
                       {a.description && <div className="text-xs text-slate-600">{a.description}</div>}
@@ -267,7 +267,7 @@ export default function PlayersPage({ params }: { params?: Promise<{ league?: st
             <p className="text-slate-400 text-sm mt-0.5">{leagueDisplay}</p>
           </div>
           <input
-            className="rounded-lg border border-slate-700 bg-slate-800 text-white text-sm px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 w-48"
+            className="rounded-lg border border-slate-700 bg-slate-800 text-white text-sm px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-zinc-500 w-48"
             placeholder="Search players..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}

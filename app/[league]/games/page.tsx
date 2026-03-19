@@ -61,12 +61,12 @@ export default function GamesPage({ params }: { params?: Promise<{ league?: stri
           <Link
             key={g.href}
             href={`/${slug}/games/${g.href}`}
-            className="block rounded-xl border border-slate-700 bg-slate-950 p-6 hover:border-blue-600 hover:bg-slate-800/40 transition group"
+            className="block rounded-xl border border-slate-700 bg-slate-950 p-6 hover:border-zinc-500 hover:bg-slate-800/40 transition group"
           >
             <div className="text-4xl mb-3">{g.emoji}</div>
             <h3 className="text-xl font-bold text-white mb-1">{g.title}</h3>
             <p className="text-slate-400 text-sm">{g.desc}</p>
-            <p className="text-blue-500 text-xs mt-3 font-semibold group-hover:text-blue-400">Play →</p>
+            <p className="text-zinc-500 text-xs mt-3 font-semibold group-hover:text-zinc-300">Play →</p>
           </Link>
         ))}
       </div>

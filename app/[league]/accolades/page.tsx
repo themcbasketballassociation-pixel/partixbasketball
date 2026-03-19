@@ -2,9 +2,9 @@
 import React from "react";
 
 const leagueNames: Record<string, string> = {
-  pba: "Minecraft Basketball Association",
-  pcaa: "College",
-  pbgl: "G League",
+  mba: "Minecraft Basketball Association",
+  mcaa: "College",
+  mbgl: "G League",
 };
 
 const SEASONS = ["Season 1","Season 2","Season 3","Season 4","Season 5","Season 6","Season 7"];
@@ -57,7 +57,7 @@ export default function AccoladesPage({ params }: { params?: Promise<{ league?: 
           <button
             onClick={() => setSeason("All")}
             className={`px-3 py-1.5 font-medium transition whitespace-nowrap ${
-              season === "All" ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700"
+              season === "All" ? "bg-zinc-700 text-white" : "bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700"
             }`}
           >
             All
@@ -67,7 +67,7 @@ export default function AccoladesPage({ params }: { params?: Promise<{ league?: 
               key={s}
               onClick={() => setSeason(s)}
               className={`px-3 py-1.5 font-medium transition whitespace-nowrap ${
-                season === s ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700"
+                season === s ? "bg-zinc-700 text-white" : "bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700"
               }`}
             >
               {s}
@@ -100,9 +100,9 @@ export default function AccoladesPage({ params }: { params?: Promise<{ league?: 
                         <div className="text-xs text-slate-500">{a.season}</div>
                       </div>
                     </div>
-                    <div className="rounded-lg bg-blue-950 border border-blue-800 px-3 py-2">
-                      <div className="font-bold text-blue-300 text-sm">{a.type}</div>
-                      {a.description && <div className="text-blue-400 text-xs mt-0.5">{a.description}</div>}
+                    <div className="rounded-lg bg-zinc-800/60 border border-zinc-700 px-3 py-2">
+                      <div className="font-bold text-white text-sm">{a.type}</div>
+                      {a.description && <div className="text-zinc-400 text-xs mt-0.5">{a.description}</div>}
                     </div>
                   </div>
                 ))}

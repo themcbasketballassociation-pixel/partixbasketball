@@ -34,10 +34,10 @@ type Article = { id: string; league: string; title: string; body: string; create
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const btn = "rounded-lg px-3 py-1.5 text-sm font-medium transition";
-const btnPrimary = `${btn} bg-blue-600 hover:bg-blue-500 text-white`;
+const btnPrimary = `${btn} bg-zinc-700 hover:bg-zinc-600 text-white`;
 const btnDanger = `${btn} bg-red-900 hover:bg-red-800 text-red-200`;
 const btnSecondary = `${btn} bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700`;
-const input = "rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none w-full";
+const input = "rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white focus:border-zinc-500 focus:outline-none w-full";
 const card = "rounded-xl border border-slate-700 bg-slate-950 p-4";
 
 function ErrMsg({ msg }: { msg: string }) {
@@ -711,7 +711,7 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
           <div className="flex items-center gap-2">
             <label className="text-xs text-slate-500">Season:</label>
             <select
-              className="rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none"
+              className="rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-white focus:border-zinc-500 focus:outline-none"
               value={season}
               onChange={(e) => setSeason(e.target.value)}
             >
@@ -943,12 +943,12 @@ function ScheduleTab({ league, season }: { league: string; season: string }) {
 
   const refresh = useCallback(async () => {
     const [g, t] = await Promise.all([
-      fetch(`/api/games?league=${league}`).then((r) => r.json()),
+      fetch(`/api/games?league=${league}&season=${encodeURIComponent(season)}`).then((r) => r.json()),
       fetch(`/api/teams?league=${league}`).then((r) => r.json()),
     ]);
     setGames(Array.isArray(g) ? g : []);
     setTeams(Array.isArray(t) ? t : []);
-  }, [league]);
+  }, [league, season]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -958,7 +958,7 @@ function ScheduleTab({ league, season }: { league: string; season: string }) {
     const r = await fetch("/api/games", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ league, scheduled_at: newDate, home_team_id: newHome, away_team_id: newAway }),
+      body: JSON.stringify({ league, scheduled_at: newDate, home_team_id: newHome, away_team_id: newAway, season }),
     });
     const data = await r.json();
     if (!r.ok) { setErr(data.error ?? "Failed to add game"); return; }
@@ -1005,7 +1005,7 @@ function ScheduleTab({ league, season }: { league: string; season: string }) {
       const r = await fetch("/api/games", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ league, scheduled_at: g.date, home_team_id: g.homeTeam!.id, away_team_id: g.awayTeam!.id }),
+        body: JSON.stringify({ league, scheduled_at: g.date, home_team_id: g.homeTeam!.id, away_team_id: g.awayTeam!.id, season }),
       });
       if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Import failed"); setImporting(false); return; }
     }
@@ -1069,7 +1069,7 @@ function ScheduleTab({ league, season }: { league: string; season: string }) {
                 </div>
                 {Array.from(new Set(parsed.map(g => g.week))).sort((a,b) => a-b).map(week => (
                   <div key={week} className="mb-3">
-                    <div className="text-xs font-semibold text-blue-400 uppercase tracking-widest mb-1">Week {week}</div>
+                    <div className="text-xs font-semibold text-zinc-500 uppercase tracking-widest mb-1">Week {week}</div>
                     <div className="space-y-1">
                       {parsed.filter(g => g.week === week).map((g, i) => (
                         <div key={i} className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm ${g.homeTeam && g.awayTeam ? "bg-slate-900 border border-slate-800" : "bg-red-950 border border-red-900"}`}>
@@ -1124,7 +1124,7 @@ function ScheduleTab({ league, season }: { league: string; season: string }) {
           <div className="space-y-5">
             {weekKeys.map((wk, wi) => (
               <div key={wk}>
-                <div className="text-xs font-semibold text-blue-400 uppercase tracking-widest mb-2">Week {wi + 1}</div>
+                <div className="text-xs font-semibold text-zinc-500 uppercase tracking-widest mb-2">Week {wi + 1}</div>
                 <div className="space-y-2">
                   {grouped[wk].sort((a,b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()).map((g) => (
                     <div key={g.id} className="rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 hover:border-slate-700 transition">
@@ -1146,9 +1146,9 @@ function ScheduleTab({ league, season }: { league: string; season: string }) {
                       </div>
                       {completingId === g.id && (
                         <div className="mt-3 flex gap-2 items-center flex-wrap">
-                          <input className="rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none w-28" type="number" placeholder={`${g.home_team?.abbreviation} score`} value={homeScore} onChange={(e) => setHomeScore(e.target.value)} />
+                          <input className="rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-white focus:border-zinc-500 focus:outline-none w-28" type="number" placeholder={`${g.home_team?.abbreviation} score`} value={homeScore} onChange={(e) => setHomeScore(e.target.value)} />
                           <span className="text-slate-400">–</span>
-                          <input className="rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none w-28" type="number" placeholder={`${g.away_team?.abbreviation} score`} value={awayScore} onChange={(e) => setAwayScore(e.target.value)} />
+                          <input className="rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-white focus:border-zinc-500 focus:outline-none w-28" type="number" placeholder={`${g.away_team?.abbreviation} score`} value={awayScore} onChange={(e) => setAwayScore(e.target.value)} />
                           <button className={btnPrimary} onClick={() => markCompleted(g.id)}>Save</button>
                         </div>
                       )}
@@ -1481,7 +1481,7 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
                         {statCols.map((c) => (
                           <td key={c} className="px-1 py-1">
                             <input
-                              className={`rounded border border-slate-700 bg-slate-800 px-1.5 py-1 text-sm text-white focus:border-blue-500 focus:outline-none text-center ${c === "fg" || c === "three_fg" ? "w-16" : c === "minutes_played" ? "w-14" : "w-12"}`}
+                              className={`rounded border border-slate-700 bg-slate-800 px-1.5 py-1 text-sm text-white focus:border-zinc-500 focus:outline-none text-center ${c === "fg" || c === "three_fg" ? "w-16" : c === "minutes_played" ? "w-14" : "w-12"}`}
                               placeholder={c === "minutes_played" ? "0:00" : c === "fg" || c === "three_fg" ? "0/0" : ""}
                               value={statForm[uuid]?.[c] ?? ""}
                               onChange={(e) => setField(uuid, c, e.target.value)}
@@ -1581,7 +1581,7 @@ function AccoladesTab({ league, season: initialSeason }: { league: string; seaso
                 <div className="flex items-center gap-3">
                   <Avatar uuid={a.mc_uuid} username={(a as any).players?.mc_username ?? a.mc_uuid} />
                   <div>
-                    <span className="font-semibold text-blue-300">{a.type}</span>
+                    <span className="font-semibold text-zinc-300">{a.type}</span>
                     <span className="ml-2 text-slate-400 text-sm">{a.season}</span>
                     {a.description && <span className="ml-2 text-slate-500 text-sm">— {a.description}</span>}
                   </div>
@@ -2032,7 +2032,7 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
                   <tr
                     key={p.mc_uuid}
                     onClick={() => { setSelectedUuid(p.mc_uuid); setErr(""); setSaved(false); setTimeout(() => document.getElementById("stats-edit-form")?.scrollIntoView({ behavior: "smooth" }), 50); }}
-                    className={`cursor-pointer transition ${isSelected ? "bg-blue-950/40 border-l-2 border-blue-500" : "hover:bg-slate-800/60"} ${savedPlayers.has(p.mc_uuid) ? "opacity-70" : ""}`}
+                    className={`cursor-pointer transition ${isSelected ? "bg-zinc-800/60 border-l-2 border-zinc-500" : "hover:bg-slate-800/60"} ${savedPlayers.has(p.mc_uuid) ? "opacity-70" : ""}`}
                   >
                     <td className="px-3 py-2 whitespace-nowrap">
                       <div className="flex items-center gap-2">
@@ -2310,13 +2310,13 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
         <div className="flex items-center gap-2 mb-4">
           <button
             onClick={() => setUseConferences(false)}
-            className={`px-3 py-1.5 rounded-l-lg border text-sm font-medium transition ${!useConferences ? "bg-blue-600 border-blue-500 text-white" : "bg-slate-800 border-slate-700 text-slate-400 hover:text-white"}`}
+            className={`px-3 py-1.5 rounded-l-lg border text-sm font-medium transition ${!useConferences ? "bg-zinc-700 border-zinc-600 text-white" : "bg-slate-800 border-slate-700 text-slate-400 hover:text-white"}`}
           >
             Single Bracket
           </button>
           <button
             onClick={() => setUseConferences(true)}
-            className={`px-3 py-1.5 rounded-r-lg border-t border-r border-b text-sm font-medium transition ${useConferences ? "bg-blue-600 border-blue-500 text-white" : "bg-slate-800 border-slate-700 text-slate-400 hover:text-white"}`}
+            className={`px-3 py-1.5 rounded-r-lg border-t border-r border-b text-sm font-medium transition ${useConferences ? "bg-zinc-700 border-zinc-600 text-white" : "bg-slate-800 border-slate-700 text-slate-400 hover:text-white"}`}
           >
             With Conferences
           </button>
@@ -2329,7 +2329,7 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
               <div className="flex gap-1 flex-wrap">
                 {["4","6","8","16"].map(n => (
                   <button key={n} onClick={() => setNumTeams(n)}
-                    className={`px-3 py-1.5 rounded text-sm font-medium transition border ${numTeams === n ? "bg-blue-600 border-blue-500 text-white" : "bg-slate-800 border-slate-700 text-slate-300 hover:text-white"}`}>
+                    className={`px-3 py-1.5 rounded text-sm font-medium transition border ${numTeams === n ? "bg-zinc-700 border-zinc-600 text-white" : "bg-slate-800 border-slate-700 text-slate-300 hover:text-white"}`}>
                     {n}
                   </button>
                 ))}
@@ -2415,7 +2415,7 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
                         </div>
                         {/* Team picker */}
                         <select
-                          className="flex-1 rounded border border-slate-700 bg-slate-800 text-sm text-white px-2 py-1 focus:border-blue-500 focus:outline-none"
+                          className="flex-1 rounded border border-slate-700 bg-slate-800 text-sm text-white px-2 py-1 focus:border-zinc-500 focus:outline-none"
                           value={m[idKey] ?? ""}
                           onChange={(e) => updateMatchup(m, { [idKey]: e.target.value || null })}
                         >
@@ -2425,7 +2425,7 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
                         {/* Score */}
                         <input
                           type="number" min="0" placeholder="—"
-                          className="w-16 rounded border border-slate-700 bg-slate-800 text-sm text-white px-2 py-1 text-center focus:border-blue-500 focus:outline-none"
+                          className="w-16 rounded border border-slate-700 bg-slate-800 text-sm text-white px-2 py-1 text-center focus:border-zinc-500 focus:outline-none"
                           value={m[scoreKey] ?? ""}
                           onChange={(e) => updateMatchup(m, { [scoreKey]: e.target.value !== "" ? parseInt(e.target.value) : null })}
                         />
@@ -2534,7 +2534,7 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
           <div className="flex items-center gap-2">
             <label className="text-xs text-slate-400 font-medium">Season:</label>
             <select
-              className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-white focus:border-blue-500 focus:outline-none"
+              className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-white focus:border-zinc-500 focus:outline-none"
               value={season}
               onChange={(e) => setSeason(e.target.value)}
             >
@@ -2550,7 +2550,7 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`px-5 py-3.5 text-sm font-medium transition whitespace-nowrap border-b-2 ${activeTab === tab ? "border-blue-500 text-white" : "border-transparent text-slate-400 hover:text-white hover:border-slate-600"}`}
+            className={`px-5 py-3.5 text-sm font-medium transition whitespace-nowrap border-b-2 ${activeTab === tab ? "border-white text-white" : "border-transparent text-slate-400 hover:text-white hover:border-slate-600"}`}
           >
             {tab}
           </button>
