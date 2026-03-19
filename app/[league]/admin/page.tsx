@@ -2170,8 +2170,8 @@ type BracketMatchup = {
   team2?: { id: string; name: string; abbreviation: string; logo_url?: string | null } | null;
 };
 
-const MATCHUP_H = 96;
-const BASE_GAP  = 16;
+const MATCHUP_H = 152;  // 2×60px rows + 1px divider + 31px footer
+const BASE_GAP  = 20;
 
 function gapForRound(ri: number) { return (Math.pow(2, ri) - 1) * (MATCHUP_H + BASE_GAP) + BASE_GAP; }
 function topOffsetForRound(ri: number) { return ((Math.pow(2, ri) - 1) * (MATCHUP_H + BASE_GAP)) / 2; }
@@ -2283,34 +2283,46 @@ function ConferenceSeedPicker({
 }
 
 // ── Bracket matchup team row ──────────────────────────────────────────────────
-function BracketTeamRow({ matchup, side, teams, saving, onUpdate, isBye }: {
+function BracketTeamRow({ matchup, side, teams, saving, onUpdate }: {
   matchup: BracketMatchup; side: "team1"|"team2"; teams: Team[];
-  saving: boolean; onUpdate: (p: object) => void; isBye?: boolean;
+  saving: boolean; onUpdate: (p: object) => void;
 }) {
-  if (isBye) return (
-    <div style={{ display:"flex", alignItems:"center", padding:"8px 10px", height:48, opacity:0.3 }}>
-      <span style={{ fontSize:"0.72rem", color:"#888", fontStyle:"italic" }}>BYE</span>
-    </div>
-  );
   const idKey    = side==="team1"?"team1_id":"team2_id";
   const scoreKey = side==="team1"?"team1_score":"team2_score";
   const teamId   = matchup[idKey];
   const score    = matchup[scoreKey];
   const team     = (matchup[side] ?? teams.find(t => t.id === teamId)) as Team | null;
   const isWinner = !!(matchup.winner_id && teamId && matchup.winner_id === teamId);
+
   return (
-    <div style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 10px", height:48, background:isWinner?"rgba(22,163,74,0.10)":"transparent" }}>
-      <div style={{ width:24, height:24, borderRadius:4, flexShrink:0, overflow:"hidden", background:"#1e1e1e", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.6rem", fontWeight:700, color:"#666" }}>
-        {team?.logo_url ? <img src={team.logo_url} style={{ width:"100%", height:"100%", objectFit:"contain" }} alt="" /> : (team?.abbreviation?.[0] ?? "—")}
+    <div style={{ display:"flex", alignItems:"center", height:60, background: isWinner ? "rgba(22,163,74,0.09)" : "transparent" }}>
+      {/* Logo — fills full height */}
+      <div style={{ width:60, height:60, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", background:"#0c0c0c", borderRight:"1px solid #1a1a1a" }}>
+        {team?.logo_url
+          ? <img src={team.logo_url} style={{ width:46, height:46, objectFit:"contain" }} alt="" />
+          : <div style={{ width:44, height:44, background:"#141414", borderRadius:6, border:"1px solid #222", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.75rem", fontWeight:700, color:"#333" }}>
+              {team?.abbreviation?.[0] ?? "?"}
+            </div>}
       </div>
-      <select value={teamId ?? ""} onChange={e => onUpdate({ [idKey]: e.target.value||null, winner_id:null })} disabled={saving}
-        style={{ flex:1, minWidth:0, background:"#0d0d0d", border:"none", outline:"none", color:teamId?"#e5e5e5":"#444", fontSize:"0.75rem", cursor:"pointer" }}>
-        <option value="">— TBD —</option>
-        {teams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.abbreviation})</option>)}
-      </select>
-      <input type="number" min="0" placeholder="—" value={score ?? ""} onChange={e => onUpdate({ [scoreKey]: e.target.value!==""?parseInt(e.target.value):null })}
-        style={{ width:36, background:"transparent", border:"none", outline:"none", borderBottom:"1px solid #2a2a2a", color:"#fff", fontSize:"0.8rem", textAlign:"center" }} />
-      {isWinner && <span style={{ fontSize:"0.75rem" }}>🏆</span>}
+      {/* Team name or TBD select */}
+      <div style={{ flex:1, padding:"0 10px", minWidth:0, overflow:"hidden" }}>
+        {team
+          ? <span style={{ fontSize:"0.82rem", fontWeight:700, color: isWinner ? "#4ade80" : "#ddd", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", display:"block" }}>
+              {team.abbreviation}{isWinner && <span style={{ marginLeft:5, fontSize:"0.7rem" }}>🏆</span>}
+            </span>
+          : <select value={teamId ?? ""} onChange={e => onUpdate({ [idKey]: e.target.value||null, winner_id:null })} disabled={saving}
+              style={{ width:"100%", background:"transparent", border:"none", outline:"none", color:"#444", fontSize:"0.72rem", cursor:"pointer" }}>
+              <option value="">— TBD —</option>
+              {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+        }
+      </div>
+      {/* Score / Wins */}
+      <div style={{ padding:"0 14px 0 6px", flexShrink:0 }}>
+        <input type="number" min="0" placeholder="—" value={score ?? ""}
+          onChange={e => onUpdate({ [scoreKey]: e.target.value !== "" ? parseInt(e.target.value) : null })}
+          style={{ width:38, background:"transparent", border:"none", outline:"none", borderBottom:`1px solid ${isWinner?"#16a34a":"#2a2a2a"}`, color: isWinner ? "#4ade80" : "#fff", fontSize:"1rem", fontWeight:700, textAlign:"center" }} />
+      </div>
     </div>
   );
 }
@@ -2377,63 +2389,73 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
     return arr;
   }, [matchups]);
 
-  // Conference bracket columns (by round_order, split East/West/Finals)
-  const confColumns = useMemo(() => {
-    if (!isConferenceBracket) return null;
-    const map = new Map<number,{order:number;east:BracketMatchup[];west:BracketMatchup[];finals:BracketMatchup[]}>();
-    for (const m of matchups) {
-      if (!map.has(m.round_order)) map.set(m.round_order, {order:m.round_order, east:[], west:[], finals:[]});
-      const col = map.get(m.round_order)!;
-      if (m.round_name.startsWith("East ")) col.east.push(m);
-      else if (m.round_name.startsWith("West ")) col.west.push(m);
-      else col.finals.push(m);
+  // Conference rounds grouped by name, sorted by round_order — separate East/West/Finals
+  const westRounds = useMemo(() => {
+    const map = new Map<string,{name:string;order:number;matchups:BracketMatchup[]}>();
+    for (const m of matchups.filter(m=>m.round_name.startsWith("West "))) {
+      if (!map.has(m.round_name)) map.set(m.round_name, {name:m.round_name, order:m.round_order, matchups:[]});
+      map.get(m.round_name)!.matchups.push(m);
     }
-    const cols = [...map.values()].sort((a,b)=>a.order-b.order);
-    for (const col of cols) {
-      col.east.sort((a,b)=>a.matchup_index-b.matchup_index);
-      col.west.sort((a,b)=>a.matchup_index-b.matchup_index);
-    }
-    return cols;
-  }, [matchups, isConferenceBracket]);
+    return [...map.values()].sort((a,b)=>a.order-b.order).map(r=>({...r, matchups: r.matchups.sort((a,b)=>a.matchup_index-b.matchup_index)}));
+  }, [matchups]);
 
+  const eastRounds = useMemo(() => {
+    const map = new Map<string,{name:string;order:number;matchups:BracketMatchup[]}>();
+    for (const m of matchups.filter(m=>m.round_name.startsWith("East "))) {
+      if (!map.has(m.round_name)) map.set(m.round_name, {name:m.round_name, order:m.round_order, matchups:[]});
+      map.get(m.round_name)!.matchups.push(m);
+    }
+    return [...map.values()].sort((a,b)=>a.order-b.order).map(r=>({...r, matchups: r.matchups.sort((a,b)=>a.matchup_index-b.matchup_index)}));
+  }, [matchups]);
+
+  const finalsMatchup = useMemo(() => matchups.find(m=>m.round_name==="Finals") ?? null, [matchups]);
+
+  // Connector lines: West goes L→R (exits right), East goes R→L (exits left)
   const recalcConnectors = useCallback(() => {
     const inner = innerRef.current; if (!inner) return;
     const ir = inner.getBoundingClientRect();
     const paths: {d:string;key:string}[] = [];
-    const drawPath = (fromEl: HTMLElement, toEl: HTMLElement, key: string, toFrac=0.5) => {
+
+    const drawLR = (fromEl: HTMLElement, toEl: HTMLElement, key: string, toFrac=0.5) => {
       const fr=fromEl.getBoundingClientRect(), tr=toEl.getBoundingClientRect();
       const fx=fr.right-ir.left+inner.scrollLeft, fy=fr.top+fr.height/2-ir.top+inner.scrollTop;
       const tx=tr.left-ir.left+inner.scrollLeft,  ty=tr.top+tr.height*toFrac-ir.top+inner.scrollTop;
-      const mx=fx+(tx-fx)*0.5;
-      paths.push({d:`M ${fx} ${fy} H ${mx} V ${ty} H ${tx}`, key});
+      paths.push({d:`M ${fx} ${fy} H ${(fx+tx)/2} V ${ty} H ${tx}`, key});
     };
-    if (isConferenceBracket && confColumns) {
-      const eastNames=[...new Set(matchups.filter(m=>m.round_name.startsWith("East ")).sort((a,b)=>a.round_order-b.round_order).map(m=>m.round_name))];
-      const westNames=[...new Set(matchups.filter(m=>m.round_name.startsWith("West ")).sort((a,b)=>a.round_order-b.round_order).map(m=>m.round_name))];
-      const finalsM=matchups.find(m=>m.round_name==="Finals");
-      for (let ri=0;ri<eastNames.length-1;ri++) {
-        const curMs=matchups.filter(m=>m.round_name===eastNames[ri]).sort((a,b)=>a.matchup_index-b.matchup_index);
-        const nextMs=matchups.filter(m=>m.round_name===eastNames[ri+1]).sort((a,b)=>a.matchup_index-b.matchup_index);
-        for (let mi=0;mi<curMs.length;mi++) { const nM=nextMs[Math.floor(mi/2)]; if(!nM) continue; const fe=matchupEls.current.get(curMs[mi].id),te=matchupEls.current.get(nM.id); if(fe&&te) drawPath(fe,te,`${curMs[mi].id}-${nM.id}`); }
+    const drawRL = (fromEl: HTMLElement, toEl: HTMLElement, key: string, toFrac=0.5) => {
+      const fr=fromEl.getBoundingClientRect(), tr=toEl.getBoundingClientRect();
+      const fx=fr.left-ir.left+inner.scrollLeft,  fy=fr.top+fr.height/2-ir.top+inner.scrollTop;
+      const tx=tr.right-ir.left+inner.scrollLeft, ty=tr.top+tr.height*toFrac-ir.top+inner.scrollTop;
+      paths.push({d:`M ${fx} ${fy} H ${(fx+tx)/2} V ${ty} H ${tx}`, key});
+    };
+
+    if (isConferenceBracket) {
+      // West connectors: left-to-right
+      for (let ri=0; ri<westRounds.length-1; ri++) {
+        const curMs=westRounds[ri].matchups, nextMs=westRounds[ri+1].matchups;
+        for (let mi=0; mi<curMs.length; mi++) { const nM=nextMs[Math.floor(mi/2)]; if(!nM) continue; const fe=matchupEls.current.get(curMs[mi].id),te=matchupEls.current.get(nM.id); if(fe&&te) drawLR(fe,te,`${curMs[mi].id}-${nM.id}`); }
       }
-      if (finalsM&&eastNames.length>0) { const lE=matchups.filter(m=>m.round_name===eastNames[eastNames.length-1]); for(const m of lE){const fe=matchupEls.current.get(m.id),te=matchupEls.current.get(finalsM.id);if(fe&&te)drawPath(fe,te,`${m.id}-fe`,0.25);} }
-      for (let ri=0;ri<westNames.length-1;ri++) {
-        const curMs=matchups.filter(m=>m.round_name===westNames[ri]).sort((a,b)=>a.matchup_index-b.matchup_index);
-        const nextMs=matchups.filter(m=>m.round_name===westNames[ri+1]).sort((a,b)=>a.matchup_index-b.matchup_index);
-        for (let mi=0;mi<curMs.length;mi++) { const nM=nextMs[Math.floor(mi/2)]; if(!nM) continue; const fe=matchupEls.current.get(curMs[mi].id),te=matchupEls.current.get(nM.id); if(fe&&te) drawPath(fe,te,`${curMs[mi].id}-${nM.id}`); }
+      if (finalsMatchup && westRounds.length>0) {
+        const lastW=westRounds[westRounds.length-1].matchups;
+        for (const m of lastW) { const fe=matchupEls.current.get(m.id),te=matchupEls.current.get(finalsMatchup.id); if(fe&&te) drawLR(fe,te,`${m.id}-wf`,0.35); }
       }
-      if (finalsM&&westNames.length>0) { const lW=matchups.filter(m=>m.round_name===westNames[westNames.length-1]); for(const m of lW){const fe=matchupEls.current.get(m.id),te=matchupEls.current.get(finalsM.id);if(fe&&te)drawPath(fe,te,`${m.id}-fw`,0.75);} }
+      // East connectors: right-to-left (from outer R1 toward inner Finals)
+      for (let ri=0; ri<eastRounds.length-1; ri++) {
+        const curMs=eastRounds[ri].matchups, nextMs=eastRounds[ri+1].matchups;
+        for (let mi=0; mi<curMs.length; mi++) { const nM=nextMs[Math.floor(mi/2)]; if(!nM) continue; const fe=matchupEls.current.get(curMs[mi].id),te=matchupEls.current.get(nM.id); if(fe&&te) drawRL(fe,te,`${curMs[mi].id}-${nM.id}`); }
+      }
+      if (finalsMatchup && eastRounds.length>0) {
+        const lastE=eastRounds[eastRounds.length-1].matchups;
+        for (const m of lastE) { const fe=matchupEls.current.get(m.id),te=matchupEls.current.get(finalsMatchup.id); if(fe&&te) drawRL(fe,te,`${m.id}-ef`,0.65); }
+      }
     } else {
-      for (let ri=0;ri<rounds.length-1;ri++) {
+      for (let ri=0; ri<rounds.length-1; ri++) {
         const cur=rounds[ri],next=rounds[ri+1];
-        for (let mi=0;mi<cur.matchups.length;mi++) {
-          const m=cur.matchups[mi],nM=next.matchups[Math.floor(mi/2)]; if(!nM) continue;
-          const fe=matchupEls.current.get(m.id),te=matchupEls.current.get(nM.id); if(fe&&te) drawPath(fe,te,`${m.id}-${nM.id}`);
-        }
+        for (let mi=0; mi<cur.matchups.length; mi++) { const m=cur.matchups[mi],nM=next.matchups[Math.floor(mi/2)]; if(!nM) continue; const fe=matchupEls.current.get(m.id),te=matchupEls.current.get(nM.id); if(fe&&te) drawLR(fe,te,`${m.id}-${nM.id}`); }
       }
     }
     setConnectors(paths);
-  }, [rounds, matchups, isConferenceBracket, confColumns]);
+  }, [rounds, westRounds, eastRounds, finalsMatchup, isConferenceBracket]);
 
   useLayoutEffect(() => { const t=setTimeout(recalcConnectors,40); return ()=>clearTimeout(t); }, [recalcConnectors]);
 
@@ -2456,32 +2478,54 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
     setGenerating(true); setErr("");
     for (const m of matchups) await fetch(`/api/playoff-brackets?id=${m.id}`,{method:"DELETE"});
 
+    // Build one conference bracket. Bye teams skip Round 1 — pre-filled into Round 2.
+    // Returns the single team if N=1 (auto-advances to Finals).
+    const buildConf = async (seeds: Team[], prefix: string): Promise<Team|null> => {
+      const N = seeds.length;
+      if (N === 1) return seeds[0]; // Only 1 team — goes straight to Finals
+      const P = nextPow2(N);
+      const totalR = Math.log2(P);
+      const names = Array.from({length:totalR},(_,i)=>{ const f=totalR-i; return f===1?`${prefix} Finals`:f===2?`${prefix} Semifinals`:`${prefix} Round ${i+1}`; });
+      const slots = buildBracketSlots(P);
+      // Map: R2 matchup_index → {t1, t2} for teams that get byes
+      const r2pre = new Map<number,{t1:string|null,t2:string|null}>();
+      for (let i=0; i<P/2; i++) {
+        const s1=slots[i*2], s2=slots[i*2+1];
+        const t1=s1<=N?seeds[s1-1]:null, t2=s2<=N?seeds[s2-1]:null;
+        if (t1&&t2) {
+          // Real game — create R1 matchup
+          await upsert({league,season,round_name:names[0],round_order:0,matchup_index:i,team1_id:t1.id,team2_id:t2.id,winner_id:null,team1_score:null,team2_score:null});
+        } else if (t1) {
+          // Bye — skip to R2; pre-fill the slot
+          const r2i=Math.floor(i/2);
+          if (!r2pre.has(r2i)) r2pre.set(r2i,{t1:null,t2:null});
+          const slot=r2pre.get(r2i)!;
+          if (i%2===0) slot.t1=t1.id; else slot.t2=t1.id;
+        }
+      }
+      // Subsequent rounds (R2+)
+      for (let r=1; r<totalR; r++) {
+        const mc=P>>(r+1);
+        for (let i=0; i<mc; i++) {
+          const pf=r===1?r2pre.get(i):undefined;
+          await upsert({league,season,round_name:names[r],round_order:r,matchup_index:i,team1_id:pf?.t1??null,team2_id:pf?.t2??null,winner_id:null,team1_score:null,team2_score:null});
+        }
+      }
+      return null;
+    };
+
     const PE=nextPow2(NE), PW=nextPow2(NW);
     const rE=Math.log2(PE), rW=Math.log2(PW);
     const maxConf=Math.max(rE,rW);
-    const eastNames=Array.from({length:rE},(_,i)=>{const f=rE-i;return f===1?"East Finals":f===2?"East Semifinals":`East Round ${i+1}`;});
-    const westNames=Array.from({length:rW},(_,i)=>{const f=rW-i;return f===1?"West Finals":f===2?"West Semifinals":`West Round ${i+1}`;});
 
-    // East R1 (seeded matchups)
-    const slotsE=buildBracketSlots(PE);
-    for (let i=0;i<PE/2;i++) {
-      const s1=slotsE[i*2],s2=slotsE[i*2+1];
-      const t1=s1<=NE?eastSeeds[s1-1]:null, t2=s2<=NE?eastSeeds[s2-1]:null;
-      await upsert({league,season,round_name:eastNames[0],round_order:0,matchup_index:i,team1_id:t1?.id??null,team2_id:t2?.id??null,winner_id:!t2&&t1?t1.id:null,team1_score:null,team2_score:null});
-    }
-    for (let r=1;r<rE;r++) { const mc=PE>>(r+1); for(let i=0;i<mc;i++) await upsert({league,season,round_name:eastNames[r],round_order:r,matchup_index:i,team1_id:null,team2_id:null,winner_id:null,team1_score:null,team2_score:null}); }
+    const [eastSolo, westSolo] = await Promise.all([
+      buildConf(eastSeeds,"East"),
+      buildConf(westSeeds,"West"),
+    ]);
 
-    // West R1 (seeded matchups)
-    const slotsW=buildBracketSlots(PW);
-    for (let i=0;i<PW/2;i++) {
-      const s1=slotsW[i*2],s2=slotsW[i*2+1];
-      const t1=s1<=NW?westSeeds[s1-1]:null, t2=s2<=NW?westSeeds[s2-1]:null;
-      await upsert({league,season,round_name:westNames[0],round_order:0,matchup_index:i,team1_id:t1?.id??null,team2_id:t2?.id??null,winner_id:!t2&&t1?t1.id:null,team1_score:null,team2_score:null});
-    }
-    for (let r=1;r<rW;r++) { const mc=PW>>(r+1); for(let i=0;i<mc;i++) await upsert({league,season,round_name:westNames[r],round_order:r,matchup_index:i,team1_id:null,team2_id:null,winner_id:null,team1_score:null,team2_score:null}); }
-
-    // Championship Finals
-    await upsert({league,season,round_name:"Finals",round_order:maxConf,matchup_index:0,team1_id:null,team2_id:null,winner_id:null,team1_score:null,team2_score:null});
+    // Championship Finals (East winner vs West winner — West on left=team1, East on right=team2)
+    await upsert({league,season,round_name:"Finals",round_order:maxConf,matchup_index:0,
+      team1_id:westSolo?.id??null, team2_id:eastSolo?.id??null, winner_id:null,team1_score:null,team2_score:null});
 
     setGenerating(false);
     await refresh();
@@ -2497,44 +2541,46 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
   };
 
   const canvasH = useMemo(() => {
-    if (isConferenceBracket && confColumns) {
-      const maxE=Math.max(...confColumns.map(c=>c.east.length), 1);
-      const maxW=Math.max(...confColumns.map(c=>c.west.length), 1);
-      return maxE*MATCHUP_H + Math.max(0,maxE-1)*12 + 48 + MATCHUP_H*2+8 + 48 + maxW*MATCHUP_H + Math.max(0,maxW-1)*12 + 80;
+    if (isConferenceBracket) {
+      let maxH = MATCHUP_H;
+      // West: ri = index from left (R1=0)
+      westRounds.forEach((col,ri)=>{ const n=col.matchups.length; const h=topOffsetForRound(ri)+n*MATCHUP_H+Math.max(0,n-1)*gapForRound(ri); if(h>maxH) maxH=h; });
+      // East: eastRounds[i] uses riFromRight = i
+      eastRounds.forEach((col,i)=>{ const n=col.matchups.length; const h=topOffsetForRound(i)+n*MATCHUP_H+Math.max(0,n-1)*gapForRound(i); if(h>maxH) maxH=h; });
+      return maxH + 80;
     }
     let max=200;
     for (let ri=0;ri<rounds.length;ri++) { const n=rounds[ri].matchups.length; const h=topOffsetForRound(ri)+n*MATCHUP_H+Math.max(0,n-1)*gapForRound(ri); if(h>max) max=h; }
     return max+80;
-  }, [rounds, isConferenceBracket, confColumns]);
+  }, [rounds, westRounds, eastRounds, isConferenceBracket]);
 
-  // Reusable matchup card
+  // Matchup card component
   const MatchupCard = ({ m }: { m: BracketMatchup }) => {
     const t1=(m.team1??teams.find(t=>t.id===m.team1_id)) as Team|null;
     const t2=(m.team2??teams.find(t=>t.id===m.team2_id)) as Team|null;
-    const isByeMatchup=!m.team2_id&&!!m.winner_id&&m.round_order===0;
     return (
       <div ref={el=>{ if(el) matchupEls.current.set(m.id,el); else matchupEls.current.delete(m.id); }}
-        style={{ borderRadius:10, border:`1px solid ${isByeMatchup?"#181818":"#242424"}`, background:"#141414", overflow:"hidden", flexShrink:0, opacity:isByeMatchup?0.7:1 }}>
+        style={{ borderRadius:10, border:"1px solid #242424", background:"#141414", overflow:"hidden", flexShrink:0 }}>
         <BracketTeamRow matchup={m} side="team1" teams={teams} saving={saving===m.id} onUpdate={p=>updateMatchup(m,p)} />
         <div style={{ height:1, background:"#1e1e1e" }}/>
-        <BracketTeamRow matchup={m} side="team2" teams={teams} saving={saving===m.id} onUpdate={p=>updateMatchup(m,p)} isBye={isByeMatchup} />
-        {!isByeMatchup && (
-          <div style={{ padding:"5px 8px", borderTop:"1px solid #181818", display:"flex", alignItems:"center", gap:4, background:"#0f0f0f" }}>
-            {([{id:m.team1_id,team:t1},{id:m.team2_id,team:t2}] as const).map(({id,team},wi)=>
-              id?(
-                <button key={wi} onClick={()=>updateMatchup(m,{winner_id:m.winner_id===id?null:id})}
-                  style={{ fontSize:"0.65rem", padding:"2px 7px", borderRadius:4, border:"1px solid", background:m.winner_id===id?"rgba(22,163,74,0.15)":"transparent", borderColor:m.winner_id===id?"#16a34a":"#2a2a2a", color:m.winner_id===id?"#4ade80":"#555", cursor:"pointer" }}>
-                  {team?.abbreviation??`T${wi+1}`} 🏆
-                </button>
-              ):null
-            )}
-          </div>
-        )}
+        <BracketTeamRow matchup={m} side="team2" teams={teams} saving={saving===m.id} onUpdate={p=>updateMatchup(m,p)} />
+        <div style={{ padding:"5px 8px", borderTop:"1px solid #181818", display:"flex", alignItems:"center", gap:4, background:"#0f0f0f" }}>
+          {([{id:m.team1_id,team:t1},{id:m.team2_id,team:t2}] as const).map(({id,team},wi)=>
+            id ? (
+              <button key={wi} onClick={()=>updateMatchup(m,{winner_id:m.winner_id===id?null:id})}
+                style={{ fontSize:"0.65rem", padding:"2px 8px", borderRadius:4, border:"1px solid", background:m.winner_id===id?"rgba(22,163,74,0.15)":"transparent", borderColor:m.winner_id===id?"#16a34a":"#2a2a2a", color:m.winner_id===id?"#4ade80":"#555", cursor:"pointer" }}>
+                {team?.abbreviation??`T${wi+1}`} 🏆
+              </button>
+            ) : null
+          )}
+        </div>
       </div>
     );
   };
 
   const hasEnoughTeams = eastSeeds.length>=1 && westSeeds.length>=1;
+  // Finals vertical centering: center card within canvas
+  const finalsTopPad = Math.max(0, Math.floor((canvasH - 80 - MATCHUP_H - 31) / 2));
 
   return (
     <div>
@@ -2556,7 +2602,7 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
           />
           <div style={{ marginTop:20, paddingTop:16, borderTop:"1px solid #1e1e1e", display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
             <button onClick={generateBracket} disabled={generating||!hasEnoughTeams}
-              style={{ background:!hasEnoughTeams?"#1a1a1a":"#2563eb", border:"none", borderRadius:8, color:!hasEnoughTeams?"#444":"#fff", fontWeight:700, fontSize:"0.85rem", padding:"8px 20px", cursor:!hasEnoughTeams?"default":"pointer", transition:"background 0.15s" }}>
+              style={{ background:!hasEnoughTeams?"#1a1a1a":"#2563eb", border:"none", borderRadius:8, color:!hasEnoughTeams?"#444":"#fff", fontWeight:700, fontSize:"0.85rem", padding:"8px 20px", cursor:!hasEnoughTeams?"default":"pointer" }}>
               {generating ? "Generating…" : matchups.length>0 ? "↻ Regenerate Bracket" : "Generate Bracket →"}
             </button>
             {!hasEnoughTeams && <span style={{ color:"#444", fontSize:"0.75rem" }}>Add at least 1 team per conference</span>}
@@ -2564,81 +2610,67 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
         </div>
       ) : (
         <div>
-          {/* Bracket toolbar */}
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12, flexWrap:"wrap", gap:8 }}>
-            <button onClick={()=>setView("setup")} style={{ background:"transparent", border:"1px solid #2a2a2a", borderRadius:8, color:"#888", fontSize:"0.8rem", padding:"5px 12px", cursor:"pointer" }}>
-              ← Edit Teams
-            </button>
+            <button onClick={()=>setView("setup")} style={{ background:"transparent", border:"1px solid #2a2a2a", borderRadius:8, color:"#888", fontSize:"0.8rem", padding:"5px 12px", cursor:"pointer" }}>← Edit Teams</button>
             <span style={{ color:"#555", fontSize:"0.75rem" }}>{matchups.length} matchups · {season}</span>
             <button onClick={clearBracket} disabled={clearing} style={{ background:"#2a0a0a", border:"1px solid #5a1a1a", borderRadius:8, color:"#f87171", fontSize:"0.8rem", padding:"5px 12px", cursor:"pointer" }}>
-              {clearing ? "Clearing…" : "Clear Bracket"}
+              {clearing?"Clearing…":"Clear Bracket"}
             </button>
           </div>
 
-          {/* Bracket canvas */}
           <div style={{ overflowX:"auto", background:"#0a0a0a", borderRadius:"1rem", border:"1px solid #1e1e1e" }}>
             <div ref={innerRef} style={{ position:"relative", minWidth:"max-content", height:canvasH, padding:"28px 36px" }}>
               <svg style={{ position:"absolute", inset:0, width:"100%", height:"100%", pointerEvents:"none", overflow:"visible", zIndex:1 }}>
                 {connectors.map(c=><path key={c.key} d={c.d} fill="none" stroke="#2a2a2a" strokeWidth={2}/>)}
               </svg>
 
-              {isConferenceBracket && confColumns ? (
-                /* Conference bracket: East on top, West on bottom, Finals centered */
-                <div style={{ display:"flex", gap:52, alignItems:"flex-start", position:"relative", zIndex:2 }}>
-                  {confColumns.map(col => {
-                    const maxE=Math.max(...confColumns.map(c=>c.east.length),1);
-                    const maxW=Math.max(...confColumns.map(c=>c.west.length),1);
-                    const eastSecH=maxE*MATCHUP_H+Math.max(0,maxE-1)*12;
-                    const westSecH=maxW*MATCHUP_H+Math.max(0,maxW-1)*12;
-                    const finalsSecH=MATCHUP_H*2+8+48;
+              {isConferenceBracket ? (
+                /* Mirrored conference bracket:
+                   WEST (left→right) | Finals (center) | EAST (right→left, rendered Finals→R1) */
+                <div style={{ display:"flex", gap:44, alignItems:"flex-start", position:"relative", zIndex:2 }}>
+
+                  {/* ── WEST side: R1 leftmost, Finals rightmost before center ── */}
+                  {westRounds.map((col,ri)=>(
+                    <div key={col.name} style={{ width:220, flexShrink:0 }}>
+                      <div style={{ fontSize:"0.62rem", fontWeight:700, color:"#ef4444", textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:10, textAlign:"center" }}>
+                        {col.name}
+                      </div>
+                      <div style={{ display:"flex", flexDirection:"column", paddingTop:topOffsetForRound(ri), gap:gapForRound(ri) }}>
+                        {col.matchups.map(m=><MatchupCard key={m.id} m={m} />)}
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* ── FINALS: centered vertically ── */}
+                  {finalsMatchup && (
+                    <div style={{ width:220, flexShrink:0 }}>
+                      <div style={{ height: finalsTopPad }} />
+                      <div style={{ fontSize:"0.65rem", fontWeight:700, color:"#facc15", textTransform:"uppercase", letterSpacing:"0.12em", marginBottom:10, textAlign:"center" }}>🏆 Finals</div>
+                      <MatchupCard m={finalsMatchup} />
+                    </div>
+                  )}
+
+                  {/* ── EAST side: East Finals leftmost (closest to center), East R1 rightmost ── */}
+                  {[...eastRounds].reverse().map((col,reverseIdx)=>{
+                    const riFromRight = eastRounds.length - 1 - reverseIdx;
                     return (
-                      <div key={col.order} style={{ width:234, flexShrink:0, display:"flex", flexDirection:"column" }}>
-                        {/* East section */}
-                        <div style={{ height:eastSecH, display:"flex", alignItems:"center" }}>
-                          {col.east.length>0 && (
-                            <div style={{ width:"100%" }}>
-                              <div style={{ fontSize:"0.62rem", color:"#3b82f6", fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase", marginBottom:8, textAlign:"center" }}>
-                                {col.east[0].round_name}
-                              </div>
-                              <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-                                {col.east.map(m=><MatchupCard key={m.id} m={m} />)}
-                              </div>
-                            </div>
-                          )}
+                      <div key={col.name} style={{ width:220, flexShrink:0 }}>
+                        <div style={{ fontSize:"0.62rem", fontWeight:700, color:"#3b82f6", textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:10, textAlign:"center" }}>
+                          {col.name}
                         </div>
-                        {/* Center: Finals or divider */}
-                        <div style={{ height:finalsSecH, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                          {col.finals.length>0 ? (
-                            <div style={{ width:"100%" }}>
-                              <div style={{ fontSize:"0.65rem", color:"#facc15", fontWeight:700, letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:8, textAlign:"center" }}>🏆 Finals</div>
-                              {col.finals.map(m=><MatchupCard key={m.id} m={m} />)}
-                            </div>
-                          ) : (
-                            <div style={{ width:"80%", height:1, background:"#181818" }} />
-                          )}
-                        </div>
-                        {/* West section */}
-                        <div style={{ height:westSecH, display:"flex", alignItems:"center" }}>
-                          {col.west.length>0 && (
-                            <div style={{ width:"100%" }}>
-                              <div style={{ fontSize:"0.62rem", color:"#ef4444", fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase", marginBottom:8, textAlign:"center" }}>
-                                {col.west[0].round_name}
-                              </div>
-                              <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-                                {col.west.map(m=><MatchupCard key={m.id} m={m} />)}
-                              </div>
-                            </div>
-                          )}
+                        <div style={{ display:"flex", flexDirection:"column", paddingTop:topOffsetForRound(riFromRight), gap:gapForRound(riFromRight) }}>
+                          {col.matchups.map(m=><MatchupCard key={m.id} m={m} />)}
                         </div>
                       </div>
                     );
                   })}
+
                 </div>
               ) : (
                 /* Flat bracket */
-                <div style={{ display:"flex", gap:52, alignItems:"flex-start", position:"relative", zIndex:2 }}>
+                <div style={{ display:"flex", gap:44, alignItems:"flex-start", position:"relative", zIndex:2 }}>
                   {rounds.map((round,ri)=>(
-                    <div key={round.name} style={{ width:234, flexShrink:0 }}>
+                    <div key={round.name} style={{ width:220, flexShrink:0 }}>
                       <div style={{ fontSize:"0.7rem", fontWeight:700, color:"#555", textTransform:"uppercase", letterSpacing:"0.12em", marginBottom:14, paddingBottom:8, borderBottom:"1px solid #1e1e1e", textAlign:"center" }}>
                         {round.name}
                       </div>
