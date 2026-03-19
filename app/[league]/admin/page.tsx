@@ -2160,343 +2160,325 @@ type BracketMatchup = {
   team2?: { id: string; name: string; abbreviation: string; logo_url?: string | null } | null;
 };
 
-const MATCHUP_H = 96; // px — height of one matchup box
-const BASE_GAP  = 16; // px — min gap between matchups in round 0
+const MATCHUP_H = 96;
+const BASE_GAP  = 16;
 
-function gapForRound(ri: number) {
-  return (Math.pow(2, ri) - 1) * (MATCHUP_H + BASE_GAP) + BASE_GAP;
-}
-function topOffsetForRound(ri: number) {
-  return ((Math.pow(2, ri) - 1) * (MATCHUP_H + BASE_GAP)) / 2;
+function gapForRound(ri: number) { return (Math.pow(2, ri) - 1) * (MATCHUP_H + BASE_GAP) + BASE_GAP; }
+function topOffsetForRound(ri: number) { return ((Math.pow(2, ri) - 1) * (MATCHUP_H + BASE_GAP)) / 2; }
+function nextPow2(n: number) { let p = 1; while (p < n) p *= 2; return p; }
+
+function buildBracketSlots(P: number): number[] {
+  if (P === 2) return [1, 2];
+  const half = buildBracketSlots(P / 2);
+  const result: number[] = [];
+  for (const s of half) { result.push(s); result.push(P + 1 - s); }
+  return result;
 }
 
-// ── Matchup team row ──────────────────────────────────────────────────────────
-function BracketTeamRow({
-  matchup, side, teams, saving, onUpdate,
-}: {
-  matchup: BracketMatchup; side: "team1" | "team2"; teams: Team[];
-  saving: boolean; onUpdate: (patch: object) => void;
+function getRoundNames(total: number): string[] {
+  return Array.from({ length: total }, (_, i) => {
+    const fromEnd = total - i;
+    if (fromEnd === 1) return "Finals";
+    if (fromEnd === 2) return "Semifinals";
+    if (fromEnd === 3) return "Quarterfinals";
+    return `Round ${i + 1}`;
+  });
+}
+
+// ── Seed picker ───────────────────────────────────────────────────────────────
+function SeedPicker({ allTeams, seeded, onChange }: { allTeams: Team[]; seeded: Team[]; onChange: (t: Team[]) => void }) {
+  const seededIds = new Set(seeded.map(t => t.id));
+  const available = allTeams.filter(t => !seededIds.has(t.id));
+  const add  = (team: Team) => onChange([...seeded, team]);
+  const remove = (i: number) => onChange(seeded.filter((_, j) => j !== i));
+  const moveUp = (i: number) => { if (i === 0) return; const a = [...seeded]; [a[i-1],a[i]]=[a[i],a[i-1]]; onChange(a); };
+  const moveDown = (i: number) => { if (i === seeded.length-1) return; const a=[...seeded]; [a[i],a[i+1]]=[a[i+1],a[i]]; onChange(a); };
+
+  const N = seeded.length;
+  const P = N >= 2 ? nextPow2(N) : 0;
+  const byes = P - N;
+
+  return (
+    <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+      {/* Left: seeded list */}
+      <div style={{ flex: "1 1 260px" }}>
+        <div style={{ fontSize: "0.7rem", fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>
+          Playoff Seeds
+          {N >= 2 && <span style={{ color: "#444", fontWeight: 400, marginLeft: 8 }}>{N} teams · {P}-team bracket · {byes} bye{byes !== 1 ? "s" : ""}</span>}
+        </div>
+        {seeded.length === 0
+          ? <div style={{ color: "#444", fontSize: "0.8rem", padding: "12px 0" }}>No teams yet — add from the right →</div>
+          : <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+              {seeded.map((team, i) => (
+                <div key={team.id} style={{ display: "flex", alignItems: "center", gap: 8, background: "#161616", border: "1px solid #222", borderRadius: 8, padding: "6px 10px" }}>
+                  <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#555", width: 22, textAlign: "center", flexShrink: 0 }}>#{i+1}</span>
+                  {team.logo_url && <img src={team.logo_url} style={{ width: 20, height: 20, objectFit: "contain", borderRadius: 3, flexShrink: 0 }} alt="" />}
+                  <span style={{ flex: 1, fontSize: "0.85rem", color: "#ddd", fontWeight: 600 }}>{team.name}</span>
+                  {i < byes && <span style={{ fontSize: "0.6rem", color: "#facc15", background: "rgba(234,179,8,0.08)", border: "1px solid rgba(234,179,8,0.2)", borderRadius: 4, padding: "1px 5px", flexShrink: 0 }}>BYE</span>}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                    <button onClick={() => moveUp(i)} disabled={i === 0} style={{ background: "none", border: "none", color: i===0?"#2a2a2a":"#555", cursor: i===0?"default":"pointer", padding: "0 3px", fontSize: "0.55rem", lineHeight: 1.4 }}>▲</button>
+                    <button onClick={() => moveDown(i)} disabled={i===seeded.length-1} style={{ background: "none", border: "none", color: i===seeded.length-1?"#2a2a2a":"#555", cursor: i===seeded.length-1?"default":"pointer", padding: "0 3px", fontSize: "0.55rem", lineHeight: 1.4 }}>▼</button>
+                  </div>
+                  <button onClick={() => remove(i)} style={{ background: "none", border: "none", color: "#3a1a1a", cursor: "pointer", fontSize: "0.75rem", padding: "0 2px" }} onMouseEnter={e=>(e.currentTarget.style.color="#f87171")} onMouseLeave={e=>(e.currentTarget.style.color="#3a1a1a")}>✕</button>
+                </div>
+              ))}
+            </div>
+        }
+      </div>
+      {/* Right: available teams */}
+      <div style={{ flex: "1 1 200px" }}>
+        <div style={{ fontSize: "0.7rem", fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>Add Team</div>
+        {available.length === 0
+          ? <div style={{ color: "#444", fontSize: "0.8rem" }}>All teams added.</div>
+          : <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {available.map(team => (
+                <button key={team.id} onClick={() => add(team)} style={{ display: "flex", alignItems: "center", gap: 8, background: "transparent", border: "1px solid #1e1e1e", borderRadius: 8, padding: "7px 10px", cursor: "pointer", textAlign: "left", color: "#777" }}
+                  onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.borderColor="#333";(e.currentTarget as HTMLElement).style.color="#fff";}}
+                  onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.borderColor="#1e1e1e";(e.currentTarget as HTMLElement).style.color="#777";}}>
+                  {team.logo_url && <img src={team.logo_url} style={{ width: 20, height: 20, objectFit: "contain", borderRadius: 3 }} alt="" />}
+                  <span style={{ flex: 1, fontSize: "0.85rem", fontWeight: 600 }}>{team.name}</span>
+                  <span style={{ fontSize: "0.75rem", opacity: 0.4 }}>+</span>
+                </button>
+              ))}
+            </div>
+        }
+      </div>
+    </div>
+  );
+}
+
+// ── Bracket matchup team row ──────────────────────────────────────────────────
+function BracketTeamRow({ matchup, side, teams, saving, onUpdate, isBye }: {
+  matchup: BracketMatchup; side: "team1"|"team2"; teams: Team[];
+  saving: boolean; onUpdate: (p: object) => void; isBye?: boolean;
 }) {
+  if (isBye) return (
+    <div style={{ display: "flex", alignItems: "center", padding: "8px 10px", height: 48, opacity: 0.3 }}>
+      <span style={{ fontSize: "0.72rem", color: "#888", fontStyle: "italic" }}>BYE</span>
+    </div>
+  );
   const idKey    = side === "team1" ? "team1_id"    : "team2_id";
   const scoreKey = side === "team1" ? "team1_score" : "team2_score";
   const teamId   = matchup[idKey];
   const score    = matchup[scoreKey];
   const team     = (matchup[side] ?? teams.find(t => t.id === teamId)) as Team | null;
   const isWinner = !!(matchup.winner_id && teamId && matchup.winner_id === teamId);
-
   return (
-    <div style={{
-      display: "flex", alignItems: "center", gap: 6, padding: "8px 10px",
-      background: isWinner ? "rgba(22,163,74,0.10)" : "transparent",
-    }}>
-      {/* Logo / abbr badge */}
-      <div style={{
-        width: 24, height: 24, borderRadius: 4, flexShrink: 0, overflow: "hidden",
-        background: "#1e1e1e", display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: "0.6rem", fontWeight: 700, color: "#666",
-      }}>
-        {team?.logo_url
-          ? <img src={team.logo_url} style={{ width: "100%", height: "100%", objectFit: "contain" }} alt="" />
-          : (team?.abbreviation?.[0] ?? "?")}
+    <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px", height: 48, background: isWinner ? "rgba(22,163,74,0.10)" : "transparent" }}>
+      <div style={{ width: 24, height: 24, borderRadius: 4, flexShrink: 0, overflow: "hidden", background: "#1e1e1e", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.6rem", fontWeight: 700, color: "#666" }}>
+        {team?.logo_url ? <img src={team.logo_url} style={{ width: "100%", height: "100%", objectFit: "contain" }} alt="" /> : (team?.abbreviation?.[0] ?? "—")}
       </div>
-
-      {/* Team selector */}
-      <select
-        value={teamId ?? ""}
-        onChange={e => onUpdate({ [idKey]: e.target.value || null, winner_id: null })}
-        disabled={saving}
-        style={{
-          flex: 1, minWidth: 0, background: "#0d0d0d", border: "none", outline: "none",
-          color: teamId ? "#e5e5e5" : "#444", fontSize: "0.75rem", cursor: "pointer",
-        }}
-      >
+      <select value={teamId ?? ""} onChange={e => onUpdate({ [idKey]: e.target.value||null, winner_id: null })} disabled={saving}
+        style={{ flex: 1, minWidth: 0, background: "#0d0d0d", border: "none", outline: "none", color: teamId?"#e5e5e5":"#444", fontSize: "0.75rem", cursor: "pointer" }}>
         <option value="">— TBD —</option>
-        <option value="BYE">BYE</option>
         {teams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.abbreviation})</option>)}
       </select>
-
-      {/* Score */}
-      <input
-        type="number" min="0" placeholder="—"
-        value={score ?? ""}
-        onChange={e => onUpdate({ [scoreKey]: e.target.value !== "" ? parseInt(e.target.value) : null })}
-        style={{
-          width: 38, background: "transparent", border: "none", outline: "none",
-          borderBottom: "1px solid #2a2a2a", color: "#fff", fontSize: "0.8rem",
-          textAlign: "center",
-        }}
-      />
-
-      {/* Winner glow */}
-      {isWinner && <span style={{ fontSize: "0.75rem", flexShrink: 0 }}>🏆</span>}
+      <input type="number" min="0" placeholder="—" value={score ?? ""} onChange={e => onUpdate({ [scoreKey]: e.target.value!==""?parseInt(e.target.value):null })}
+        style={{ width: 36, background: "transparent", border: "none", outline: "none", borderBottom: "1px solid #2a2a2a", color: "#fff", fontSize: "0.8rem", textAlign: "center" }} />
+      {isWinner && <span style={{ fontSize: "0.75rem" }}>🏆</span>}
     </div>
   );
 }
 
-// ── Add-round input ───────────────────────────────────────────────────────────
-function AddRoundInput({ onAdd }: { onAdd: (name: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
-  const submit = () => { if (name.trim()) { onAdd(name.trim()); setName(""); setOpen(false); } };
-  if (!open) return (
-    <button
-      onClick={() => setOpen(true)}
-      style={{ background: "#1a1a1a", border: "1px solid #2a2a2a", borderRadius: 8, color: "#888", fontSize: "0.8rem", padding: "6px 14px", cursor: "pointer" }}
-      onMouseEnter={e => (e.currentTarget.style.color = "#fff")}
-      onMouseLeave={e => (e.currentTarget.style.color = "#888")}
-    >
-      + Add Round
-    </button>
-  );
-  return (
-    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-      <input
-        autoFocus placeholder="Round name (e.g. First Round)"
-        value={name} onChange={e => setName(e.target.value)}
-        onKeyDown={e => { if (e.key === "Enter") submit(); if (e.key === "Escape") setOpen(false); }}
-        style={{ background: "#1a1a1a", border: "1px solid #333", borderRadius: 6, padding: "5px 10px", color: "#fff", fontSize: "0.8rem", width: 210, outline: "none" }}
-      />
-      <button onClick={submit} style={{ background: "#2563eb", border: "none", borderRadius: 6, color: "#fff", fontSize: "0.8rem", padding: "5px 12px", cursor: "pointer" }}>Add</button>
-      <button onClick={() => setOpen(false)} style={{ background: "transparent", border: "1px solid #2a2a2a", borderRadius: 6, color: "#666", fontSize: "0.8rem", padding: "5px 8px", cursor: "pointer" }}>✕</button>
-    </div>
-  );
-}
-
-// ── Main Playoffs tab ─────────────────────────────────────────────────────────
+// ── Main PlayoffsTab ──────────────────────────────────────────────────────────
 function PlayoffsTab({ league, season }: { league: string; season: string }) {
-  const [matchups, setMatchups]   = useState<BracketMatchup[]>([]);
-  const [teams, setTeams]         = useState<Team[]>([]);
-  const [err, setErr]             = useState("");
-  const [saving, setSaving]       = useState<string | null>(null);
-  const [clearing, setClearing]   = useState(false);
-  const [connectors, setConnectors] = useState<{ d: string; key: string }[]>([]);
+  const [matchups, setMatchups]       = useState<BracketMatchup[]>([]);
+  const [teams, setTeams]             = useState<Team[]>([]);
+  const [seededTeams, setSeededTeams] = useState<Team[]>([]);
+  const [view, setView]               = useState<"setup"|"bracket">("setup");
+  const [err, setErr]                 = useState("");
+  const [saving, setSaving]           = useState<string|null>(null);
+  const [generating, setGenerating]   = useState(false);
+  const [clearing, setClearing]       = useState(false);
+  const [connectors, setConnectors]   = useState<{d:string;key:string}[]>([]);
 
-  const innerRef      = useRef<HTMLDivElement>(null);
-  const matchupEls    = useRef<Map<string, HTMLElement>>(new Map());
+  const innerRef   = useRef<HTMLDivElement>(null);
+  const matchupEls = useRef<Map<string,HTMLElement>>(new Map());
 
   const refresh = useCallback(async () => {
     const [m, t] = await Promise.all([
-      fetch(`/api/playoff-brackets?league=${encodeURIComponent(league)}&season=${encodeURIComponent(season)}`).then(r => r.json()),
-      fetch(`/api/teams?league=${league}&season=${encodeURIComponent(season)}`).then(r => r.json()),
+      fetch(`/api/playoff-brackets?league=${encodeURIComponent(league)}&season=${encodeURIComponent(season)}`).then(r=>r.json()),
+      fetch(`/api/teams?league=${league}&season=${encodeURIComponent(season)}`).then(r=>r.json()),
     ]);
-    setMatchups(Array.isArray(m) ? m : []);
-    setTeams(Array.isArray(t) ? t : []);
+    const ms: BracketMatchup[] = Array.isArray(m) ? m : [];
+    const ts: Team[] = Array.isArray(t) ? t : [];
+    setMatchups(ms); setTeams(ts);
+    if (ms.length > 0) setView("bracket");
   }, [league, season]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  // Group matchups into sorted rounds
   const rounds = useMemo(() => {
-    const map = new Map<string, { name: string; order: number; matchups: BracketMatchup[] }>();
+    const map = new Map<string,{name:string;order:number;matchups:BracketMatchup[]}>();
     for (const m of matchups) {
-      if (!map.has(m.round_name)) map.set(m.round_name, { name: m.round_name, order: m.round_order, matchups: [] });
+      if (!map.has(m.round_name)) map.set(m.round_name, {name:m.round_name, order:m.round_order, matchups:[]});
       map.get(m.round_name)!.matchups.push(m);
     }
-    const arr = [...map.values()].sort((a, b) => a.order - b.order);
-    for (const r of arr) r.matchups.sort((a, b) => a.matchup_index - b.matchup_index);
+    const arr = [...map.values()].sort((a,b)=>a.order-b.order);
+    for (const r of arr) r.matchups.sort((a,b)=>a.matchup_index-b.matchup_index);
     return arr;
   }, [matchups]);
 
-  // Recalculate SVG connector lines after layout
   const recalcConnectors = useCallback(() => {
-    const inner = innerRef.current;
-    if (!inner) return;
-    const innerRect = inner.getBoundingClientRect();
-    const paths: { d: string; key: string }[] = [];
-
-    for (let ri = 0; ri < rounds.length - 1; ri++) {
-      const cur  = rounds[ri];
-      const next = rounds[ri + 1];
+    const inner = innerRef.current; if (!inner) return;
+    const ir = inner.getBoundingClientRect();
+    const paths: {d:string;key:string}[] = [];
+    for (let ri = 0; ri < rounds.length-1; ri++) {
+      const cur=rounds[ri], next=rounds[ri+1];
       for (let mi = 0; mi < cur.matchups.length; mi++) {
-        const m     = cur.matchups[mi];
-        const nextM = next.matchups[Math.floor(mi / 2)];
+        const m=cur.matchups[mi], nextM=next.matchups[Math.floor(mi/2)];
         if (!nextM) continue;
-        const fromEl = matchupEls.current.get(m.id);
-        const toEl   = matchupEls.current.get(nextM.id);
-        if (!fromEl || !toEl) continue;
-
-        const fRect = fromEl.getBoundingClientRect();
-        const tRect = toEl.getBoundingClientRect();
-        const fx = fRect.right  - innerRect.left + inner.scrollLeft;
-        const fy = fRect.top    + fRect.height / 2 - innerRect.top + inner.scrollTop;
-        const tx = tRect.left   - innerRect.left + inner.scrollLeft;
-        const ty = tRect.top    + tRect.height / 2 - innerRect.top + inner.scrollTop;
-        const mx = fx + (tx - fx) * 0.5;
-        paths.push({ d: `M ${fx} ${fy} C ${mx} ${fy}, ${mx} ${ty}, ${tx} ${ty}`, key: `${m.id}-${nextM.id}` });
+        const fe=matchupEls.current.get(m.id), te=matchupEls.current.get(nextM.id);
+        if (!fe||!te) continue;
+        const fr=fe.getBoundingClientRect(), tr=te.getBoundingClientRect();
+        const fx=fr.right-ir.left+inner.scrollLeft, fy=fr.top+fr.height/2-ir.top+inner.scrollTop;
+        const tx=tr.left-ir.left+inner.scrollLeft,  ty=tr.top+tr.height/2-ir.top+inner.scrollTop;
+        const mx=fx+(tx-fx)*0.5;
+        paths.push({d:`M ${fx} ${fy} H ${mx} V ${ty} H ${tx}`, key:`${m.id}-${nextM.id}`});
       }
     }
     setConnectors(paths);
   }, [rounds]);
 
-  useLayoutEffect(() => {
-    const t = setTimeout(recalcConnectors, 30);
-    return () => clearTimeout(t);
-  }, [recalcConnectors]);
+  useLayoutEffect(() => { const t=setTimeout(recalcConnectors,40); return ()=>clearTimeout(t); }, [recalcConnectors]);
 
-  // API helpers
   const upsert = async (payload: object) => {
-    const r = await fetch("/api/playoff-brackets", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Save failed"); return false; }
+    const r = await fetch("/api/playoff-brackets", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) });
+    if (!r.ok) { const d=await r.json(); setErr(d.error??"Save failed"); return false; }
     return true;
   };
 
   const updateMatchup = async (m: BracketMatchup, patch: object) => {
     setSaving(m.id); setErr("");
-    await upsert({ league, season, round_name: m.round_name, round_order: m.round_order, matchup_index: m.matchup_index, team1_id: m.team1_id, team2_id: m.team2_id, team1_score: m.team1_score, team2_score: m.team2_score, winner_id: m.winner_id, ...patch });
+    await upsert({league,season,round_name:m.round_name,round_order:m.round_order,matchup_index:m.matchup_index,team1_id:m.team1_id,team2_id:m.team2_id,team1_score:m.team1_score,team2_score:m.team2_score,winner_id:m.winner_id,...patch});
     setSaving(null); refresh();
   };
 
-  const deleteMatchup = async (id: string) => {
-    await fetch(`/api/playoff-brackets?id=${id}`, { method: "DELETE" }); refresh();
-  };
-
-  const addMatchup = async (roundName: string, roundOrder: number) => {
-    const inRound = matchups.filter(m => m.round_name === roundName);
-    const nextIdx = inRound.length > 0 ? Math.max(...inRound.map(m => m.matchup_index)) + 1 : 0;
-    await upsert({ league, season, round_name: roundName, round_order: roundOrder, matchup_index: nextIdx });
-    refresh();
-  };
-
-  const addRound = async (name: string) => {
-    const nextOrder = rounds.length > 0 ? Math.max(...rounds.map(r => r.order)) + 1 : 0;
-    await upsert({ league, season, round_name: name, round_order: nextOrder, matchup_index: 0 });
-    refresh();
+  const generateBracket = async () => {
+    if (seededTeams.length < 2) { setErr("Add at least 2 teams."); return; }
+    if (matchups.length > 0 && !confirm("Overwrite existing bracket?")) return;
+    setGenerating(true); setErr("");
+    for (const m of matchups) await fetch(`/api/playoff-brackets?id=${m.id}`,{method:"DELETE"});
+    const N=seededTeams.length, P=nextPow2(N);
+    const slots=buildBracketSlots(P);
+    const totalRounds=Math.log2(P);
+    const names=getRoundNames(totalRounds);
+    // Round 1 from seeding
+    for (let i=0;i<P/2;i++) {
+      const s1=slots[i*2], s2=slots[i*2+1];
+      const t1=s1<=N?seededTeams[s1-1]:null;
+      const t2=s2<=N?seededTeams[s2-1]:null;
+      await upsert({league,season,round_name:names[0],round_order:0,matchup_index:i,team1_id:t1?.id??null,team2_id:t2?.id??null,winner_id:!t2&&t1?t1.id:null,team1_score:null,team2_score:null});
+    }
+    // Subsequent empty rounds
+    for (let r=1;r<totalRounds;r++) {
+      const mc=P>>( r+1);
+      for (let i=0;i<mc;i++) await upsert({league,season,round_name:names[r],round_order:r,matchup_index:i});
+    }
+    setGenerating(false); setView("bracket"); refresh();
   };
 
   const clearBracket = async () => {
-    if (!confirm(`Delete the entire bracket for ${season}? This cannot be undone.`)) return;
+    if (!confirm("Delete the entire bracket? This cannot be undone.")) return;
     setClearing(true); setErr("");
-    for (const m of matchups) await fetch(`/api/playoff-brackets?id=${m.id}`, { method: "DELETE" });
-    setClearing(false); refresh();
+    for (const m of matchups) await fetch(`/api/playoff-brackets?id=${m.id}`,{method:"DELETE"});
+    setClearing(false); setMatchups([]); setSeededTeams([]); setView("setup");
   };
 
-  // Total canvas height
   const canvasH = useMemo(() => {
-    let max = 200;
-    for (let ri = 0; ri < rounds.length; ri++) {
-      const n = rounds[ri].matchups.length;
-      const h = topOffsetForRound(ri) + n * MATCHUP_H + Math.max(0, n - 1) * gapForRound(ri);
-      if (h > max) max = h;
+    let max=200;
+    for (let ri=0;ri<rounds.length;ri++) {
+      const n=rounds[ri].matchups.length;
+      const h=topOffsetForRound(ri)+n*MATCHUP_H+Math.max(0,n-1)*gapForRound(ri);
+      if (h>max) max=h;
     }
-    return max + 80;
+    return max+80;
   }, [rounds]);
 
   return (
     <div>
       <ErrMsg msg={err} />
 
-      {/* Toolbar */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 16 }}>
-        <div style={{ color: "#888", fontSize: "0.8rem" }}>
-          {rounds.length} round{rounds.length !== 1 ? "s" : ""} · {matchups.length} matchup{matchups.length !== 1 ? "s" : ""} · {season}
-        </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <AddRoundInput onAdd={addRound} />
-          {matchups.length > 0 && (
+      {view === "setup" ? (
+        <div style={{ background:"#111", borderRadius:"1rem", border:"1px solid #1e1e1e", padding:20 }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20, flexWrap:"wrap", gap:10 }}>
+            <div style={{ fontWeight:700, color:"#fff", fontSize:"0.9rem" }}>Setup Bracket — {season}</div>
+            {matchups.length>0 && (
+              <button onClick={()=>setView("bracket")} style={{ background:"transparent", border:"1px solid #2a2a2a", borderRadius:8, color:"#888", fontSize:"0.8rem", padding:"5px 12px", cursor:"pointer" }}>
+                View Existing Bracket →
+              </button>
+            )}
+          </div>
+          <SeedPicker allTeams={teams} seeded={seededTeams} onChange={setSeededTeams} />
+          <div style={{ marginTop:20, paddingTop:16, borderTop:"1px solid #1e1e1e", display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
             <button
-              onClick={clearBracket} disabled={clearing}
-              style={{ background: "#2a0a0a", border: "1px solid #5a1a1a", borderRadius: 8, color: "#f87171", fontSize: "0.8rem", padding: "6px 14px", cursor: "pointer" }}
+              onClick={generateBracket} disabled={generating||seededTeams.length<2}
+              style={{ background:seededTeams.length<2?"#1a1a1a":"#2563eb", border:"none", borderRadius:8, color:seededTeams.length<2?"#444":"#fff", fontWeight:700, fontSize:"0.85rem", padding:"8px 20px", cursor:seededTeams.length<2?"default":"pointer", transition:"background 0.15s" }}
             >
-              {clearing ? "Clearing…" : "Clear All"}
+              {generating ? "Generating…" : matchups.length>0 ? "↻ Regenerate Bracket" : "Generate Bracket →"}
             </button>
-          )}
-        </div>
-      </div>
-
-      {rounds.length === 0 ? (
-        <div style={{ padding: 60, textAlign: "center", color: "#444", fontSize: "0.875rem", background: "#111", borderRadius: "1rem", border: "1px solid #1e1e1e" }}>
-          <div style={{ fontSize: "2.5rem", marginBottom: 12 }}>🏆</div>
-          No rounds yet. Click <strong style={{ color: "#888" }}>+ Add Round</strong> to start building the bracket.
+            {seededTeams.length<2 && <span style={{ color:"#444", fontSize:"0.75rem" }}>Select at least 2 teams</span>}
+          </div>
         </div>
       ) : (
-        /* Bracket canvas */
-        <div style={{ overflowX: "auto", overflowY: "visible", background: "#0a0a0a", borderRadius: "1rem", border: "1px solid #1e1e1e" }}>
-          <div ref={innerRef} style={{ position: "relative", minWidth: "max-content", height: canvasH, padding: "24px 32px" }}>
+        <div>
+          {/* Bracket toolbar */}
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12, flexWrap:"wrap", gap:8 }}>
+            <button onClick={()=>setView("setup")} style={{ background:"transparent", border:"1px solid #2a2a2a", borderRadius:8, color:"#888", fontSize:"0.8rem", padding:"5px 12px", cursor:"pointer" }}>
+              ← Edit Teams
+            </button>
+            <span style={{ color:"#555", fontSize:"0.75rem" }}>{rounds.length} rounds · {matchups.length} matchups · {season}</span>
+            <button onClick={clearBracket} disabled={clearing} style={{ background:"#2a0a0a", border:"1px solid #5a1a1a", borderRadius:8, color:"#f87171", fontSize:"0.8rem", padding:"5px 12px", cursor:"pointer" }}>
+              {clearing ? "Clearing…" : "Clear Bracket"}
+            </button>
+          </div>
 
-            {/* SVG connector lines */}
-            <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none", overflow: "visible", zIndex: 1 }}>
-              {connectors.map(c => (
-                <path key={c.key} d={c.d} fill="none" stroke="#2a2a2a" strokeWidth={2} />
-              ))}
-            </svg>
-
-            {/* Round columns */}
-            <div style={{ display: "flex", gap: 48, alignItems: "flex-start", position: "relative", zIndex: 2 }}>
-              {rounds.map((round, ri) => (
-                <div key={round.name} style={{ width: 230, flexShrink: 0 }}>
-
-                  {/* Round header */}
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, paddingBottom: 8, borderBottom: "1px solid #1e1e1e" }}>
-                    <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#666", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+          {/* Bracket canvas */}
+          <div style={{ overflowX:"auto", background:"#0a0a0a", borderRadius:"1rem", border:"1px solid #1e1e1e" }}>
+            <div ref={innerRef} style={{ position:"relative", minWidth:"max-content", height:canvasH, padding:"28px 36px" }}>
+              {/* SVG lines */}
+              <svg style={{ position:"absolute", inset:0, width:"100%", height:"100%", pointerEvents:"none", overflow:"visible", zIndex:1 }}>
+                {connectors.map(c=><path key={c.key} d={c.d} fill="none" stroke="#2a2a2a" strokeWidth={2}/>)}
+              </svg>
+              {/* Round columns */}
+              <div style={{ display:"flex", gap:52, alignItems:"flex-start", position:"relative", zIndex:2 }}>
+                {rounds.map((round,ri)=>(
+                  <div key={round.name} style={{ width:234, flexShrink:0 }}>
+                    <div style={{ fontSize:"0.7rem", fontWeight:700, color:"#555", textTransform:"uppercase", letterSpacing:"0.12em", marginBottom:14, paddingBottom:8, borderBottom:"1px solid #1e1e1e", textAlign:"center" }}>
                       {round.name}
-                    </span>
-                    <button
-                      onClick={() => addMatchup(round.name, round.order)}
-                      style={{ fontSize: "0.7rem", color: "#444", background: "none", border: "none", cursor: "pointer", padding: "2px 6px" }}
-                      onMouseEnter={e => (e.currentTarget.style.color = "#aaa")}
-                      onMouseLeave={e => (e.currentTarget.style.color = "#444")}
-                    >
-                      + matchup
-                    </button>
-                  </div>
-
-                  {/* Matchup boxes */}
-                  <div style={{ display: "flex", flexDirection: "column", paddingTop: topOffsetForRound(ri), gap: gapForRound(ri) }}>
-                    {round.matchups.map(m => {
-                      const t1 = (m.team1 ?? teams.find(t => t.id === m.team1_id)) as Team | null;
-                      const t2 = (m.team2 ?? teams.find(t => t.id === m.team2_id)) as Team | null;
-                      return (
-                        <div
-                          key={m.id}
-                          ref={el => { if (el) matchupEls.current.set(m.id, el); else matchupEls.current.delete(m.id); }}
-                          style={{ borderRadius: 10, border: "1px solid #222", background: "#141414", overflow: "hidden", flexShrink: 0 }}
-                        >
-                          <BracketTeamRow matchup={m} side="team1" teams={teams} saving={saving === m.id} onUpdate={p => updateMatchup(m, p)} />
-                          <div style={{ height: 1, background: "#1e1e1e" }} />
-                          <BracketTeamRow matchup={m} side="team2" teams={teams} saving={saving === m.id} onUpdate={p => updateMatchup(m, p)} />
-
-                          {/* Footer: winner buttons + delete */}
-                          <div style={{ padding: "5px 8px", borderTop: "1px solid #1a1a1a", display: "flex", alignItems: "center", justifyContent: "space-between", background: "#0f0f0f" }}>
-                            <div style={{ display: "flex", gap: 4 }}>
-                              {([{ id: m.team1_id, team: t1 }, { id: m.team2_id, team: t2 }] as const).map(({ id, team }, wi) =>
-                                id ? (
-                                  <button
-                                    key={wi}
-                                    onClick={() => updateMatchup(m, { winner_id: m.winner_id === id ? null : id })}
-                                    title={`Set ${team?.abbreviation ?? "team"} as winner`}
-                                    style={{
-                                      fontSize: "0.65rem", padding: "2px 7px", borderRadius: 4,
-                                      border: "1px solid",
-                                      background: m.winner_id === id ? "rgba(22,163,74,0.15)" : "transparent",
-                                      borderColor: m.winner_id === id ? "#16a34a" : "#2a2a2a",
-                                      color: m.winner_id === id ? "#4ade80" : "#555",
-                                      cursor: "pointer",
-                                    }}
-                                  >
-                                    {team?.abbreviation ?? `T${wi + 1}`} 🏆
-                                  </button>
-                                ) : null
-                              )}
-                            </div>
-                            <button
-                              onClick={() => deleteMatchup(m.id)}
-                              title="Remove matchup"
-                              style={{ fontSize: "0.7rem", color: "#3a1a1a", background: "none", border: "none", cursor: "pointer", padding: "2px 4px" }}
-                              onMouseEnter={e => (e.currentTarget.style.color = "#f87171")}
-                              onMouseLeave={e => (e.currentTarget.style.color = "#3a1a1a")}
-                            >
-                              ✕
-                            </button>
+                    </div>
+                    <div style={{ display:"flex", flexDirection:"column", paddingTop:topOffsetForRound(ri), gap:gapForRound(ri) }}>
+                      {round.matchups.map(m=>{
+                        const t1=(m.team1??teams.find(t=>t.id===m.team1_id)) as Team|null;
+                        const t2=(m.team2??teams.find(t=>t.id===m.team2_id)) as Team|null;
+                        const isByeMatchup=!m.team2_id&&!!m.winner_id&&m.round_order===0;
+                        return (
+                          <div key={m.id}
+                            ref={el=>{ if(el) matchupEls.current.set(m.id,el); else matchupEls.current.delete(m.id); }}
+                            style={{ borderRadius:10, border:`1px solid ${isByeMatchup?"#181818":"#242424"}`, background:"#141414", overflow:"hidden", flexShrink:0, opacity:isByeMatchup?0.7:1 }}>
+                            <BracketTeamRow matchup={m} side="team1" teams={teams} saving={saving===m.id} onUpdate={p=>updateMatchup(m,p)} />
+                            <div style={{ height:1, background:"#1e1e1e" }}/>
+                            <BracketTeamRow matchup={m} side="team2" teams={teams} saving={saving===m.id} onUpdate={p=>updateMatchup(m,p)} isBye={isByeMatchup} />
+                            {/* Footer: winner buttons */}
+                            {!isByeMatchup && (
+                              <div style={{ padding:"5px 8px", borderTop:"1px solid #181818", display:"flex", alignItems:"center", gap:4, background:"#0f0f0f" }}>
+                                {([{id:m.team1_id,team:t1},{id:m.team2_id,team:t2}] as const).map(({id,team},wi)=>
+                                  id?(
+                                    <button key={wi} onClick={()=>updateMatchup(m,{winner_id:m.winner_id===id?null:id})}
+                                      style={{ fontSize:"0.65rem", padding:"2px 7px", borderRadius:4, border:"1px solid", background:m.winner_id===id?"rgba(22,163,74,0.15)":"transparent", borderColor:m.winner_id===id?"#16a34a":"#2a2a2a", color:m.winner_id===id?"#4ade80":"#555", cursor:"pointer" }}>
+                                      {team?.abbreviation??`T${wi+1}`} 🏆
+                                    </button>
+                                  ):null
+                                )}
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
         </div>
