@@ -6,7 +6,7 @@ import React from "react";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Player = { mc_uuid: string; mc_username: string; discord_id: string | null };
-type Team = { id: string; league: string; name: string; abbreviation: string; division: string | null; logo_url: string | null; color: string | null };
+type Team = { id: string; league: string; name: string; abbreviation: string; division: string | null; logo_url: string | null; color: string | null; color2: string | null };
 type PlayerTeam = { mc_uuid: string; team_id: string; league: string; players: Player; teams: Team };
 type Game = {
   id: string; league: string; scheduled_at: string;
@@ -488,6 +488,51 @@ function TeamLogoAdmin({ team }: { team: Team }) {
   );
 }
 
+// NBA team colors [primary, secondary]
+const NBA_COLORS: Record<string, [string, string]> = {
+  "atlanta hawks":          ["#E03A3E","#C1D32F"],
+  "boston celtics":         ["#007A33","#BA9653"],
+  "brooklyn nets":          ["#000000","#FFFFFF"],
+  "charlotte hornets":      ["#1D1160","#00788C"],
+  "chicago bulls":          ["#CE1141","#000000"],
+  "cleveland cavaliers":    ["#860038","#FDBB30"],
+  "dallas mavericks":       ["#00538C","#002B5E"],
+  "denver nuggets":         ["#0E2240","#FEC524"],
+  "detroit pistons":        ["#C8102E","#1D428A"],
+  "golden state warriors":  ["#1D428A","#FFC72C"],
+  "houston rockets":        ["#CE1141","#000000"],
+  "indiana pacers":         ["#002D62","#FDBB30"],
+  "los angeles clippers":   ["#C8102E","#1D428A"],
+  "los angeles lakers":     ["#552583","#FDB927"],
+  "memphis grizzlies":      ["#5D76A9","#12173F"],
+  "miami heat":             ["#98002E","#F9A01B"],
+  "milwaukee bucks":        ["#00471B","#EEE1C6"],
+  "minnesota timberwolves": ["#0C2340","#236192"],
+  "new orleans pelicans":   ["#0C2340","#C8102E"],
+  "new york knicks":        ["#006BB6","#F58426"],
+  "oklahoma city thunder":  ["#007AC1","#EF3B24"],
+  "orlando magic":          ["#0077C0","#C4CED4"],
+  "philadelphia 76ers":     ["#006BB6","#ED174C"],
+  "phoenix suns":           ["#1D1160","#E56020"],
+  "portland trail blazers": ["#E03A3E","#000000"],
+  "sacramento kings":       ["#5A2D81","#63727A"],
+  "san antonio spurs":      ["#C4CED4","#000000"],
+  "toronto raptors":        ["#CE1141","#000000"],
+  "utah jazz":              ["#002B5C","#00471B"],
+  "washington wizards":     ["#002B5C","#E31837"],
+};
+
+function lookupNbaColors(teamName: string): [string, string] | null {
+  const key = teamName.toLowerCase().trim();
+  if (NBA_COLORS[key]) return NBA_COLORS[key];
+  // fuzzy: check if name contains a known team name substring
+  for (const [k, v] of Object.entries(NBA_COLORS)) {
+    const words = k.split(" ");
+    if (words.some(w => w.length > 4 && key.includes(w))) return v;
+  }
+  return null;
+}
+
 function TeamsTab({ league, season: initialSeason }: { league: string; season: string }) {
   const SEASONS = ["Season 1","Season 2","Season 3","Season 4","Season 5","Season 6","Season 7"];
   const [season, setSeason] = useState(
@@ -627,12 +672,12 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
     refresh();
   };
 
-  const saveColor = async (teamId: string, color: string) => {
+  const saveColors = async (teamId: string, color: string | null, color2: string | null) => {
     setSavingColor(teamId);
     await fetch(`/api/teams/${teamId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ color }),
+      body: JSON.stringify({ color, color2 }),
     });
     setSavingColor(null);
     refresh();
@@ -798,12 +843,35 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
                           {records[t.id] != null ? `${records[t.id].wins}-${records[t.id].losses}` : "Set W-L"}
                         </button>
                       )}
-                      {/* Team color picker */}
-                      <label title="Set team color (used in bracket)" style={{ position:"relative", cursor:"pointer", flexShrink:0 }}>
-                        <div style={{ width:28, height:28, borderRadius:6, background: t.color ?? "#1e293b", border:"2px solid #334155", display:"flex", alignItems:"center", justifyContent:"center", opacity: savingColor===t.id ? 0.5 : 1, transition:"opacity 0.2s" }} title="Pick team color" />
-                        <input type="color" value={t.color ?? "#1e293b"} onChange={e => saveColor(t.id, e.target.value)}
-                          style={{ position:"absolute", inset:0, opacity:0, width:"100%", height:"100%", cursor:"pointer", border:"none", padding:0 }} />
-                      </label>
+                      {/* Team colors */}
+                      <div style={{ display:"flex", alignItems:"center", gap:4, flexShrink:0 }}>
+                        <div style={{ width:16, height:16, borderRadius:3, background: t.color ?? "#1e293b", border:"1px solid #334155", flexShrink:0 }} />
+                        <input
+                          defaultValue={t.color ?? ""}
+                          placeholder="Primary #"
+                          onBlur={e => { const v = e.target.value.trim(); if (v !== (t.color ?? "")) saveColors(t.id, v||null, t.color2); }}
+                          onKeyDown={e => { if (e.key==="Enter") (e.target as HTMLInputElement).blur(); }}
+                          style={{ width:80, background:"#0d0d0d", border:"1px solid #222", borderRadius:5, color:"#ccc", fontSize:"0.72rem", padding:"3px 6px", outline:"none" }}
+                        />
+                        <div style={{ width:16, height:16, borderRadius:3, background: t.color2 ?? "#0f172a", border:"1px solid #334155", flexShrink:0 }} />
+                        <input
+                          defaultValue={t.color2 ?? ""}
+                          placeholder="Secondary #"
+                          onBlur={e => { const v = e.target.value.trim(); if (v !== (t.color2 ?? "")) saveColors(t.id, t.color, v||null); }}
+                          onKeyDown={e => { if (e.key==="Enter") (e.target as HTMLInputElement).blur(); }}
+                          style={{ width:80, background:"#0d0d0d", border:"1px solid #222", borderRadius:5, color:"#ccc", fontSize:"0.72rem", padding:"3px 6px", outline:"none" }}
+                        />
+                        {(() => { const nba = lookupNbaColors(t.name); return nba ? (
+                          <button
+                            title={`Auto-fill NBA colors: ${nba[0]} / ${nba[1]}`}
+                            onClick={() => saveColors(t.id, nba[0], nba[1])}
+                            disabled={savingColor===t.id}
+                            style={{ background:"#1a1a2e", border:"1px solid #3730a3", borderRadius:5, color:"#818cf8", fontSize:"0.68rem", fontWeight:700, padding:"3px 7px", cursor:"pointer", whiteSpace:"nowrap" }}
+                          >
+                            🏀 NBA
+                          </button>
+                        ) : null; })()}
+                      </div>
                       {/* Logo upload */}
                       <label className={`${btnSecondary} cursor-pointer`}>
                         {uploadingLogo === t.id ? "Uploading..." : "Upload Logo"}
@@ -2184,14 +2252,14 @@ type BracketMatchup = {
   team1_id: string | null; team2_id: string | null;
   team1_score: number | null; team2_score: number | null;
   winner_id: string | null;
-  team1?: { id: string; name: string; abbreviation: string; logo_url?: string | null; color?: string | null } | null;
-  team2?: { id: string; name: string; abbreviation: string; logo_url?: string | null; color?: string | null } | null;
+  team1?: { id: string; name: string; abbreviation: string; logo_url?: string | null; color?: string | null; color2?: string | null } | null;
+  team2?: { id: string; name: string; abbreviation: string; logo_url?: string | null; color?: string | null; color2?: string | null } | null;
 };
 
-const SLOT_H    = 54;   // height of each individual team box (pill shape)
-const INNER_GAP = 22;   // gap between team1 and team2 boxes within a matchup
-const MATCHUP_H = SLOT_H * 2 + INNER_GAP;  // = 130
-const BASE_GAP  = 28;
+const SLOT_H    = 58;   // height of each individual team box (pill shape)
+const INNER_GAP = 6;    // gap between team1 and team2 boxes within a matchup
+const MATCHUP_H = SLOT_H * 2 + INNER_GAP;  // = 122
+const BASE_GAP  = 48;
 
 function gapForRound(ri: number) { return (Math.pow(2, ri) - 1) * (MATCHUP_H + BASE_GAP) + BASE_GAP; }
 function topOffsetForRound(ri: number) { return ((Math.pow(2, ri) - 1) * (MATCHUP_H + BASE_GAP)) / 2; }
@@ -2323,22 +2391,26 @@ function TeamSlot({ m, side, teams, saving, onUpdate, slotRef, conf }: {
   const isWinner = !!(m.winner_id && teamId && m.winner_id === teamId);
 
   const confColors = CONF_COLORS[conf] ?? CONF_COLORS.W;
-  // Use team's custom color if set, otherwise fall back to conference color
-  const teamColor = team?.color ?? null;
-  const pillBg  = isWinner ? "#166534" : teamColor ?? confColors.bg;
-  const logoBg  = isWinner ? "#15803d" : teamColor ?? confColors.darkBg;
+  const isLoser = !!(m.winner_id && teamId && m.winner_id !== teamId);
+  // Use team's custom colors if set, otherwise fall back to conference color
+  const teamColor  = team?.color  ?? null;
+  const teamColor2 = team?.color2 ?? null;
+  const pillBg  = isWinner ? "#166534" : isLoser ? "#111" : teamColor  ?? confColors.bg;
+  const logoBg  = isWinner ? "#15803d" : isLoser ? "#0d0d0d" : teamColor2 ?? teamColor ?? confColors.darkBg;
 
   return (
     <div ref={slotRef as React.Ref<HTMLDivElement>}
       style={{ display:"flex", alignItems:"center", height:SLOT_H, borderRadius:10,
         background: pillBg,
-        border: `1.5px solid ${isWinner ? "#22c55e" : team ? "transparent" : "#252525"}`,
-        overflow:"hidden", flexShrink:0, position:"relative" }}>
+        border: `1.5px solid ${isWinner ? "#22c55e" : isLoser ? "#1e1e1e" : team ? "transparent" : "#252525"}`,
+        overflow:"hidden", flexShrink:0, position:"relative",
+        opacity: isLoser ? 0.45 : 1,
+        transition: "opacity 0.2s" }}>
 
       {/* Left: team abbreviation / TBD picker */}
       <div style={{ flex:1, padding:"0 14px", minWidth:0, overflow:"hidden" }}>
         {team
-          ? <span style={{ fontSize:"1.15rem", fontWeight:900, color:"#fff", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", display:"block", letterSpacing:"0.04em", textShadow:"0 1px 3px rgba(0,0,0,0.4)" }}>
+          ? <span style={{ fontSize:"1.15rem", fontWeight:900, color: isLoser ? "#666" : "#fff", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", display:"block", letterSpacing:"0.04em", textShadow:"0 1px 3px rgba(0,0,0,0.4)" }}>
               {team.abbreviation}
             </span>
           : <select value={teamId ?? ""} onChange={e => onUpdate({ [idKey]: e.target.value||null, winner_id:null })} disabled={saving}
