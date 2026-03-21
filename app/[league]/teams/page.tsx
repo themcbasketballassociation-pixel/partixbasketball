@@ -12,7 +12,7 @@ type Player = { mc_uuid: string; mc_username: string };
 type PlayerTeam = { mc_uuid: string; team_id: string; players: Player };
 
 function TeamCard({ team, players }: { team: Team; players: PlayerTeam[] }) {
-  const accent = team.color2 ?? "#2a2a2a";
+  const accent = team.color2 ?? null;
   return (
     <div style={{
       borderRadius: "0.875rem",
@@ -21,19 +21,19 @@ function TeamCard({ team, players }: { team: Team; players: PlayerTeam[] }) {
       overflow: "hidden",
       display: "flex",
       flexDirection: "column",
+      borderLeft: accent ? `3px solid ${accent}` : "1px solid #1e1e1e",
     }}>
-      {/* Color bar + logo + name */}
+      {/* Logo + name */}
       <div style={{
-        background: `linear-gradient(135deg, ${accent}22 0%, transparent 60%)`,
         borderBottom: "1px solid #1e1e1e",
-        padding: "18px 20px",
+        padding: "16px 18px",
         display: "flex",
         alignItems: "center",
         gap: 14,
       }}>
         <div style={{
-          width: 52, height: 52, borderRadius: 10,
-          background: "#111", border: `2px solid ${accent}44`,
+          width: 48, height: 48, borderRadius: 8,
+          background: "#111", border: "1px solid #2a2a2a",
           display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
           overflow: "hidden",
         }}>
@@ -72,6 +72,17 @@ function TeamCard({ team, players }: { team: Team; players: PlayerTeam[] }) {
   );
 }
 
+function EvenGrid({ teams, players }: { teams: Team[]; players: PlayerTeam[] }) {
+  const cols = Math.max(2, Math.ceil(teams.length / 2));
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 14 }}>
+      {teams.map((t) => (
+        <TeamCard key={t.id} team={t} players={players.filter((pt) => pt.team_id === t.id)} />
+      ))}
+    </div>
+  );
+}
+
 function ConferenceSection({ title, teams, players, accent }: { title: string; teams: Team[]; players: PlayerTeam[]; accent: string }) {
   return (
     <div>
@@ -81,11 +92,7 @@ function ConferenceSection({ title, teams, players, accent }: { title: string; t
         <div style={{ flex: 1, height: 1, background: "#1e1e1e" }} />
         <span style={{ fontSize: "0.7rem", color: "#444" }}>{teams.length} team{teams.length !== 1 ? "s" : ""}</span>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
-        {teams.map((t) => (
-          <TeamCard key={t.id} team={t} players={players.filter((pt) => pt.team_id === t.id)} />
-        ))}
-      </div>
+      <EvenGrid teams={teams} players={players} />
     </div>
   );
 }
@@ -167,10 +174,8 @@ export default function TeamsPage({ params }: { params?: Promise<{ league?: stri
           )}
         </div>
       ) : (
-        <div style={{ padding: 28, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
-          {teams.map((t) => (
-            <TeamCard key={t.id} team={t} players={playerTeams.filter((pt) => pt.team_id === t.id)} />
-          ))}
+        <div style={{ padding: 28 }}>
+          <EvenGrid teams={teams} players={playerTeams} />
         </div>
       )}
     </div>
