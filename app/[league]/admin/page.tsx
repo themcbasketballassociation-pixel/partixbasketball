@@ -672,12 +672,12 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
     refresh();
   };
 
-  const saveColors = async (teamId: string, color: string | null, color2: string | null) => {
+  const saveColors = async (teamId: string, color2: string | null) => {
     setSavingColor(teamId);
     await fetch(`/api/teams/${teamId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ color, color2 }),
+      body: JSON.stringify({ color2 }),
     });
     setSavingColor(null);
     refresh();
@@ -843,28 +843,20 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
                           {records[t.id] != null ? `${records[t.id].wins}-${records[t.id].losses}` : "Set W-L"}
                         </button>
                       )}
-                      {/* Team colors */}
+                      {/* Team color */}
                       <div style={{ display:"flex", alignItems:"center", gap:4, flexShrink:0 }}>
-                        <div style={{ width:16, height:16, borderRadius:3, background: t.color ?? "#1e293b", border:"1px solid #334155", flexShrink:0 }} />
-                        <input
-                          defaultValue={t.color ?? ""}
-                          placeholder="Primary #"
-                          onBlur={e => { const v = e.target.value.trim(); if (v !== (t.color ?? "")) saveColors(t.id, v||null, t.color2); }}
-                          onKeyDown={e => { if (e.key==="Enter") (e.target as HTMLInputElement).blur(); }}
-                          style={{ width:80, background:"#0d0d0d", border:"1px solid #222", borderRadius:5, color:"#ccc", fontSize:"0.72rem", padding:"3px 6px", outline:"none" }}
-                        />
-                        <div style={{ width:16, height:16, borderRadius:3, background: t.color2 ?? "#0f172a", border:"1px solid #334155", flexShrink:0 }} />
+                        <div style={{ width:16, height:16, borderRadius:3, background: t.color2 ?? "#1e293b", border:"1px solid #334155", flexShrink:0 }} />
                         <input
                           defaultValue={t.color2 ?? ""}
-                          placeholder="Secondary #"
-                          onBlur={e => { const v = e.target.value.trim(); if (v !== (t.color2 ?? "")) saveColors(t.id, t.color, v||null); }}
+                          placeholder="Color #hex"
+                          onBlur={e => { const v = e.target.value.trim(); if (v !== (t.color2 ?? "")) saveColors(t.id, v||null); }}
                           onKeyDown={e => { if (e.key==="Enter") (e.target as HTMLInputElement).blur(); }}
-                          style={{ width:80, background:"#0d0d0d", border:"1px solid #222", borderRadius:5, color:"#ccc", fontSize:"0.72rem", padding:"3px 6px", outline:"none" }}
+                          style={{ width:90, background:"#0d0d0d", border:"1px solid #222", borderRadius:5, color:"#ccc", fontSize:"0.72rem", padding:"3px 6px", outline:"none" }}
                         />
                         {(() => { const nba = lookupNbaColors(t.name); return nba ? (
                           <button
-                            title={`Auto-fill NBA colors: ${nba[0]} / ${nba[1]}`}
-                            onClick={() => saveColors(t.id, nba[0], nba[1])}
+                            title={`Auto-fill NBA primary color: ${nba[0]}`}
+                            onClick={() => saveColors(t.id, nba[0])}
                             disabled={savingColor===t.id}
                             style={{ background:"#1a1a2e", border:"1px solid #3730a3", borderRadius:5, color:"#818cf8", fontSize:"0.68rem", fontWeight:700, padding:"3px 7px", cursor:"pointer", whiteSpace:"nowrap" }}
                           >
@@ -2392,11 +2384,10 @@ function TeamSlot({ m, side, teams, saving, onUpdate, slotRef, conf }: {
 
   const confColors = CONF_COLORS[conf] ?? CONF_COLORS.W;
   const isLoser = !!(m.winner_id && teamId && m.winner_id !== teamId);
-  // Use team's custom colors if set, otherwise fall back to conference color
-  const teamColor  = team?.color  ?? null;
-  const teamColor2 = team?.color2 ?? null;
-  const pillBg  = isWinner ? "#166534" : isLoser ? "#111" : teamColor  ?? confColors.bg;
-  const logoBg  = isWinner ? "#15803d" : isLoser ? "#0d0d0d" : teamColor2 ?? teamColor ?? confColors.darkBg;
+  // color2 = team primary color (only color column currently in DB)
+  const teamColor = team?.color2 ?? null;
+  const pillBg  = isWinner ? "#166534" : isLoser ? "#111" : teamColor ?? confColors.bg;
+  const logoBg  = isWinner ? "#15803d" : isLoser ? "#0d0d0d" : teamColor ?? confColors.darkBg;
 
   return (
     <div ref={slotRef as React.Ref<HTMLDivElement>}

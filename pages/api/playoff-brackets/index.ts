@@ -12,8 +12,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .from("playoff_brackets")
       .select(`
         *,
-        team1:team1_id(id, name, abbreviation, logo_url),
-        team2:team2_id(id, name, abbreviation, logo_url),
+        team1:team1_id(id, name, abbreviation, logo_url, color2),
+        team2:team2_id(id, name, abbreviation, logo_url, color2),
         winner:winner_id(id, name, abbreviation)
       `)
       .eq("league", league as string)
