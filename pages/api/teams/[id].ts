@@ -9,10 +9,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "PUT") {
     const admin = await requireAdmin(req, res);
     if (!admin) return;
-    const { name, abbreviation, division, logo_url } = req.body;
-    const update: Record<string, unknown> = { name, abbreviation };
+    const { name, abbreviation, division, logo_url, color } = req.body;
+    const update: Record<string, unknown> = {};
+    if (name !== undefined) update.name = name;
+    if (abbreviation !== undefined) update.abbreviation = abbreviation;
     if (division !== undefined) update.division = division ?? null;
     if (logo_url !== undefined) update.logo_url = logo_url ?? null;
+    if (color !== undefined) update.color = color ?? null;
     const { data, error } = await supabase.from("teams").update(update).eq("id", id).select().single();
     if (error) return res.status(500).json({ error: error.message });
     return res.status(200).json(data);

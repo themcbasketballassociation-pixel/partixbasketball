@@ -6,7 +6,7 @@ import React from "react";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Player = { mc_uuid: string; mc_username: string; discord_id: string | null };
-type Team = { id: string; league: string; name: string; abbreviation: string; division: string | null; logo_url: string | null };
+type Team = { id: string; league: string; name: string; abbreviation: string; division: string | null; logo_url: string | null; color: string | null };
 type PlayerTeam = { mc_uuid: string; team_id: string; league: string; players: Player; teams: Team };
 type Game = {
   id: string; league: string; scheduled_at: string;
@@ -502,6 +502,7 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
   const [editAbbr, setEditAbbr] = useState("");
   const [editDivision, setEditDivision] = useState("");
   const [uploadingLogo, setUploadingLogo] = useState<string | null>(null);
+  const [savingColor, setSavingColor] = useState<string | null>(null);
   const [showBulk, setShowBulk] = useState(false);
   const [bulkText, setBulkText] = useState("");
   const [bulkParsed, setBulkParsed] = useState<{ name: string; abbr: string; division: string }[] | null>(null);
@@ -623,6 +624,17 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
     const data = await r.json();
     if (!r.ok) { setErr(data.error ?? "Logo upload failed"); }
     setUploadingLogo(null);
+    refresh();
+  };
+
+  const saveColor = async (teamId: string, color: string) => {
+    setSavingColor(teamId);
+    await fetch(`/api/teams/${teamId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ color }),
+    });
+    setSavingColor(null);
     refresh();
   };
 
@@ -786,6 +798,12 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
                           {records[t.id] != null ? `${records[t.id].wins}-${records[t.id].losses}` : "Set W-L"}
                         </button>
                       )}
+                      {/* Team color picker */}
+                      <label title="Set team color (used in bracket)" style={{ position:"relative", cursor:"pointer", flexShrink:0 }}>
+                        <div style={{ width:28, height:28, borderRadius:6, background: t.color ?? "#1e293b", border:"2px solid #334155", display:"flex", alignItems:"center", justifyContent:"center", opacity: savingColor===t.id ? 0.5 : 1, transition:"opacity 0.2s" }} title="Pick team color" />
+                        <input type="color" value={t.color ?? "#1e293b"} onChange={e => saveColor(t.id, e.target.value)}
+                          style={{ position:"absolute", inset:0, opacity:0, width:"100%", height:"100%", cursor:"pointer", border:"none", padding:0 }} />
+                      </label>
                       {/* Logo upload */}
                       <label className={`${btnSecondary} cursor-pointer`}>
                         {uploadingLogo === t.id ? "Uploading..." : "Upload Logo"}
@@ -2166,12 +2184,14 @@ type BracketMatchup = {
   team1_id: string | null; team2_id: string | null;
   team1_score: number | null; team2_score: number | null;
   winner_id: string | null;
-  team1?: { id: string; name: string; abbreviation: string; logo_url?: string | null } | null;
-  team2?: { id: string; name: string; abbreviation: string; logo_url?: string | null } | null;
+  team1?: { id: string; name: string; abbreviation: string; logo_url?: string | null; color?: string | null } | null;
+  team2?: { id: string; name: string; abbreviation: string; logo_url?: string | null; color?: string | null } | null;
 };
 
-const MATCHUP_H = 152;  // 2×60px rows + 1px divider + 31px footer
-const BASE_GAP  = 20;
+const SLOT_H    = 54;   // height of each individual team box (pill shape)
+const INNER_GAP = 22;   // gap between team1 and team2 boxes within a matchup
+const MATCHUP_H = SLOT_H * 2 + INNER_GAP;  // = 130
+const BASE_GAP  = 28;
 
 function gapForRound(ri: number) { return (Math.pow(2, ri) - 1) * (MATCHUP_H + BASE_GAP) + BASE_GAP; }
 function topOffsetForRound(ri: number) { return ((Math.pow(2, ri) - 1) * (MATCHUP_H + BASE_GAP)) / 2; }
@@ -2282,46 +2302,73 @@ function ConferenceSeedPicker({
   );
 }
 
-// ── Bracket matchup team row ──────────────────────────────────────────────────
-function BracketTeamRow({ matchup, side, teams, saving, onUpdate }: {
-  matchup: BracketMatchup; side: "team1"|"team2"; teams: Team[];
+// ── Individual team slot (bold sport-pill, one box per team) ─────────────────
+const CONF_COLORS: Record<string, { bg: string; darkBg: string }> = {
+  W: { bg: "#991b1b", darkBg: "#7f1d1d" },   // West = red
+  E: { bg: "#1d4ed8", darkBg: "#1e3a8a" },   // East = blue
+  F: { bg: "#78350f", darkBg: "#451a03" },   // Finals = gold-brown
+};
+
+function TeamSlot({ m, side, teams, saving, onUpdate, slotRef, conf }: {
+  m: BracketMatchup; side: "team1"|"team2"; teams: Team[];
   saving: boolean; onUpdate: (p: object) => void;
+  slotRef: (el: HTMLElement | null) => void;
+  conf: "W"|"E"|"F";
 }) {
-  const idKey    = side==="team1"?"team1_id":"team2_id";
-  const scoreKey = side==="team1"?"team1_score":"team2_score";
-  const teamId   = matchup[idKey];
-  const score    = matchup[scoreKey];
-  const team     = (matchup[side] ?? teams.find(t => t.id === teamId)) as Team | null;
-  const isWinner = !!(matchup.winner_id && teamId && matchup.winner_id === teamId);
+  const idKey    = side === "team1" ? "team1_id" : "team2_id";
+  const scoreKey = side === "team1" ? "team1_score" : "team2_score";
+  const teamId   = m[idKey];
+  const score    = m[scoreKey];
+  const team     = (m[side] ?? teams.find(t => t.id === teamId)) as Team | null;
+  const isWinner = !!(m.winner_id && teamId && m.winner_id === teamId);
+
+  const confColors = CONF_COLORS[conf] ?? CONF_COLORS.W;
+  // Use team's custom color if set, otherwise fall back to conference color
+  const teamColor = team?.color ?? null;
+  const pillBg  = isWinner ? "#166534" : teamColor ?? confColors.bg;
+  const logoBg  = isWinner ? "#15803d" : teamColor ?? confColors.darkBg;
 
   return (
-    <div style={{ display:"flex", alignItems:"center", height:60, background: isWinner ? "rgba(22,163,74,0.09)" : "transparent" }}>
-      {/* Logo — fills full height */}
-      <div style={{ width:60, height:60, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", background:"#0c0c0c", borderRight:"1px solid #1a1a1a" }}>
-        {team?.logo_url
-          ? <img src={team.logo_url} style={{ width:46, height:46, objectFit:"contain" }} alt="" />
-          : <div style={{ width:44, height:44, background:"#141414", borderRadius:6, border:"1px solid #222", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.75rem", fontWeight:700, color:"#333" }}>
-              {team?.abbreviation?.[0] ?? "?"}
-            </div>}
-      </div>
-      {/* Team name or TBD select */}
-      <div style={{ flex:1, padding:"0 10px", minWidth:0, overflow:"hidden" }}>
+    <div ref={slotRef as React.Ref<HTMLDivElement>}
+      style={{ display:"flex", alignItems:"center", height:SLOT_H, borderRadius:10,
+        background: pillBg,
+        border: `1.5px solid ${isWinner ? "#22c55e" : team ? "transparent" : "#252525"}`,
+        overflow:"hidden", flexShrink:0, position:"relative" }}>
+
+      {/* Left: team abbreviation / TBD picker */}
+      <div style={{ flex:1, padding:"0 14px", minWidth:0, overflow:"hidden" }}>
         {team
-          ? <span style={{ fontSize:"0.82rem", fontWeight:700, color: isWinner ? "#4ade80" : "#ddd", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", display:"block" }}>
-              {team.abbreviation}{isWinner && <span style={{ marginLeft:5, fontSize:"0.7rem" }}>🏆</span>}
+          ? <span style={{ fontSize:"1.15rem", fontWeight:900, color:"#fff", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", display:"block", letterSpacing:"0.04em", textShadow:"0 1px 3px rgba(0,0,0,0.4)" }}>
+              {team.abbreviation}
             </span>
           : <select value={teamId ?? ""} onChange={e => onUpdate({ [idKey]: e.target.value||null, winner_id:null })} disabled={saving}
-              style={{ width:"100%", background:"transparent", border:"none", outline:"none", color:"#444", fontSize:"0.72rem", cursor:"pointer" }}>
+              style={{ width:"100%", background:"transparent", border:"none", outline:"none", color:"#555", fontSize:"0.75rem", cursor:"pointer" }}>
               <option value="">— TBD —</option>
               {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
         }
       </div>
-      {/* Score / Wins */}
-      <div style={{ padding:"0 14px 0 6px", flexShrink:0 }}>
-        <input type="number" min="0" placeholder="—" value={score ?? ""}
+
+      {/* Wins input */}
+      <div style={{ display:"flex", alignItems:"center", gap:4, padding:"0 6px 0 0", flexShrink:0 }}>
+        <input type="number" min="0" placeholder="W" value={score ?? ""}
           onChange={e => onUpdate({ [scoreKey]: e.target.value !== "" ? parseInt(e.target.value) : null })}
-          style={{ width:38, background:"transparent", border:"none", outline:"none", borderBottom:`1px solid ${isWinner?"#16a34a":"#2a2a2a"}`, color: isWinner ? "#4ade80" : "#fff", fontSize:"1rem", fontWeight:700, textAlign:"center" }} />
+          style={{ width:30, background:"rgba(0,0,0,0.25)", border:"none", outline:"none", borderRadius:4, color:"rgba(255,255,255,0.85)", fontSize:"0.9rem", fontWeight:700, textAlign:"center", padding:"2px 0" }} />
+        {teamId && (
+          <button onClick={() => onUpdate({ winner_id: m.winner_id === teamId ? null : teamId })}
+            title="Mark winner"
+            style={{ background:"none", border:"none", cursor:"pointer", fontSize:"0.8rem", lineHeight:1, opacity: m.winner_id === teamId ? 1 : 0.25, transition:"opacity 0.15s", padding:"1px 2px" }}>
+            🏆
+          </button>
+        )}
+      </div>
+
+      {/* Right: logo panel */}
+      <div style={{ width:58, height:SLOT_H, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", background:logoBg, borderLeft:"1px solid rgba(0,0,0,0.25)" }}>
+        {team?.logo_url
+          ? <img src={team.logo_url} style={{ width:44, height:44, objectFit:"contain" }} alt="" />
+          : <div style={{ width:36, height:36, display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.85rem", fontWeight:700, color:"#2a2a2a" }}>?</div>
+        }
       </div>
     </div>
   );
@@ -2341,7 +2388,7 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
   const [connectors, setConnectors] = useState<{d:string;key:string}[]>([]);
   const seedsInit = useRef(false);
   const innerRef   = useRef<HTMLDivElement>(null);
-  const matchupEls = useRef<Map<string,HTMLElement>>(new Map());
+  const slotEls = useRef<Map<string,HTMLElement>>(new Map());
 
   const refresh = useCallback(async () => {
     const [m, t] = await Promise.all([
@@ -2410,48 +2457,95 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
 
   const finalsMatchup = useMemo(() => matchups.find(m=>m.round_name==="Finals") ?? null, [matchups]);
 
-  // Connector lines: West goes L→R (exits right), East goes R→L (exits left)
+  // Connector lines: draw classic bracket shape from two team slots to one winner slot
   const recalcConnectors = useCallback(() => {
     const inner = innerRef.current; if (!inner) return;
     const ir = inner.getBoundingClientRect();
+    const sv = inner.scrollTop, sh = inner.scrollLeft;
     const paths: {d:string;key:string}[] = [];
 
-    const drawLR = (fromEl: HTMLElement, toEl: HTMLElement, key: string, toFrac=0.5) => {
-      const fr=fromEl.getBoundingClientRect(), tr=toEl.getBoundingClientRect();
-      const fx=fr.right-ir.left+inner.scrollLeft, fy=fr.top+fr.height/2-ir.top+inner.scrollTop;
-      const tx=tr.left-ir.left+inner.scrollLeft,  ty=tr.top+tr.height*toFrac-ir.top+inner.scrollTop;
-      paths.push({d:`M ${fx} ${fy} H ${(fx+tx)/2} V ${ty} H ${tx}`, key});
+    const sl = slotEls.current;
+
+    // Draw bracket: two slots (T1, T2) connect to one winner slot
+    // direction: "LR" = exit right/enter left, "RL" = exit left/enter right
+    const drawBracket = (
+      s1Id: string, s2Id: string, winId: string, key: string, dir: "LR"|"RL"
+    ) => {
+      const e1=sl.get(s1Id), e2=sl.get(s2Id), ew=sl.get(winId);
+      if (!e1 || !e2 || !ew) return;
+      const r1=e1.getBoundingClientRect(), r2=e2.getBoundingClientRect(), rw=ew.getBoundingClientRect();
+      if (dir==="LR") {
+        const x1=r1.right-ir.left+sh, y1=r1.top+r1.height/2-ir.top+sv;
+        const x2=r2.right-ir.left+sh, y2=r2.top+r2.height/2-ir.top+sv;
+        const xw=rw.left-ir.left+sh,  yw=rw.top+rw.height/2-ir.top+sv;
+        const mx=(Math.max(x1,x2)+xw)/2, ym=(y1+y2)/2;
+        paths.push({d:`M ${x1} ${y1} H ${mx} V ${y2} H ${x2} M ${mx} ${ym} H ${xw}`,key});
+      } else {
+        const x1=r1.left-ir.left+sh, y1=r1.top+r1.height/2-ir.top+sv;
+        const x2=r2.left-ir.left+sh, y2=r2.top+r2.height/2-ir.top+sv;
+        const xw=rw.right-ir.left+sh, yw=rw.top+rw.height/2-ir.top+sv;
+        const mx=(Math.min(x1,x2)+xw)/2, ym=(y1+y2)/2;
+        paths.push({d:`M ${x1} ${y1} H ${mx} V ${y2} H ${x2} M ${mx} ${ym} H ${xw}`,key});
+      }
     };
-    const drawRL = (fromEl: HTMLElement, toEl: HTMLElement, key: string, toFrac=0.5) => {
-      const fr=fromEl.getBoundingClientRect(), tr=toEl.getBoundingClientRect();
-      const fx=fr.left-ir.left+inner.scrollLeft,  fy=fr.top+fr.height/2-ir.top+inner.scrollTop;
-      const tx=tr.right-ir.left+inner.scrollLeft, ty=tr.top+tr.height*toFrac-ir.top+inner.scrollTop;
-      paths.push({d:`M ${fx} ${fy} H ${(fx+tx)/2} V ${ty} H ${tx}`, key});
+
+    // Simple line from one slot to another (for Finals connection)
+    const drawLine = (fromId: string, toId: string, key: string, dir: "LR"|"RL") => {
+      const ef=sl.get(fromId), et=sl.get(toId);
+      if (!ef || !et) return;
+      const rf=ef.getBoundingClientRect(), rt=et.getBoundingClientRect();
+      if (dir==="LR") {
+        const fx=rf.right-ir.left+sh, fy=rf.top+rf.height/2-ir.top+sv;
+        const tx=rt.left-ir.left+sh,  ty=rt.top+rt.height/2-ir.top+sv;
+        paths.push({d:`M ${fx} ${fy} H ${(fx+tx)/2} V ${ty} H ${tx}`,key});
+      } else {
+        const fx=rf.left-ir.left+sh,  fy=rf.top+rf.height/2-ir.top+sv;
+        const tx=rt.right-ir.left+sh, ty=rt.top+rt.height/2-ir.top+sv;
+        paths.push({d:`M ${fx} ${fy} H ${(fx+tx)/2} V ${ty} H ${tx}`,key});
+      }
     };
 
     if (isConferenceBracket) {
-      // West connectors: left-to-right
+      // West: left-to-right
       for (let ri=0; ri<westRounds.length-1; ri++) {
         const curMs=westRounds[ri].matchups, nextMs=westRounds[ri+1].matchups;
-        for (let mi=0; mi<curMs.length; mi++) { const nM=nextMs[Math.floor(mi/2)]; if(!nM) continue; const fe=matchupEls.current.get(curMs[mi].id),te=matchupEls.current.get(nM.id); if(fe&&te) drawLR(fe,te,`${curMs[mi].id}-${nM.id}`); }
+        for (let mi=0; mi<curMs.length; mi++) {
+          const nM=nextMs[Math.floor(mi/2)]; if(!nM) continue;
+          const winSlot=mi%2===0?"1":"2";
+          drawBracket(`${curMs[mi].id}-1`,`${curMs[mi].id}-2`,`${nM.id}-${winSlot}`,`${curMs[mi].id}-${nM.id}`,"LR");
+        }
       }
+      // West Conf Finals → Championship Finals team1 slot
       if (finalsMatchup && westRounds.length>0) {
         const lastW=westRounds[westRounds.length-1].matchups;
-        for (const m of lastW) { const fe=matchupEls.current.get(m.id),te=matchupEls.current.get(finalsMatchup.id); if(fe&&te) drawLR(fe,te,`${m.id}-wf`,0.35); }
+        for (const m of lastW) {
+          drawBracket(`${m.id}-1`,`${m.id}-2`,`${finalsMatchup.id}-1`,`${m.id}-wf`,"LR");
+        }
       }
-      // East connectors: right-to-left (from outer R1 toward inner Finals)
+      // East: right-to-left (from outer R1 toward center)
       for (let ri=0; ri<eastRounds.length-1; ri++) {
         const curMs=eastRounds[ri].matchups, nextMs=eastRounds[ri+1].matchups;
-        for (let mi=0; mi<curMs.length; mi++) { const nM=nextMs[Math.floor(mi/2)]; if(!nM) continue; const fe=matchupEls.current.get(curMs[mi].id),te=matchupEls.current.get(nM.id); if(fe&&te) drawRL(fe,te,`${curMs[mi].id}-${nM.id}`); }
+        for (let mi=0; mi<curMs.length; mi++) {
+          const nM=nextMs[Math.floor(mi/2)]; if(!nM) continue;
+          const winSlot=mi%2===0?"1":"2";
+          drawBracket(`${curMs[mi].id}-1`,`${curMs[mi].id}-2`,`${nM.id}-${winSlot}`,`${curMs[mi].id}-${nM.id}`,"RL");
+        }
       }
+      // East Conf Finals → Championship Finals team2 slot
       if (finalsMatchup && eastRounds.length>0) {
         const lastE=eastRounds[eastRounds.length-1].matchups;
-        for (const m of lastE) { const fe=matchupEls.current.get(m.id),te=matchupEls.current.get(finalsMatchup.id); if(fe&&te) drawRL(fe,te,`${m.id}-ef`,0.65); }
+        for (const m of lastE) {
+          drawBracket(`${m.id}-1`,`${m.id}-2`,`${finalsMatchup.id}-2`,`${m.id}-ef`,"RL");
+        }
       }
     } else {
       for (let ri=0; ri<rounds.length-1; ri++) {
         const cur=rounds[ri],next=rounds[ri+1];
-        for (let mi=0; mi<cur.matchups.length; mi++) { const m=cur.matchups[mi],nM=next.matchups[Math.floor(mi/2)]; if(!nM) continue; const fe=matchupEls.current.get(m.id),te=matchupEls.current.get(nM.id); if(fe&&te) drawLR(fe,te,`${m.id}-${nM.id}`); }
+        for (let mi=0; mi<cur.matchups.length; mi++) {
+          const m=cur.matchups[mi],nM=next.matchups[Math.floor(mi/2)]; if(!nM) continue;
+          const winSlot=mi%2===0?"1":"2";
+          drawBracket(`${m.id}-1`,`${m.id}-2`,`${nM.id}-${winSlot}`,`${m.id}-${nM.id}`,"LR");
+        }
       }
     }
     setConnectors(paths);
@@ -2554,33 +2648,19 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
     return max+80;
   }, [rounds, westRounds, eastRounds, isConferenceBracket]);
 
-  // Matchup card component
-  const MatchupCard = ({ m }: { m: BracketMatchup }) => {
-    const t1=(m.team1??teams.find(t=>t.id===m.team1_id)) as Team|null;
-    const t2=(m.team2??teams.find(t=>t.id===m.team2_id)) as Team|null;
-    return (
-      <div ref={el=>{ if(el) matchupEls.current.set(m.id,el); else matchupEls.current.delete(m.id); }}
-        style={{ borderRadius:10, border:"1px solid #242424", background:"#141414", overflow:"hidden", flexShrink:0 }}>
-        <BracketTeamRow matchup={m} side="team1" teams={teams} saving={saving===m.id} onUpdate={p=>updateMatchup(m,p)} />
-        <div style={{ height:1, background:"#1e1e1e" }}/>
-        <BracketTeamRow matchup={m} side="team2" teams={teams} saving={saving===m.id} onUpdate={p=>updateMatchup(m,p)} />
-        <div style={{ padding:"5px 8px", borderTop:"1px solid #181818", display:"flex", alignItems:"center", gap:4, background:"#0f0f0f" }}>
-          {([{id:m.team1_id,team:t1},{id:m.team2_id,team:t2}] as const).map(({id,team},wi)=>
-            id ? (
-              <button key={wi} onClick={()=>updateMatchup(m,{winner_id:m.winner_id===id?null:id})}
-                style={{ fontSize:"0.65rem", padding:"2px 8px", borderRadius:4, border:"1px solid", background:m.winner_id===id?"rgba(22,163,74,0.15)":"transparent", borderColor:m.winner_id===id?"#16a34a":"#2a2a2a", color:m.winner_id===id?"#4ade80":"#555", cursor:"pointer" }}>
-                {team?.abbreviation??`T${wi+1}`} 🏆
-              </button>
-            ) : null
-          )}
-        </div>
-      </div>
-    );
-  };
+  // Matchup group: two separate sport-pill boxes (one per team)
+  const MatchupGroup = ({ m, conf }: { m: BracketMatchup; conf: "W"|"E"|"F" }) => (
+    <div style={{ display:"flex", flexDirection:"column", gap:INNER_GAP, flexShrink:0 }}>
+      <TeamSlot m={m} side="team1" teams={teams} saving={saving===m.id} onUpdate={p=>updateMatchup(m,p)} conf={conf}
+        slotRef={el=>{ if(el) slotEls.current.set(`${m.id}-1`,el); else slotEls.current.delete(`${m.id}-1`); }} />
+      <TeamSlot m={m} side="team2" teams={teams} saving={saving===m.id} onUpdate={p=>updateMatchup(m,p)} conf={conf}
+        slotRef={el=>{ if(el) slotEls.current.set(`${m.id}-2`,el); else slotEls.current.delete(`${m.id}-2`); }} />
+    </div>
+  );
 
   const hasEnoughTeams = eastSeeds.length>=1 && westSeeds.length>=1;
-  // Finals vertical centering: center card within canvas
-  const finalsTopPad = Math.max(0, Math.floor((canvasH - 80 - MATCHUP_H - 31) / 2));
+  // Finals vertical centering
+  const finalsTopPad = Math.max(0, Math.floor((canvasH - 80 - MATCHUP_H) / 2));
 
   return (
     <div>
@@ -2627,39 +2707,50 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
               {isConferenceBracket ? (
                 /* Mirrored conference bracket:
                    WEST (left→right) | Finals (center) | EAST (right→left, rendered Finals→R1) */
-                <div style={{ display:"flex", gap:44, alignItems:"flex-start", position:"relative", zIndex:2 }}>
+                <div style={{ display:"flex", gap:56, alignItems:"flex-start", position:"relative", zIndex:2 }}>
 
-                  {/* ── WEST side: R1 leftmost, Finals rightmost before center ── */}
-                  {westRounds.map((col,ri)=>(
-                    <div key={col.name} style={{ width:220, flexShrink:0 }}>
-                      <div style={{ fontSize:"0.62rem", fontWeight:700, color:"#ef4444", textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:10, textAlign:"center" }}>
-                        {col.name}
+                  {/* ── WEST side: R1 leftmost, Conf Finals rightmost before center ── */}
+                  {westRounds.map((col,ri)=>{
+                    // In R1 (first round), only show matchups that have both teams — no TBD byes
+                    const isFirstRound = ri === 0;
+                    const visibleMatchups = isFirstRound
+                      ? col.matchups.filter(m => m.team1_id && m.team2_id)
+                      : col.matchups;
+                    return (
+                      <div key={col.name} style={{ width:240, flexShrink:0 }}>
+                        <div style={{ fontSize:"0.6rem", fontWeight:700, color:"#ef4444", textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:10, textAlign:"center" }}>
+                          {col.name}
+                        </div>
+                        <div style={{ display:"flex", flexDirection:"column", paddingTop:topOffsetForRound(ri), gap:gapForRound(ri) }}>
+                          {visibleMatchups.map(m=><MatchupGroup key={m.id} m={m} conf="W" />)}
+                        </div>
                       </div>
-                      <div style={{ display:"flex", flexDirection:"column", paddingTop:topOffsetForRound(ri), gap:gapForRound(ri) }}>
-                        {col.matchups.map(m=><MatchupCard key={m.id} m={m} />)}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
 
-                  {/* ── FINALS: centered vertically ── */}
+                  {/* ── CHAMPIONSHIP FINALS: centered vertically ── */}
                   {finalsMatchup && (
-                    <div style={{ width:220, flexShrink:0 }}>
+                    <div style={{ width:240, flexShrink:0 }}>
                       <div style={{ height: finalsTopPad }} />
-                      <div style={{ fontSize:"0.65rem", fontWeight:700, color:"#facc15", textTransform:"uppercase", letterSpacing:"0.12em", marginBottom:10, textAlign:"center" }}>🏆 Finals</div>
-                      <MatchupCard m={finalsMatchup} />
+                      <div style={{ fontSize:"0.63rem", fontWeight:700, color:"#facc15", textTransform:"uppercase", letterSpacing:"0.12em", marginBottom:10, textAlign:"center" }}>🏆 Championship</div>
+                      <MatchupGroup m={finalsMatchup} conf="F" />
                     </div>
                   )}
 
                   {/* ── EAST side: East Finals leftmost (closest to center), East R1 rightmost ── */}
                   {[...eastRounds].reverse().map((col,reverseIdx)=>{
                     const riFromRight = eastRounds.length - 1 - reverseIdx;
+                    const isFirstRound = riFromRight === 0;
+                    const visibleMatchups = isFirstRound
+                      ? col.matchups.filter(m => m.team1_id && m.team2_id)
+                      : col.matchups;
                     return (
-                      <div key={col.name} style={{ width:220, flexShrink:0 }}>
-                        <div style={{ fontSize:"0.62rem", fontWeight:700, color:"#3b82f6", textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:10, textAlign:"center" }}>
+                      <div key={col.name} style={{ width:240, flexShrink:0 }}>
+                        <div style={{ fontSize:"0.6rem", fontWeight:700, color:"#3b82f6", textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:10, textAlign:"center" }}>
                           {col.name}
                         </div>
                         <div style={{ display:"flex", flexDirection:"column", paddingTop:topOffsetForRound(riFromRight), gap:gapForRound(riFromRight) }}>
-                          {col.matchups.map(m=><MatchupCard key={m.id} m={m} />)}
+                          {visibleMatchups.map(m=><MatchupGroup key={m.id} m={m} conf="E" />)}
                         </div>
                       </div>
                     );
@@ -2668,17 +2759,23 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
                 </div>
               ) : (
                 /* Flat bracket */
-                <div style={{ display:"flex", gap:44, alignItems:"flex-start", position:"relative", zIndex:2 }}>
-                  {rounds.map((round,ri)=>(
-                    <div key={round.name} style={{ width:220, flexShrink:0 }}>
-                      <div style={{ fontSize:"0.7rem", fontWeight:700, color:"#555", textTransform:"uppercase", letterSpacing:"0.12em", marginBottom:14, paddingBottom:8, borderBottom:"1px solid #1e1e1e", textAlign:"center" }}>
-                        {round.name}
+                <div style={{ display:"flex", gap:56, alignItems:"flex-start", position:"relative", zIndex:2 }}>
+                  {rounds.map((round,ri)=>{
+                    const isFirstRound = ri === 0;
+                    const visibleMatchups = isFirstRound
+                      ? round.matchups.filter(m => m.team1_id && m.team2_id)
+                      : round.matchups;
+                    return (
+                      <div key={round.name} style={{ width:240, flexShrink:0 }}>
+                        <div style={{ fontSize:"0.7rem", fontWeight:700, color:"#555", textTransform:"uppercase", letterSpacing:"0.12em", marginBottom:14, paddingBottom:8, borderBottom:"1px solid #1e1e1e", textAlign:"center" }}>
+                          {round.name}
+                        </div>
+                        <div style={{ display:"flex", flexDirection:"column", paddingTop:topOffsetForRound(ri), gap:gapForRound(ri) }}>
+                          {visibleMatchups.map(m=><MatchupGroup key={m.id} m={m} conf="W" />)}
+                        </div>
                       </div>
-                      <div style={{ display:"flex", flexDirection:"column", paddingTop:topOffsetForRound(ri), gap:gapForRound(ri) }}>
-                        {round.matchups.map(m=><MatchupCard key={m.id} m={m} />)}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

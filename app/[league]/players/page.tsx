@@ -30,23 +30,30 @@ type Accolade = {
 };
 type PlayerTeam = { mc_uuid: string; team_id: string; season: string | null };
 type TeamRecord = { team_id: string; wins: number; losses: number };
+type StatType = "regular" | "playoffs" | "combined";
 
 const na = (v: number | null | undefined, suffix = "") =>
   v == null ? "—" : `${v}${suffix}`;
 
 function PlayerCard({
   player,
-  stats,
+  statsRegular,
+  statsPlayoffs,
+  statsCombined,
   accolades,
   allTimeRecord,
   onClose,
 }: {
   player: Player;
-  stats: StatRow | null;
+  statsRegular: StatRow | null;
+  statsPlayoffs: StatRow | null;
+  statsCombined: StatRow | null;
   accolades: Accolade[];
   allTimeRecord: { wins: number; losses: number };
   onClose: () => void;
 }) {
+  const [statType, setStatType] = React.useState<StatType>("regular");
+  const stats = statType === "regular" ? statsRegular : statType === "playoffs" ? statsPlayoffs : statsCombined;
   const rings = accolades.filter((a) => a.mc_uuid === player.mc_uuid && a.type === "Finals Champion");
   const otherAccolades = accolades.filter((a) => a.mc_uuid === player.mc_uuid && a.type !== "Finals Champion");
 
@@ -116,7 +123,20 @@ function PlayerCard({
 
           {/* All-time stats */}
           <div className="px-6 py-4 border-b border-slate-800">
-            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">All-Time Stats</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest">All-Time Stats</h3>
+              <div className="flex rounded-lg overflow-hidden border border-slate-700 text-xs">
+                {(["regular", "playoffs", "combined"] as StatType[]).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setStatType(t)}
+                    className={`px-2.5 py-1 transition ${statType === t ? "bg-blue-600 text-white font-semibold" : "bg-slate-800 text-slate-400 hover:text-white"}`}
+                  >
+                    {t === "regular" ? "Regular" : t === "playoffs" ? "Playoffs" : "Combined"}
+                  </button>
+                ))}
+              </div>
+            </div>
             {!stats ? (
               <p className="text-slate-600 text-sm">No stats recorded.</p>
             ) : (
@@ -193,7 +213,9 @@ export default function PlayersPage({ params }: { params?: Promise<{ league?: st
   const leagueDisplay = leagueNames[slug] ?? slug.toUpperCase();
 
   const [players, setPlayers] = React.useState<Player[]>([]);
-  const [statsMap, setStatsMap] = React.useState<Record<string, StatRow>>({});
+  const [statsMapRegular, setStatsMapRegular] = React.useState<Record<string, StatRow>>({});
+  const [statsMapPlayoffs, setStatsMapPlayoffs] = React.useState<Record<string, StatRow>>({});
+  const [statsMapCombined, setStatsMapCombined] = React.useState<Record<string, StatRow>>({});
   const [accolades, setAccolades] = React.useState<Accolade[]>([]);
   const [recordMap, setRecordMap] = React.useState<Record<string, { wins: number; losses: number }>>({});
   const [playerTeams, setPlayerTeams] = React.useState<PlayerTeam[]>([]);
@@ -205,17 +227,23 @@ export default function PlayersPage({ params }: { params?: Promise<{ league?: st
     if (!slug) return;
     Promise.all([
       fetch("/api/players").then((r) => r.json()),
+      fetch(`/api/stats?league=${slug}&season=all&type=regular`).then((r) => r.json()),
+      fetch(`/api/stats?league=${slug}&season=all&type=playoffs`).then((r) => r.json()),
       fetch(`/api/stats?league=${slug}&season=all&type=combined`).then((r) => r.json()),
       fetch(`/api/accolades?league=${slug}`).then((r) => r.json()),
       fetch(`/api/teams/records?league=${slug}`).then((r) => r.json()),
       fetch(`/api/teams/players?league=${slug}`).then((r) => r.json()),
-    ]).then(([p, s, a, rec, pt]) => {
+    ]).then(([p, sReg, sPly, sCom, a, rec, pt]) => {
       setPlayers(Array.isArray(p) ? p : []);
-      const map: Record<string, StatRow> = {};
-      if (Array.isArray(s)) s.forEach((row: StatRow) => { map[row.mc_uuid] = row; });
-      setStatsMap(map);
+      const toMap = (rows: StatRow[]) => {
+        const map: Record<string, StatRow> = {};
+        if (Array.isArray(rows)) rows.forEach((row) => { map[row.mc_uuid] = row; });
+        return map;
+      };
+      setStatsMapRegular(toMap(sReg));
+      setStatsMapPlayoffs(toMap(sPly));
+      setStatsMapCombined(toMap(sCom));
       setAccolades(Array.isArray(a) ? a : []);
-      // Build record map keyed by team_id
       const rmap: Record<string, { wins: number; losses: number }> = {};
       if (Array.isArray(rec)) rec.forEach((r: TeamRecord) => { rmap[r.team_id] = { wins: r.wins, losses: r.losses }; });
       setRecordMap(rmap);
@@ -240,8 +268,8 @@ export default function PlayersPage({ params }: { params?: Promise<{ league?: st
     : players;
 
   const sorted = [...filtered].sort((a, b) => {
-    const as = statsMap[a.mc_uuid];
-    const bs = statsMap[b.mc_uuid];
+    const as = statsMapRegular[a.mc_uuid];
+    const bs = statsMapRegular[b.mc_uuid];
     if (!as && !bs) return 0;
     if (!as) return 1;
     if (!bs) return -1;
@@ -253,7 +281,9 @@ export default function PlayersPage({ params }: { params?: Promise<{ league?: st
       {selected && (
         <PlayerCard
           player={selected}
-          stats={statsMap[selected.mc_uuid] ?? null}
+          statsRegular={statsMapRegular[selected.mc_uuid] ?? null}
+          statsPlayoffs={statsMapPlayoffs[selected.mc_uuid] ?? null}
+          statsCombined={statsMapCombined[selected.mc_uuid] ?? null}
           accolades={accolades}
           allTimeRecord={getRecord(selected.mc_uuid)}
           onClose={() => setSelected(null)}
@@ -281,7 +311,7 @@ export default function PlayersPage({ params }: { params?: Promise<{ league?: st
         ) : (
           <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             {sorted.map((p) => {
-              const st = statsMap[p.mc_uuid];
+              const st = statsMapRegular[p.mc_uuid];
               const rings = accolades.filter((a) => a.mc_uuid === p.mc_uuid && a.type === "Finals Champion");
               const rec = getRecord(p.mc_uuid);
               return (
