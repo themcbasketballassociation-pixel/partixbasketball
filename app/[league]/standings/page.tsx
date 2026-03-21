@@ -8,13 +8,16 @@ const leagueNames: Record<string, string> = {
 };
 
 type Team = { id: string; name: string; abbreviation: string; division: string | null; logo_url: string | null };
-type Game = { id: string; status: string; home_team_id: string; away_team_id: string; home_score: number | null; away_score: number | null; season?: string };
+type Game = { id: string; status: string; home_team_id: string; away_team_id: string; home_score: number | null; away_score: number | null };
 type StandingRow = { team: Team; w: number; l: number; pf: number; pa: number; pct: number; diff: number; confW: number; confL: number; confPct: number };
 
-function TeamLogo({ team, size = 32 }: { team: Team; size?: number }) {
-  if (team.logo_url) return <img src={team.logo_url} alt={team.abbreviation} width={size} height={size} style={{ objectFit: "contain", borderRadius: 4, flexShrink: 0, width: size, height: size }} />;
+function TeamLogo({ team, size = 28 }: { team: Team; size?: number }) {
+  if (team.logo_url) return (
+    <img src={team.logo_url} alt={team.abbreviation} width={size} height={size}
+      style={{ objectFit: "contain", borderRadius: 4, flexShrink: 0, width: size, height: size }} />
+  );
   return (
-    <div style={{ width: size, height: size, borderRadius: 4, background: "#1e1e1e", border: "1px solid #2a2a2a", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: size < 32 ? 9 : 11, fontWeight: 700, color: "#888" }}>
+    <div style={{ width: size, height: size, borderRadius: 4, background: "#1e1e1e", border: "1px solid #2a2a2a", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 9, fontWeight: 700, color: "#888" }}>
       {team.abbreviation}
     </div>
   );
@@ -55,25 +58,20 @@ function sortStandings(rows: StandingRow[], games: Game[]): StandingRow[] {
   return groups.flatMap((g) => applyTiebreakers(g, games));
 }
 
-function StandingsTable({ rows, games }: { rows: StandingRow[]; games: Game[] }) {
-  if (rows.length === 0) return <div style={{ padding: 48, textAlign: "center", color: "#555", fontSize: "0.875rem" }}>No teams yet.</div>;
+function StandingsTable({ rows, games, accent }: { rows: StandingRow[]; games: Game[]; accent?: string }) {
+  if (rows.length === 0) return <div style={{ padding: 32, textAlign: "center", color: "#555", fontSize: "0.875rem" }}>No teams yet.</div>;
   const sorted = sortStandings(rows, games);
   const leader = sorted[0];
-  const headers = ["#", "Team", "W", "L", "PCT", "GB", "CONF", "PF", "PA", "DIFF"];
   return (
     <div style={{ overflowX: "auto" }}>
-      <table style={{ minWidth: "100%", fontSize: "0.875rem", borderCollapse: "collapse" }}>
+      <table style={{ width: "100%", fontSize: "0.875rem", borderCollapse: "collapse" }}>
         <thead>
           <tr style={{ borderBottom: "1px solid #1e1e1e" }}>
-            {headers.map((h) => (
+            {["#", "Team", "W", "L", "PCT", "GB", "CONF", "DIFF"].map((h) => (
               <th key={h} style={{
-                padding: "12px 12px",
-                fontSize: "0.7rem",
-                fontWeight: 600,
-                textTransform: "uppercase",
-                letterSpacing: "0.1em",
-                color: "#555",
-                textAlign: h === "Team" ? "left" : "center",
+                padding: "10px 12px",
+                fontSize: "0.65rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em",
+                color: "#444", textAlign: h === "Team" ? "left" : "center", whiteSpace: "nowrap",
               }}>{h}</th>
             ))}
           </tr>
@@ -82,29 +80,34 @@ function StandingsTable({ rows, games }: { rows: StandingRow[]; games: Game[] })
           {sorted.map((row, i) => {
             const gb = i === 0 ? "—" : ((leader.w - leader.l - (row.w - row.l)) / 2).toFixed(1);
             const gp = row.w + row.l;
+            const isFirst = i === 0;
             return (
-              <tr key={row.team.id} style={{ borderTop: "1px solid #1e1e1e", background: i === 0 ? "rgba(255,255,255,0.03)" : undefined }}>
-                <td style={{ padding: "12px 16px", textAlign: "center", color: "#555", fontSize: "0.75rem", fontFamily: "monospace" }}>{i + 1}</td>
-                <td style={{ padding: "12px 16px" }}>
+              <tr key={row.team.id} style={{
+                borderTop: "1px solid #1a1a1a",
+                background: isFirst ? "rgba(255,255,255,0.02)" : undefined,
+                transition: "background 0.1s",
+              }}>
+                <td style={{ padding: "11px 14px", textAlign: "center", color: "#444", fontSize: "0.7rem", fontWeight: 600 }}>{i + 1}</td>
+                <td style={{ padding: "11px 12px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <TeamLogo team={row.team} size={28} />
+                    <TeamLogo team={row.team} size={26} />
                     <div>
-                      <span style={{ fontWeight: 600, color: "#fff", fontSize: "0.875rem", display: "block" }}>{row.team.name}</span>
-                      <span style={{ fontSize: "0.75rem", color: "#555", fontFamily: "monospace" }}>
-                        {row.team.abbreviation}
-                        {row.team.division && <span style={{ marginLeft: 6, color: "#444" }}>{row.team.division}</span>}
-                      </span>
+                      <div style={{ fontWeight: 600, color: "#fff", fontSize: "0.875rem", lineHeight: 1.2 }}>{row.team.name}</div>
+                      <div style={{ fontSize: "0.7rem", color: "#555", fontFamily: "monospace" }}>{row.team.abbreviation}</div>
                     </div>
                   </div>
                 </td>
-                <td style={{ padding: "12px", textAlign: "center", fontWeight: 700, color: "#4ade80" }}>{row.w}</td>
-                <td style={{ padding: "12px", textAlign: "center", color: "#f87171" }}>{row.l}</td>
-                <td style={{ padding: "12px", textAlign: "center", fontWeight: 600, color: "#fff" }}>{gp > 0 ? row.pct.toFixed(3) : ".000"}</td>
-                <td style={{ padding: "12px", textAlign: "center", color: "#888", fontSize: "0.75rem" }}>{gb}</td>
-                <td style={{ padding: "12px", textAlign: "center", color: "#888", fontSize: "0.75rem" }}>{row.confW + row.confL > 0 ? `${row.confW}-${row.confL}` : "—"}</td>
-                <td style={{ padding: "12px", textAlign: "center", color: "#888" }}>{row.pf}</td>
-                <td style={{ padding: "12px", textAlign: "center", color: "#888" }}>{row.pa}</td>
-                <td style={{ padding: "12px", textAlign: "center", fontWeight: 600, fontSize: "0.75rem", color: row.diff > 0 ? "#4ade80" : row.diff < 0 ? "#f87171" : "#555" }}>
+                <td style={{ padding: "11px 10px", textAlign: "center", fontWeight: 700, color: "#4ade80", fontSize: "0.875rem" }}>{row.w}</td>
+                <td style={{ padding: "11px 10px", textAlign: "center", color: "#f87171", fontSize: "0.875rem" }}>{row.l}</td>
+                <td style={{ padding: "11px 10px", textAlign: "center", fontWeight: 600, color: "#fff", fontSize: "0.8rem" }}>
+                  {gp > 0 ? row.pct.toFixed(3).replace(/^0/, "") : ".000"}
+                </td>
+                <td style={{ padding: "11px 10px", textAlign: "center", color: "#555", fontSize: "0.75rem" }}>{gb}</td>
+                <td style={{ padding: "11px 10px", textAlign: "center", color: "#666", fontSize: "0.75rem" }}>
+                  {row.confW + row.confL > 0 ? `${row.confW}-${row.confL}` : "—"}
+                </td>
+                <td style={{ padding: "11px 10px", textAlign: "center", fontWeight: 600, fontSize: "0.75rem",
+                  color: row.diff > 0 ? "#4ade80" : row.diff < 0 ? "#f87171" : "#555" }}>
                   {row.diff > 0 ? "+" : ""}{row.diff}
                 </td>
               </tr>
@@ -124,11 +127,9 @@ export default function StandingsPage({ params }: { params?: Promise<{ league?: 
   const [allRows, setAllRows] = React.useState<StandingRow[]>([]);
   const [games, setGames] = React.useState<Game[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const [divFilter, setDivFilter] = React.useState<"All" | "East" | "West">("All");
   const [seasons, setSeasons] = React.useState<string[]>([]);
   const [season, setSeason] = React.useState<string>("");
 
-  // Fetch available seasons
   React.useEffect(() => {
     if (!slug) return;
     fetch(`/api/stats/seasons?league=${slug}`)
@@ -141,11 +142,9 @@ export default function StandingsPage({ params }: { params?: Promise<{ league?: 
           setSeasons(unique);
           if (unique.length > 0 && !season) setSeason(unique[0]);
         }
-      })
-      .catch(() => {});
+      }).catch(() => {});
   }, [slug]);
 
-  // Fetch standings data when season changes
   React.useEffect(() => {
     if (!slug || !season) return;
     setLoading(true);
@@ -179,55 +178,56 @@ export default function StandingsPage({ params }: { params?: Promise<{ league?: 
     });
   }, [slug, season]);
 
-  const hasDivisions = allRows.some((r) => r.team.division);
-  const filteredRows = divFilter === "All" ? allRows : allRows.filter((r) => r.team.division === divFilter);
+  const hasDivisions = allRows.some((r) => r.team.division === "East" || r.team.division === "West");
+  const eastRows = allRows.filter((r) => r.team.division === "East");
+  const westRows = allRows.filter((r) => r.team.division === "West");
 
   return (
     <div style={{ borderRadius: "1rem", border: "1px solid #1e1e1e", background: "#111", overflow: "hidden" }}>
+      {/* Header */}
       <div style={{ padding: "20px 24px", borderBottom: "1px solid #1e1e1e", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
         <div>
           <h2 style={{ fontSize: "1.5rem", fontWeight: 700, color: "#fff", margin: 0 }}>Standings</h2>
-          <p style={{ color: "#888", fontSize: "0.875rem", margin: "2px 0 0" }}>{leagueDisplay}</p>
+          <p style={{ color: "#888", fontSize: "0.875rem", margin: "2px 0 0" }}>{leagueDisplay} · {season}</p>
         </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          <select
-            value={season}
-            onChange={(e) => { setSeason(e.target.value); setLoading(true); }}
-            style={{ background: "#111", border: "1px solid #1e1e1e", color: "#fff", borderRadius: "0.75rem", padding: "6px 12px", fontSize: "0.875rem", outline: "none", cursor: "pointer" }}
-          >
-            {seasons.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
-          {hasDivisions && (
-            <div style={{ display: "flex", borderRadius: "0.5rem", border: "1px solid #1e1e1e", overflow: "hidden", fontSize: "0.875rem" }}>
-              {(["All", "East", "West"] as const).map((d) => (
-                <button
-                  key={d}
-                  onClick={() => setDivFilter(d)}
-                  style={{
-                    padding: "6px 16px",
-                    fontWeight: 500,
-                    background: divFilter === d ? "#fff" : "#111",
-                    color: divFilter === d ? "#000" : "#888",
-                    border: "none",
-                    cursor: "pointer",
-                    transition: "all 0.15s",
-                  }}
-                >
-                  {d}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <select value={season} onChange={(e) => { setSeason(e.target.value); setLoading(true); }}
+          style={{ background: "#0d0d0d", border: "1px solid #2a2a2a", color: "#fff", borderRadius: "0.75rem", padding: "6px 14px", fontSize: "0.875rem", outline: "none", cursor: "pointer" }}>
+          {seasons.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
       </div>
-      {loading
-        ? <div style={{ padding: 40, textAlign: "center", color: "#555" }}>Loading standings...</div>
-        : allRows.length === 0
-        ? <div style={{ padding: 40, textAlign: "center", color: "#555" }}>No teams or games yet.</div>
-        : <StandingsTable rows={filteredRows} games={games} />}
+
+      {loading ? (
+        <div style={{ padding: 48, textAlign: "center", color: "#555" }}>Loading standings...</div>
+      ) : allRows.length === 0 ? (
+        <div style={{ padding: 48, textAlign: "center", color: "#555" }}>No teams or games yet.</div>
+      ) : hasDivisions ? (
+        /* Conference standings — two panels side by side */
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0 }}>
+          {/* West */}
+          <div style={{ borderRight: "1px solid #1e1e1e" }}>
+            <div style={{ padding: "12px 20px", borderBottom: "1px solid #1e1e1e", display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#ef4444", flexShrink: 0 }} />
+              <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#ef4444", textTransform: "uppercase", letterSpacing: "0.12em" }}>Western Conference</span>
+            </div>
+            <StandingsTable rows={westRows} games={games} accent="#ef4444" />
+          </div>
+          {/* East */}
+          <div>
+            <div style={{ padding: "12px 20px", borderBottom: "1px solid #1e1e1e", display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#3b82f6", flexShrink: 0 }} />
+              <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#3b82f6", textTransform: "uppercase", letterSpacing: "0.12em" }}>Eastern Conference</span>
+            </div>
+            <StandingsTable rows={eastRows} games={games} accent="#3b82f6" />
+          </div>
+        </div>
+      ) : (
+        /* No conferences — single table */
+        <StandingsTable rows={allRows} games={games} />
+      )}
+
       {!loading && allRows.length > 0 && (
-        <div style={{ padding: "12px 24px", borderTop: "1px solid #1e1e1e", fontSize: "0.75rem", color: "#444" }}>
-          Tiebreakers: Record → Conf Record → H2H → Point Diff
+        <div style={{ padding: "10px 20px", borderTop: "1px solid #1e1e1e", fontSize: "0.7rem", color: "#383838" }}>
+          Tiebreakers: Win % → Conf Record → H2H → Point Diff
         </div>
       )}
     </div>
