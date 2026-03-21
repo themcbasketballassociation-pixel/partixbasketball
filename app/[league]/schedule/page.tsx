@@ -7,12 +7,20 @@ const leagueNames: Record<string, string> = {
   mbgl: "G League",
 };
 
-type Team = { id: string; name: string; abbreviation: string };
+type Team = { id: string; name: string; abbreviation: string; logo_url?: string | null; color2?: string | null };
 type Game = {
   id: string; league: string; scheduled_at: string; status: string;
   home_team_id: string; away_team_id: string;
   home_score: number | null; away_score: number | null;
   home_team: Team; away_team: Team;
+};
+type BracketMatchup = {
+  id: string; round_name: string; round_order: number; matchup_index: number;
+  team1_id: string | null; team2_id: string | null;
+  team1_score: number | null; team2_score: number | null;
+  winner_id: string | null;
+  team1?: Team | null;
+  team2?: Team | null;
 };
 
 function getWeekKey(scheduledAt: string): string {
@@ -24,6 +32,188 @@ function getWeekKey(scheduledAt: string): string {
   return thu.toISOString().slice(0, 10);
 }
 
+// ── Bracket layout constants ──────────────────────────────────────────────────
+const SLOT_H    = 58;
+const INNER_GAP = 6;
+const MATCHUP_H = SLOT_H * 2 + INNER_GAP;
+const BASE_GAP  = 48;
+function gapForRound(ri: number)    { return (Math.pow(2, ri) - 1) * (MATCHUP_H + BASE_GAP) + BASE_GAP; }
+function topOffsetForRound(ri: number) { return ((Math.pow(2, ri) - 1) * (MATCHUP_H + BASE_GAP)) / 2; }
+
+const CONF_COLORS: Record<string, { bg: string; darkBg: string }> = {
+  W: { bg: "#991b1b", darkBg: "#7f1d1d" },
+  E: { bg: "#1d4ed8", darkBg: "#1e3a8a" },
+  F: { bg: "#78350f", darkBg: "#451a03" },
+};
+
+// ── Read-only team slot ───────────────────────────────────────────────────────
+function BracketSlot({ team, score, winnerId, teamId, conf }: {
+  team: Team | null | undefined; score: number | null; winnerId: string | null; teamId: string | null; conf: "W"|"E"|"F";
+}) {
+  const isWinner = !!(winnerId && teamId && winnerId === teamId);
+  const isLoser  = !!(winnerId && teamId && winnerId !== teamId);
+  const colors   = CONF_COLORS[conf];
+  const teamColor = team?.color2 ?? null;
+  const pillBg = teamColor ?? colors.bg;
+  const logoBg = teamColor ?? colors.darkBg;
+
+  return (
+    <div style={{
+      display:"flex", alignItems:"center", height:SLOT_H, borderRadius:10,
+      background: pillBg,
+      border: `2px solid ${isWinner ? "#fff" : "transparent"}`,
+      overflow:"hidden", flexShrink:0,
+      opacity: isLoser ? 0.35 : 1,
+      filter: isWinner ? "brightness(1.15)" : isLoser ? "brightness(0.45) saturate(0.6)" : "none",
+    }}>
+      <div style={{ flex:1, padding:"0 14px", minWidth:0 }}>
+        {team
+          ? <span style={{ fontSize:"1.1rem", fontWeight:900, color:"#fff", letterSpacing:"0.04em", textShadow:"0 1px 3px rgba(0,0,0,0.4)", display:"block", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+              {team.abbreviation}
+            </span>
+          : <span style={{ fontSize:"0.75rem", color:"#444" }}>TBD</span>
+        }
+      </div>
+      {score != null && (
+        <span style={{ padding:"0 8px", fontSize:"0.95rem", fontWeight:700, color:"rgba(255,255,255,0.85)", flexShrink:0 }}>{score}</span>
+      )}
+      <div style={{ width:52, height:SLOT_H, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", background:logoBg, borderLeft:"1px solid rgba(0,0,0,0.25)" }}>
+        {team?.logo_url
+          ? <img src={team.logo_url} style={{ width:38, height:38, objectFit:"contain" }} alt="" />
+          : <span style={{ fontSize:"0.75rem", color:"#333", fontWeight:700 }}>?</span>
+        }
+      </div>
+    </div>
+  );
+}
+
+function BracketGroup({ m, conf }: { m: BracketMatchup; conf: "W"|"E"|"F" }) {
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:INNER_GAP, flexShrink:0, width:220 }}>
+      <BracketSlot team={m.team1} score={m.team1_score} winnerId={m.winner_id} teamId={m.team1_id} conf={conf} />
+      <BracketSlot team={m.team2} score={m.team2_score} winnerId={m.winner_id} teamId={m.team2_id} conf={conf} />
+    </div>
+  );
+}
+
+// ── Bracket view ─────────────────────────────────────────────────────────────
+function BracketView({ league, season }: { league: string; season: string }) {
+  const [matchups, setMatchups] = React.useState<BracketMatchup[] | null>(null);
+  const playoffSeason = `${season} Playoffs`;
+
+  React.useEffect(() => {
+    if (!league || !season) return;
+    fetch(`/api/playoff-brackets?league=${encodeURIComponent(league)}&season=${encodeURIComponent(playoffSeason)}`)
+      .then(r => r.json())
+      .then(d => setMatchups(Array.isArray(d) ? d : []))
+      .catch(() => setMatchups([]));
+  }, [league, playoffSeason]);
+
+  if (matchups === null) return <div style={{ padding:40, textAlign:"center", color:"#555" }}>Loading bracket...</div>;
+  if (matchups.length === 0) return (
+    <div style={{ padding:60, textAlign:"center" }}>
+      <div style={{ fontSize:"2rem", marginBottom:12 }}>🏆</div>
+      <div style={{ color:"#888", fontWeight:600, fontSize:"1rem" }}>No bracket yet for {playoffSeason}</div>
+      <div style={{ color:"#444", fontSize:"0.8rem", marginTop:6 }}>Check back once the playoffs begin.</div>
+    </div>
+  );
+
+  const isConf = matchups.some(m => m.round_name.startsWith("East ") || m.round_name.startsWith("West "));
+
+  const groupRounds = (filter: (m: BracketMatchup) => boolean) => {
+    const map = new Map<string, { name:string; order:number; matchups:BracketMatchup[] }>();
+    for (const m of matchups.filter(filter)) {
+      if (!map.has(m.round_name)) map.set(m.round_name, { name:m.round_name, order:m.round_order, matchups:[] });
+      map.get(m.round_name)!.matchups.push(m);
+    }
+    return [...map.values()].sort((a,b)=>a.order-b.order).map(r=>({ ...r, matchups: r.matchups.sort((a,b)=>a.matchup_index-b.matchup_index) }));
+  };
+
+  const westRounds  = groupRounds(m => m.round_name.startsWith("West "));
+  const eastRounds  = groupRounds(m => m.round_name.startsWith("East "));
+  const flatRounds  = groupRounds(m => !m.round_name.startsWith("East ") && !m.round_name.startsWith("West ") && m.round_name !== "Finals");
+  const finalsMatch = matchups.find(m => m.round_name === "Finals") ?? null;
+
+  // Canvas height
+  let canvasH = MATCHUP_H + 80;
+  const calcH = (col: { matchups: BracketMatchup[] }, ri: number) => {
+    const n = col.matchups.length;
+    return topOffsetForRound(ri) + n * MATCHUP_H + Math.max(0, n-1) * gapForRound(ri);
+  };
+  if (isConf) {
+    westRounds.forEach((col,ri) => { const h=calcH(col,ri); if(h>canvasH) canvasH=h; });
+    eastRounds.forEach((col,ri) => { const h=calcH(col,ri); if(h>canvasH) canvasH=h; });
+  } else {
+    flatRounds.forEach((col,ri) => { const h=calcH(col,ri); if(h>canvasH) canvasH=h; });
+  }
+  canvasH += 80;
+
+  const finalsTopPad = Math.max(0, Math.floor((canvasH - 80 - MATCHUP_H) / 2));
+
+  return (
+    <div style={{ overflowX:"auto" }}>
+      <div style={{ position:"relative", minWidth:"max-content", height:canvasH, padding:"28px 36px" }}>
+        {isConf ? (
+          <div style={{ display:"flex", gap:48, alignItems:"flex-start" }}>
+            {westRounds.map((col,ri) => {
+              const vis = ri===0 ? col.matchups.filter(m=>m.team1_id&&m.team2_id) : col.matchups;
+              return (
+                <div key={col.name} style={{ flexShrink:0 }}>
+                  <div style={{ fontSize:"0.6rem", fontWeight:700, color:"#ef4444", textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:10, textAlign:"center" }}>{col.name}</div>
+                  <div style={{ display:"flex", flexDirection:"column", paddingTop:topOffsetForRound(ri), gap:gapForRound(ri) }}>
+                    {vis.map(m=><BracketGroup key={m.id} m={m} conf="W" />)}
+                  </div>
+                </div>
+              );
+            })}
+            {finalsMatch && (
+              <div style={{ flexShrink:0 }}>
+                <div style={{ height:finalsTopPad }} />
+                <div style={{ fontSize:"0.63rem", fontWeight:700, color:"#facc15", textTransform:"uppercase", letterSpacing:"0.12em", marginBottom:10, textAlign:"center" }}>🏆 Championship</div>
+                <BracketGroup m={finalsMatch} conf="F" />
+              </div>
+            )}
+            {[...eastRounds].reverse().map((col,reverseIdx) => {
+              const riFromRight = eastRounds.length - 1 - reverseIdx;
+              const vis = riFromRight===0 ? col.matchups.filter(m=>m.team1_id&&m.team2_id) : col.matchups;
+              return (
+                <div key={col.name} style={{ flexShrink:0 }}>
+                  <div style={{ fontSize:"0.6rem", fontWeight:700, color:"#3b82f6", textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:10, textAlign:"center" }}>{col.name}</div>
+                  <div style={{ display:"flex", flexDirection:"column", paddingTop:topOffsetForRound(riFromRight), gap:gapForRound(riFromRight) }}>
+                    {vis.map(m=><BracketGroup key={m.id} m={m} conf="E" />)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div style={{ display:"flex", gap:48, alignItems:"flex-start" }}>
+            {flatRounds.map((col,ri) => {
+              const vis = ri===0 ? col.matchups.filter(m=>m.team1_id&&m.team2_id) : col.matchups;
+              return (
+                <div key={col.name} style={{ flexShrink:0 }}>
+                  <div style={{ fontSize:"0.65rem", fontWeight:700, color:"#888", textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:10, textAlign:"center" }}>{col.name}</div>
+                  <div style={{ display:"flex", flexDirection:"column", paddingTop:topOffsetForRound(ri), gap:gapForRound(ri) }}>
+                    {vis.map(m=><BracketGroup key={m.id} m={m} conf="W" />)}
+                  </div>
+                </div>
+              );
+            })}
+            {finalsMatch && (
+              <div style={{ flexShrink:0 }}>
+                <div style={{ height:finalsTopPad }} />
+                <div style={{ fontSize:"0.63rem", fontWeight:700, color:"#facc15", textTransform:"uppercase", letterSpacing:"0.12em", marginBottom:10, textAlign:"center" }}>🏆 Finals</div>
+                <BracketGroup m={finalsMatch} conf="F" />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
 export default function SchedulePage({ params }: { params?: Promise<{ league?: string }> }) {
   const resolved = React.use(params ?? Promise.resolve({})) as { league?: string };
   const slug = resolved?.league ?? "";
@@ -33,6 +223,7 @@ export default function SchedulePage({ params }: { params?: Promise<{ league?: s
   const [loading, setLoading] = React.useState(true);
   const [seasons, setSeasons] = React.useState<string[]>([]);
   const [season, setSeason] = React.useState<string>("");
+  const [tab, setTab] = React.useState<"schedule"|"bracket">("schedule");
 
   React.useEffect(() => {
     if (!slug) { setLoading(false); return; }
@@ -59,9 +250,7 @@ export default function SchedulePage({ params }: { params?: Promise<{ league?: s
       .catch(() => setLoading(false));
   }, [slug, season]);
 
-  const filteredGames = games;
-
-  const grouped = filteredGames.reduce<Record<string, Game[]>>((acc, g) => {
+  const grouped = games.reduce<Record<string, Game[]>>((acc, g) => {
     const key = getWeekKey(g.scheduled_at);
     if (!acc[key]) acc[key] = [];
     acc[key].push(g);
@@ -71,22 +260,38 @@ export default function SchedulePage({ params }: { params?: Promise<{ league?: s
 
   return (
     <div style={{ borderRadius: "1rem", border: "1px solid #1e1e1e", background: "#111", overflow: "hidden" }}>
+      {/* Header */}
       <div style={{ padding: "20px 24px", borderBottom: "1px solid #1e1e1e", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
         <div>
           <h2 style={{ fontSize: "1.5rem", fontWeight: 700, color: "#fff", margin: 0 }}>Schedule</h2>
           <p style={{ color: "#888", fontSize: "0.875rem", margin: "2px 0 0" }}>{leagueDisplay}</p>
         </div>
-        {seasons.length > 0 && (
-          <select
-            value={season}
-            onChange={(e) => setSeason(e.target.value)}
-            style={{ background: "#111", border: "1px solid #1e1e1e", color: "#fff", borderRadius: "0.75rem", padding: "6px 12px", fontSize: "0.875rem", outline: "none", cursor: "pointer" }}
-          >
-            {seasons.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
-        )}
+        <div style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+          {/* Tab toggle */}
+          <div style={{ display:"flex", borderRadius:8, overflow:"hidden", border:"1px solid #2a2a2a" }}>
+            {(["schedule","bracket"] as const).map(t => (
+              <button key={t} onClick={()=>setTab(t)}
+                style={{ padding:"6px 16px", fontSize:"0.8rem", fontWeight:700, cursor:"pointer", border:"none",
+                  borderRight: t==="schedule" ? "1px solid #2a2a2a" : "none",
+                  background: tab===t ? "#2563eb" : "#161616",
+                  color: tab===t ? "#fff" : "#666" }}>
+                {t==="schedule" ? "📅 Schedule" : "🏆 Bracket"}
+              </button>
+            ))}
+          </div>
+          {seasons.length > 0 && (
+            <select value={season} onChange={(e) => setSeason(e.target.value)}
+              style={{ background: "#111", border: "1px solid #1e1e1e", color: "#fff", borderRadius: "0.75rem", padding: "6px 12px", fontSize: "0.875rem", outline: "none", cursor: "pointer" }}>
+              {seasons.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          )}
+        </div>
       </div>
-      {loading ? (
+
+      {/* Content */}
+      {tab === "bracket" ? (
+        <BracketView league={slug} season={season} />
+      ) : loading ? (
         <div style={{ padding: 40, textAlign: "center", color: "#555" }}>Loading schedule...</div>
       ) : games.length === 0 ? (
         <div style={{ padding: 40, textAlign: "center", color: "#555" }}>No games scheduled yet.</div>
