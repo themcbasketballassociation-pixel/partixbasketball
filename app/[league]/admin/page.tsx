@@ -2386,17 +2386,18 @@ function TeamSlot({ m, side, teams, saving, onUpdate, slotRef, conf }: {
   const isLoser = !!(m.winner_id && teamId && m.winner_id !== teamId);
   // color2 = team primary color (only color column currently in DB)
   const teamColor = team?.color2 ?? null;
-  const pillBg  = isWinner ? "#166534" : isLoser ? "#111" : teamColor ?? confColors.bg;
-  const logoBg  = isWinner ? "#15803d" : isLoser ? "#0d0d0d" : teamColor ?? confColors.darkBg;
+  const pillBg  = isWinner ? (teamColor ?? "#166534") : isLoser ? (teamColor ?? confColors.bg) : teamColor ?? confColors.bg;
+  const logoBg  = isWinner ? (teamColor ?? confColors.darkBg) : isLoser ? (teamColor ?? confColors.darkBg) : teamColor ?? confColors.darkBg;
 
   return (
     <div ref={slotRef as React.Ref<HTMLDivElement>}
       style={{ display:"flex", alignItems:"center", height:SLOT_H, borderRadius:10,
         background: pillBg,
-        border: `1.5px solid ${isWinner ? "#22c55e" : isLoser ? "#1e1e1e" : team ? "transparent" : "#252525"}`,
+        border: `2px solid ${isWinner ? "#fff" : isLoser ? "transparent" : team ? "transparent" : "#252525"}`,
         overflow:"hidden", flexShrink:0, position:"relative",
-        opacity: isLoser ? 0.45 : 1,
-        transition: "opacity 0.2s" }}>
+        opacity: isLoser ? 0.35 : 1,
+        filter: isWinner ? "brightness(1.15)" : isLoser ? "brightness(0.45) saturate(0.6)" : "none",
+        transition: "opacity 0.2s, filter 0.2s" }}>
 
       {/* Left: team abbreviation / TBD picker */}
       <div style={{ flex:1, padding:"0 14px", minWidth:0, overflow:"hidden" }}>
@@ -2437,18 +2438,69 @@ function TeamSlot({ m, side, teams, saving, onUpdate, slotRef, conf }: {
   );
 }
 
+// ── Flat Seed Picker ──────────────────────────────────────────────────────────
+function FlatSeedPicker({ allTeams, seeds, onChange }: {
+  allTeams: Team[]; seeds: Team[]; onChange: (t: Team[]) => void;
+}) {
+  const assigned = new Set(seeds.map(t => t.id));
+  const available = allTeams.filter(t => !assigned.has(t.id));
+  const add = (team: Team) => onChange([...seeds, team]);
+  const remove = (i: number) => onChange(seeds.filter((_, j) => j !== i));
+  const move = (i: number, d: -1|1) => { const a=[...seeds]; [a[i],a[i+d]]=[a[i+d],a[i]]; onChange(a); };
+  const P = seeds.length >= 1 ? nextPow2(seeds.length) : 0;
+  const byes = P - seeds.length;
+
+  return (
+    <div style={{ display:"flex", gap:20, flexWrap:"wrap" }}>
+      <div style={{ flex:"1 1 220px", minWidth:180 }}>
+        <div style={{ fontSize:"0.7rem", fontWeight:700, color:"#888", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>
+          Seeded Teams ({seeds.length}{byes>0?`, ${byes} bye${byes>1?"s":""}`:""})
+        </div>
+        {seeds.length===0 && <div style={{ color:"#444", fontSize:"0.8rem", padding:"10px 0" }}>None yet</div>}
+        <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+          {seeds.map((team, i) => (
+            <div key={team.id} style={{ display:"flex", alignItems:"center", gap:8, background:"#161616", border:"1px solid #222", borderRadius:8, padding:"6px 10px" }}>
+              <span style={{ fontSize:"0.7rem", fontWeight:700, color:"#888", width:22, textAlign:"center", flexShrink:0 }}>#{i+1}</span>
+              {team.logo_url && <img src={team.logo_url} style={{ width:20, height:20, objectFit:"contain", borderRadius:3, flexShrink:0 }} alt="" />}
+              <span style={{ flex:1, fontSize:"0.85rem", color:"#ddd", fontWeight:600 }}>{team.name}</span>
+              <button onClick={()=>move(i,-1)} disabled={i===0} style={{ background:"none", border:"none", color:"#555", cursor:i===0?"default":"pointer", fontSize:"0.8rem" }}>▲</button>
+              <button onClick={()=>move(i,1)} disabled={i===seeds.length-1} style={{ background:"none", border:"none", color:"#555", cursor:i===seeds.length-1?"default":"pointer", fontSize:"0.8rem" }}>▼</button>
+              <button onClick={()=>remove(i)} style={{ background:"none", border:"none", color:"#555", cursor:"pointer", fontSize:"0.9rem" }}>✕</button>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{ flex:"1 1 200px", minWidth:160 }}>
+        <div style={{ fontSize:"0.7rem", fontWeight:700, color:"#888", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Available</div>
+        {available.length===0 && <div style={{ color:"#444", fontSize:"0.8rem", padding:"10px 0" }}>All teams seeded</div>}
+        <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+          {available.map(team=>(
+            <div key={team.id} style={{ display:"flex", alignItems:"center", gap:8, background:"#111", border:"1px solid #1a1a1a", borderRadius:8, padding:"6px 10px" }}>
+              {team.logo_url && <img src={team.logo_url} style={{ width:20, height:20, objectFit:"contain", borderRadius:3, flexShrink:0 }} alt="" />}
+              <span style={{ flex:1, fontSize:"0.82rem", color:"#aaa", fontWeight:600 }}>{team.name}</span>
+              <button onClick={()=>add(team)} style={{ background:"rgba(100,100,100,0.1)", border:"1px solid #333", borderRadius:5, color:"#aaa", fontSize:"0.7rem", fontWeight:700, padding:"3px 8px", cursor:"pointer" }}>+ Add</button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main PlayoffsTab ──────────────────────────────────────────────────────────
 function PlayoffsTab({ league, season }: { league: string; season: string }) {
-  const [matchups, setMatchups]     = useState<BracketMatchup[]>([]);
-  const [teams, setTeams]           = useState<Team[]>([]);
-  const [eastSeeds, setEastSeeds]   = useState<Team[]>([]);
-  const [westSeeds, setWestSeeds]   = useState<Team[]>([]);
-  const [view, setView]             = useState<"setup"|"bracket">("setup");
-  const [err, setErr]               = useState("");
-  const [saving, setSaving]         = useState<string|null>(null);
-  const [generating, setGenerating] = useState(false);
-  const [clearing, setClearing]     = useState(false);
-  const [connectors, setConnectors] = useState<{d:string;key:string}[]>([]);
+  const [matchups, setMatchups]       = useState<BracketMatchup[]>([]);
+  const [teams, setTeams]             = useState<Team[]>([]);
+  const [bracketMode, setBracketMode] = useState<"conferences"|"flat">("conferences");
+  const [eastSeeds, setEastSeeds]     = useState<Team[]>([]);
+  const [westSeeds, setWestSeeds]     = useState<Team[]>([]);
+  const [flatSeeds, setFlatSeeds]     = useState<Team[]>([]);
+  const [view, setView]               = useState<"setup"|"bracket">("setup");
+  const [err, setErr]                 = useState("");
+  const [saving, setSaving]           = useState<string|null>(null);
+  const [generating, setGenerating]   = useState(false);
+  const [clearing, setClearing]       = useState(false);
+  const [connectors, setConnectors]   = useState<{d:string;key:string}[]>([]);
   const seedsInit = useRef(false);
   const innerRef   = useRef<HTMLDivElement>(null);
   const slotEls = useRef<Map<string,HTMLElement>>(new Map());
@@ -2471,6 +2523,7 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
     if (!seedsInit.current && teams.length > 0) {
       setEastSeeds(teams.filter(t => t.division === "East"));
       setWestSeeds(teams.filter(t => t.division === "West"));
+      setFlatSeeds([...teams]);
       seedsInit.current = true;
     }
   }, [teams]);
@@ -2478,7 +2531,7 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
   // Reset when season changes
   useEffect(() => {
     seedsInit.current = false;
-    setEastSeeds([]); setWestSeeds([]);
+    setEastSeeds([]); setWestSeeds([]); setFlatSeeds([]);
     setMatchups([]); setView("setup");
   }, [season]);
 
@@ -2624,65 +2677,117 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
 
   const updateMatchup = async (m: BracketMatchup, patch: object) => {
     setSaving(m.id); setErr("");
-    await upsert({league,season,round_name:m.round_name,round_order:m.round_order,matchup_index:m.matchup_index,team1_id:m.team1_id,team2_id:m.team2_id,team1_score:m.team1_score,team2_score:m.team2_score,winner_id:m.winner_id,...patch});
+    const merged = { league, season, round_name:m.round_name, round_order:m.round_order, matchup_index:m.matchup_index, team1_id:m.team1_id, team2_id:m.team2_id, team1_score:m.team1_score, team2_score:m.team2_score, winner_id:m.winner_id, ...patch } as Record<string,unknown>;
+    await upsert(merged);
+
+    // Auto-advance winner to next round
+    const winnerId = merged.winner_id as string | null;
+    if (winnerId) {
+      // Determine which "track" this matchup belongs to and find the next round matchup
+      const findNext = (roundsList: {name:string;order:number;matchups:BracketMatchup[]}[], dir: "LR"|"RL") => {
+        for (let ri=0; ri<roundsList.length; ri++) {
+          const idx = roundsList[ri].matchups.findIndex(x=>x.id===m.id);
+          if (idx === -1) continue;
+          const nextRound = roundsList[ri+1];
+          if (!nextRound) return null;
+          const nextIdx = Math.floor(idx/2);
+          const nextMatchup = nextRound.matchups[nextIdx];
+          if (!nextMatchup) return null;
+          const slot = idx%2===0 ? "team1_id" : "team2_id";
+          return { nextMatchup, slot };
+        }
+        return null;
+      };
+
+      let found = findNext(westRounds,"LR") ?? findNext(eastRounds,"RL") ?? findNext(rounds,"LR");
+
+      // If it's a conference finals (last west/east round), advance to Finals
+      if (!found && finalsMatchup) {
+        const inLastWest = westRounds.length>0 && westRounds[westRounds.length-1].matchups.some(x=>x.id===m.id);
+        const inLastEast = eastRounds.length>0 && eastRounds[eastRounds.length-1].matchups.some(x=>x.id===m.id);
+        if (inLastWest) found = { nextMatchup: finalsMatchup, slot: "team1_id" };
+        if (inLastEast) found = { nextMatchup: finalsMatchup, slot: "team2_id" };
+      }
+
+      if (found) {
+        const { nextMatchup, slot } = found;
+        await upsert({ league, season, round_name:nextMatchup.round_name, round_order:nextMatchup.round_order, matchup_index:nextMatchup.matchup_index,
+          team1_id: slot==="team1_id" ? winnerId : nextMatchup.team1_id,
+          team2_id: slot==="team2_id" ? winnerId : nextMatchup.team2_id,
+          team1_score:nextMatchup.team1_score, team2_score:nextMatchup.team2_score, winner_id:nextMatchup.winner_id });
+      }
+    }
+
     setSaving(null); refresh();
   };
 
-  const generateBracket = async () => {
-    const NE=eastSeeds.length, NW=westSeeds.length;
-    if (NE<1||NW<1) { setErr("Each conference needs at least 1 team."); return; }
-    if (matchups.length>0 && !confirm("Overwrite existing bracket?")) return;
-    setGenerating(true); setErr("");
-    for (const m of matchups) await fetch(`/api/playoff-brackets?id=${m.id}`,{method:"DELETE"});
-
-    // Build one conference bracket. Bye teams skip Round 1 — pre-filled into Round 2.
-    // Returns the single team if N=1 (auto-advances to Finals).
-    const buildConf = async (seeds: Team[], prefix: string): Promise<Team|null> => {
-      const N = seeds.length;
-      if (N === 1) return seeds[0]; // Only 1 team — goes straight to Finals
-      const P = nextPow2(N);
-      const totalR = Math.log2(P);
-      const names = Array.from({length:totalR},(_,i)=>{ const f=totalR-i; return f===1?`${prefix} Finals`:f===2?`${prefix} Semifinals`:`${prefix} Round ${i+1}`; });
-      const slots = buildBracketSlots(P);
-      // Map: R2 matchup_index → {t1, t2} for teams that get byes
-      const r2pre = new Map<number,{t1:string|null,t2:string|null}>();
-      for (let i=0; i<P/2; i++) {
-        const s1=slots[i*2], s2=slots[i*2+1];
-        const t1=s1<=N?seeds[s1-1]:null, t2=s2<=N?seeds[s2-1]:null;
-        if (t1&&t2) {
-          // Real game — create R1 matchup
-          await upsert({league,season,round_name:names[0],round_order:0,matchup_index:i,team1_id:t1.id,team2_id:t2.id,winner_id:null,team1_score:null,team2_score:null});
-        } else if (t1) {
-          // Bye — skip to R2; pre-fill the slot
-          const r2i=Math.floor(i/2);
-          if (!r2pre.has(r2i)) r2pre.set(r2i,{t1:null,t2:null});
-          const slot=r2pre.get(r2i)!;
-          if (i%2===0) slot.t1=t1.id; else slot.t2=t1.id;
-        }
-      }
-      // Subsequent rounds (R2+)
-      for (let r=1; r<totalR; r++) {
-        const mc=P>>(r+1);
-        for (let i=0; i<mc; i++) {
-          const pf=r===1?r2pre.get(i):undefined;
-          await upsert({league,season,round_name:names[r],round_order:r,matchup_index:i,team1_id:pf?.t1??null,team2_id:pf?.t2??null,winner_id:null,team1_score:null,team2_score:null});
-        }
-      }
-      return null;
+  // Build a bracket for a list of seeds with a given name prefix (or no prefix for flat)
+  const buildBracketFromSeeds = async (seeds: Team[], prefix: string, roundOffset: number) => {
+    const N = seeds.length;
+    if (N < 2) return;
+    const P = nextPow2(N);
+    const totalR = Math.log2(P);
+    const makeName = (i: number) => {
+      const f = totalR - i;
+      const base = f===1 ? "Finals" : f===2 ? "Semifinals" : f===3 ? "Quarterfinals" : `Round ${i+1}`;
+      return prefix ? `${prefix} ${base}` : base;
     };
+    const names = Array.from({length:totalR},(_,i)=>makeName(i));
+    const slots = buildBracketSlots(P);
+    const r2pre = new Map<number,{t1:string|null,t2:string|null}>();
+    for (let i=0; i<P/2; i++) {
+      const s1=slots[i*2], s2=slots[i*2+1];
+      const t1=s1<=N?seeds[s1-1]:null, t2=s2<=N?seeds[s2-1]:null;
+      if (t1&&t2) {
+        await upsert({league,season,round_name:names[0],round_order:roundOffset,matchup_index:i,team1_id:t1.id,team2_id:t2.id,winner_id:null,team1_score:null,team2_score:null});
+      } else if (t1) {
+        const r2i=Math.floor(i/2);
+        if (!r2pre.has(r2i)) r2pre.set(r2i,{t1:null,t2:null});
+        const slot=r2pre.get(r2i)!;
+        if (i%2===0) slot.t1=t1.id; else slot.t2=t1.id;
+      }
+    }
+    for (let r=1; r<totalR; r++) {
+      const mc=P>>(r+1);
+      for (let i=0; i<mc; i++) {
+        const pf=r===1?r2pre.get(i):undefined;
+        await upsert({league,season,round_name:names[r],round_order:roundOffset+r,matchup_index:i,team1_id:pf?.t1??null,team2_id:pf?.t2??null,winner_id:null,team1_score:null,team2_score:null});
+      }
+    }
+  };
 
-    const PE=nextPow2(NE), PW=nextPow2(NW);
-    const rE=Math.log2(PE), rW=Math.log2(PW);
-    const maxConf=Math.max(rE,rW);
+  const generateBracket = async () => {
+    if (bracketMode === "flat") {
+      if (flatSeeds.length < 2) { setErr("Need at least 2 teams."); return; }
+      if (matchups.length>0 && !confirm("Overwrite existing bracket?")) return;
+      setGenerating(true); setErr("");
+      for (const m of matchups) await fetch(`/api/playoff-brackets?id=${m.id}`,{method:"DELETE"});
+      await buildBracketFromSeeds(flatSeeds, "", 0);
+    } else {
+      const NE=eastSeeds.length, NW=westSeeds.length;
+      if (NE<1||NW<1) { setErr("Each conference needs at least 1 team."); return; }
+      if (matchups.length>0 && !confirm("Overwrite existing bracket?")) return;
+      setGenerating(true); setErr("");
+      for (const m of matchups) await fetch(`/api/playoff-brackets?id=${m.id}`,{method:"DELETE"});
 
-    const [eastSolo, westSolo] = await Promise.all([
-      buildConf(eastSeeds,"East"),
-      buildConf(westSeeds,"West"),
-    ]);
+      const PE=nextPow2(NE), PW=nextPow2(NW);
+      const rE=Math.log2(PE), rW=Math.log2(PW);
+      const maxConf=Math.max(rE,rW);
 
-    // Championship Finals (East winner vs West winner — West on left=team1, East on right=team2)
-    await upsert({league,season,round_name:"Finals",round_order:maxConf,matchup_index:0,
-      team1_id:westSolo?.id??null, team2_id:eastSolo?.id??null, winner_id:null,team1_score:null,team2_score:null});
+      // Build conference brackets (single-team shortcut for solo teams)
+      const buildConf = async (seeds: Team[], prefix: string): Promise<Team|null> => {
+        if (seeds.length === 1) return seeds[0];
+        await buildBracketFromSeeds(seeds, prefix, 0);
+        return null;
+      };
+
+      const [eastSolo, westSolo] = await Promise.all([
+        buildConf(eastSeeds,"East"),
+        buildConf(westSeeds,"West"),
+      ]);
+      await upsert({league,season,round_name:"Finals",round_order:maxConf,matchup_index:0,
+        team1_id:westSolo?.id??null, team2_id:eastSolo?.id??null, winner_id:null,team1_score:null,team2_score:null});
+    }
 
     setGenerating(false);
     await refresh();
@@ -2721,7 +2826,7 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
     </div>
   );
 
-  const hasEnoughTeams = eastSeeds.length>=1 && westSeeds.length>=1;
+  const hasEnoughTeams = bracketMode === "flat" ? flatSeeds.length >= 2 : (eastSeeds.length>=1 && westSeeds.length>=1);
   // Finals vertical centering
   const finalsTopPad = Math.max(0, Math.floor((canvasH - 80 - MATCHUP_H) / 2));
 
@@ -2731,7 +2836,7 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
 
       {view === "setup" ? (
         <div style={{ background:"#111", borderRadius:"1rem", border:"1px solid #1e1e1e", padding:20 }}>
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20, flexWrap:"wrap", gap:10 }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16, flexWrap:"wrap", gap:10 }}>
             <div style={{ fontWeight:700, color:"#fff", fontSize:"0.9rem" }}>Setup Bracket — {season}</div>
             {matchups.length>0 && (
               <button onClick={()=>setView("bracket")} style={{ background:"transparent", border:"1px solid #2a2a2a", borderRadius:8, color:"#888", fontSize:"0.8rem", padding:"5px 12px", cursor:"pointer" }}>
@@ -2739,16 +2844,30 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
               </button>
             )}
           </div>
-          <ConferenceSeedPicker
-            allTeams={teams} eastSeeds={eastSeeds} westSeeds={westSeeds}
-            onChangeEast={setEastSeeds} onChangeWest={setWestSeeds}
-          />
+
+          {/* Mode toggle */}
+          <div style={{ display:"flex", gap:0, marginBottom:20, borderRadius:8, overflow:"hidden", border:"1px solid #2a2a2a", width:"fit-content" }}>
+            {(["conferences","flat"] as const).map(mode=>(
+              <button key={mode} onClick={()=>setBracketMode(mode)}
+                style={{ padding:"7px 18px", fontSize:"0.8rem", fontWeight:700, cursor:"pointer", border:"none", borderRight: mode==="conferences" ? "1px solid #2a2a2a" : "none",
+                  background: bracketMode===mode ? "#2563eb" : "#161616",
+                  color: bracketMode===mode ? "#fff" : "#666" }}>
+                {mode==="conferences" ? "🏟 Conferences" : "📋 No Conferences"}
+              </button>
+            ))}
+          </div>
+
+          {bracketMode === "conferences"
+            ? <ConferenceSeedPicker allTeams={teams} eastSeeds={eastSeeds} westSeeds={westSeeds} onChangeEast={setEastSeeds} onChangeWest={setWestSeeds} />
+            : <FlatSeedPicker allTeams={teams} seeds={flatSeeds} onChange={setFlatSeeds} />
+          }
+
           <div style={{ marginTop:20, paddingTop:16, borderTop:"1px solid #1e1e1e", display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
             <button onClick={generateBracket} disabled={generating||!hasEnoughTeams}
               style={{ background:!hasEnoughTeams?"#1a1a1a":"#2563eb", border:"none", borderRadius:8, color:!hasEnoughTeams?"#444":"#fff", fontWeight:700, fontSize:"0.85rem", padding:"8px 20px", cursor:!hasEnoughTeams?"default":"pointer" }}>
               {generating ? "Generating…" : matchups.length>0 ? "↻ Regenerate Bracket" : "Generate Bracket →"}
             </button>
-            {!hasEnoughTeams && <span style={{ color:"#444", fontSize:"0.75rem" }}>Add at least 1 team per conference</span>}
+            {!hasEnoughTeams && <span style={{ color:"#444", fontSize:"0.75rem" }}>{bracketMode==="flat" ? "Add at least 2 teams" : "Add at least 1 team per conference"}</span>}
           </div>
         </div>
       ) : (
