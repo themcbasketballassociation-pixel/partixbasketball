@@ -7,6 +7,13 @@ const MAX_CAP_SPACE_TRADE = 2000;
 const MAX_RETENTION_PCT = 0.1; // 10%
 const MAX_RETENTIONS_PER_TEAM = 3;
 
+const TRADE_ASSETS_SELECT = `
+  id, from_team_id, contract_id, pick_id, retention_amount,
+  contracts(id, mc_uuid, amount, is_two_season, players(mc_uuid, mc_username)),
+  draft_picks(id, season, round, pick_number, original_team:teams!draft_picks_original_team_id_fkey(id, name, abbreviation)),
+  from_team:teams!trade_assets_from_team_id_fkey(id, name, abbreviation)
+`;
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === "GET") {
     const { league: leagueRaw, team_id, status } = req.query;
@@ -17,11 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         *,
         proposing_team:teams!trade_proposals_proposing_team_id_fkey(id, name, abbreviation, color2),
         receiving_team:teams!trade_proposals_receiving_team_id_fkey(id, name, abbreviation, color2),
-        trade_assets(
-          id, from_team_id, contract_id, retention_amount,
-          contracts(id, mc_uuid, amount, is_two_season, players(mc_uuid, mc_username)),
-          from_team:teams!trade_assets_from_team_id_fkey(id, name, abbreviation)
-        )
+        trade_assets(${TRADE_ASSETS_SELECT})
       `)
       .order("proposed_at", { ascending: false });
     if (league) query = query.eq("league", league as string);
@@ -34,12 +37,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   // POST: owner (or admin) proposes a trade
+  // assets: Array<{ from_team_id, contract_id?, pick_id?, retention_amount? }>
   if (req.method === "POST") {
     const discordId = await getSessionDiscordId(req, res);
     if (!discordId) return;
 
     const { league: leagueRaw, proposing_team_id, receiving_team_id, assets, notes } = req.body;
-    // assets: Array<{ from_team_id, contract_id, retention_amount? }>
     const league = resolveLeague(leagueRaw);
     if (!league || !proposing_team_id || !receiving_team_id || !Array.isArray(assets) || assets.length === 0)
       return res.status(400).json({ error: "league, proposing_team_id, receiving_team_id, assets required" });
@@ -60,13 +63,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     let receiverRetentionTotal = 0;
 
     for (const asset of assets) {
-      if (!asset.contract_id || !asset.from_team_id)
-        return res.status(400).json({ error: "Each asset requires from_team_id and contract_id" });
+      if (!asset.from_team_id || (!asset.contract_id && !asset.pick_id))
+        return res.status(400).json({ error: "Each asset requires from_team_id and either contract_id or pick_id" });
 
+      // Draft pick asset — validate ownership, no retention allowed
+      if (asset.pick_id) {
+        const { data: pick } = await supabase
+          .from("draft_picks")
+          .select("id, current_team_id, status")
+          .eq("id", asset.pick_id)
+          .maybeSingle();
+        if (!pick) return res.status(400).json({ error: `Draft pick ${asset.pick_id} not found` });
+        if (pick.status !== "active") return res.status(400).json({ error: `Draft pick ${asset.pick_id} is not active` });
+        if (pick.current_team_id !== asset.from_team_id)
+          return res.status(400).json({ error: `Draft pick ${asset.pick_id} is not owned by the sending team` });
+        continue; // no retention validation for picks
+      }
+
+      // Contract asset
       const retention = Number(asset.retention_amount ?? 0);
 
       if (retention > 0) {
-        // Fetch contract
         const { data: contract } = await supabase
           .from("contracts")
           .select("amount, team_id")
@@ -85,7 +102,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             error: `Retention on contract ${asset.contract_id} exceeds max (${maxRetention} = 10% of ${contract.amount}, capped at ${MAX_CAP_SPACE_TRADE})`,
           });
 
-        // Check team's current active retention count
         const { data: activeRetentions } = await supabase
           .from("cap_retentions")
           .select("id")
@@ -115,7 +131,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const assetRows = assets.map((a: any) => ({
       trade_id: trade.id,
       from_team_id: a.from_team_id,
-      contract_id: a.contract_id,
+      contract_id: a.contract_id ?? null,
+      pick_id: a.pick_id ?? null,
       retention_amount: Number(a.retention_amount ?? 0),
     }));
     const { error: assetErr } = await supabase.from("trade_assets").insert(assetRows);

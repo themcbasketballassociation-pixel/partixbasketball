@@ -4,6 +4,11 @@ import { authOptions } from "../auth/[...nextauth]";
 import { supabase } from "../../../lib/supabase";
 import { resolveLeague } from "../../../lib/leagueMapping";
 
+/** Extract numeric value from "Season N" for sorting */
+function seasonNum(s: string | null): number {
+  return parseInt((s ?? "0").match(/\d+/)?.[0] ?? "0");
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
 
@@ -16,15 +21,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { league: leagueRaw } = req.query;
   const league = resolveLeague(leagueRaw);
 
-  // Get all teams this Discord user owns
+  // Get all owner records for this Discord user in this league
   let query = supabase
     .from("team_owners")
-    .select("id, discord_id, league, teams(id, name, abbreviation, color2, division, logo_url)")
+    .select("id, discord_id, league, season, teams(id, name, abbreviation, color2, division, logo_url)")
     .eq("discord_id", discordId);
   if (league) query = query.eq("league", league as string);
 
   const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
 
-  return res.status(200).json(data ?? []);
+  if (!data || data.length === 0) return res.status(200).json([]);
+
+  // Find the most recent season by numeric value
+  const sorted = [...data].sort((a, b) => seasonNum(b.season) - seasonNum(a.season));
+  const latestSeason = sorted[0].season;
+
+  // Only return records from the most recent season
+  const latestRecords = sorted.filter(r => r.season === latestSeason);
+  return res.status(200).json(latestRecords);
 }

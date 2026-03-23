@@ -8,7 +8,14 @@ type Contract = { id: string; mc_uuid: string; team_id: string; amount: number; 
 type CapRetention = { id: string; mc_uuid: string; retention_amount: number; status: string };
 type Bid = { id: string; team_id: string; amount: number; is_two_season: boolean; effective_value: number; placed_at: string; is_valid: boolean; teams: Team };
 type Auction = { id: string; mc_uuid: string; min_price: number; status: string; closes_at: string; phase: number; season: string | null; players: Player; auction_bids: Bid[] };
-type TradeAsset = { id: string; from_team_id: string; contract_id: string; retention_amount: number; contracts: { id: string; mc_uuid: string; amount: number; is_two_season: boolean; players: Player } | null };
+type DraftPick = { id: string; season: string; round: number; pick_number: number | null; notes: string | null; original_team: { id: string; name: string; abbreviation: string } | null };
+type TradeAsset = {
+  id: string; from_team_id: string;
+  contract_id: string | null; retention_amount: number;
+  pick_id: string | null;
+  contracts: { id: string; mc_uuid: string; amount: number; is_two_season: boolean; players: Player } | null;
+  draft_picks: { id: string; season: string; round: number; pick_number: number | null; original_team: { id: string; name: string; abbreviation: string } | null } | null;
+};
 type Trade = { id: string; proposing_team_id: string; receiving_team_id: string; status: string; proposed_at: string; notes: string | null; admin_note: string | null; proposing_team: Team; receiving_team: Team; trade_assets: TradeAsset[] };
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -168,12 +175,44 @@ function BidView({ auctions, teamId, contracts, onRefresh }: { auctions: Auction
 }
 
 // ── Trades ────────────────────────────────────────────────────────────────────
-function TradesView({ teamId, leagueSlug, contracts, allTeams, onRefresh }: { teamId: string; leagueSlug: string; contracts: Contract[]; allTeams: Team[]; onRefresh: () => void }) {
+type AssetRow = { type: "contract" | "pick"; cid: string; ret: string; pickId: string };
+const emptyAsset = (): AssetRow => ({ type: "contract", cid: "", ret: "", pickId: "" });
+
+function pickLabel(p: DraftPick) {
+  return `${p.season} R${p.round}${p.pick_number != null ? ` #${p.pick_number}` : ""}${p.original_team ? ` (${p.original_team.abbreviation})` : ""}`;
+}
+
+function TradeAssetDisplay({ asset }: { asset: TradeAsset }) {
+  if (asset.pick_id && asset.draft_picks) {
+    const p = asset.draft_picks;
+    return (
+      <div style={{ color: "#fbbf24", fontSize: 12 }}>
+        🏀 {p.season} R{p.round}{p.pick_number != null ? ` #${p.pick_number}` : ""}
+        {p.original_team && <span style={{ color: "#555" }}> ({p.original_team.abbreviation})</span>}
+      </div>
+    );
+  }
+  if (asset.contract_id && asset.contracts) {
+    return (
+      <div style={{ color: "#888", fontSize: 12 }}>
+        {asset.contracts.players.mc_username} ({fmt(asset.contracts.amount)})
+        {(asset.retention_amount ?? 0) > 0 && <span style={{ color: "#a855f7", marginLeft: 4 }}>ret. {fmt(asset.retention_amount)}</span>}
+      </div>
+    );
+  }
+  return <div style={{ color: "#333", fontSize: 12 }}>?</div>;
+}
+
+function TradesView({ teamId, leagueSlug, contracts, allTeams, myPicks, onRefresh }: {
+  teamId: string; leagueSlug: string; contracts: Contract[]; allTeams: Team[];
+  myPicks: DraftPick[]; onRefresh: () => void;
+}) {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [targetTeam, setTargetTeam] = useState("");
   const [theirContracts, setTheirContracts] = useState<Contract[]>([]);
-  const [myAssets, setMyAssets] = useState<{ cid: string; ret: string }[]>([{ cid: "", ret: "" }]);
-  const [theirAssets, setTheirAssets] = useState<{ cid: string; ret: string }[]>([{ cid: "", ret: "" }]);
+  const [theirPicks, setTheirPicks] = useState<DraftPick[]>([]);
+  const [myAssets, setMyAssets] = useState<AssetRow[]>([emptyAsset()]);
+  const [theirAssets, setTheirAssets] = useState<AssetRow[]>([emptyAsset()]);
   const [notes, setNotes] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
@@ -187,23 +226,44 @@ function TradesView({ teamId, leagueSlug, contracts, allTeams, onRefresh }: { te
   useEffect(() => { loadTrades(); }, [loadTrades]);
 
   useEffect(() => {
-    if (!targetTeam) { setTheirContracts([]); return; }
-    fetch(`/api/contracts?league=${leagueSlug}&team_id=${targetTeam}`).then(r => r.json()).then(d => setTheirContracts(Array.isArray(d) ? d : []));
+    if (!targetTeam) { setTheirContracts([]); setTheirPicks([]); return; }
+    Promise.all([
+      fetch(`/api/contracts?league=${leagueSlug}&team_id=${targetTeam}`).then(r => r.json()),
+      fetch(`/api/draft-picks?league=${leagueSlug}&team_id=${targetTeam}`).then(r => r.json()),
+    ]).then(([c, p]) => {
+      setTheirContracts(Array.isArray(c) ? c : []);
+      setTheirPicks(Array.isArray(p) ? p : []);
+    });
   }, [targetTeam, leagueSlug]);
 
   const submit = async () => {
     if (!targetTeam) return setErr("Select a team");
     setErr(""); setBusy(true);
+
+    const buildAssets = (rows: AssetRow[], fromTeamId: string, ctrts: Contract[], picks: DraftPick[]) =>
+      rows.filter(a => a.type === "contract" ? a.cid : a.pickId).map(a => {
+        if (a.type === "pick") return { from_team_id: fromTeamId, pick_id: a.pickId };
+        const contract = ctrts.find(c => c.id === a.cid);
+        const maxRet = contract ? Math.floor(contract.amount * 0.1) : 0;
+        const ret = Math.min(parseInt(a.ret) || 0, maxRet);
+        return { from_team_id: fromTeamId, contract_id: a.cid, retention_amount: ret };
+      });
+
     const assets = [
-      ...myAssets.filter(a => a.cid).map(a => ({ from_team_id: teamId, contract_id: a.cid, retention_amount: parseInt(a.ret) || 0 })),
-      ...theirAssets.filter(a => a.cid).map(a => ({ from_team_id: targetTeam, contract_id: a.cid, retention_amount: parseInt(a.ret) || 0 })),
+      ...buildAssets(myAssets, teamId, contracts, myPicks),
+      ...buildAssets(theirAssets, targetTeam, theirContracts, theirPicks),
     ];
-    if (!assets.length) { setBusy(false); return setErr("Add at least one player"); }
-    const r = await fetch("/api/trades", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ league: leagueSlug, proposing_team_id: teamId, receiving_team_id: targetTeam, assets, notes }) });
+    if (!assets.length) { setBusy(false); return setErr("Add at least one asset"); }
+
+    const r = await fetch("/api/trades", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ league: leagueSlug, proposing_team_id: teamId, receiving_team_id: targetTeam, assets, notes }),
+    });
     const d = await r.json();
     setBusy(false);
     if (!r.ok) return setErr(d.error);
-    setMyAssets([{ cid: "", ret: "" }]); setTheirAssets([{ cid: "", ret: "" }]); setNotes(""); setTargetTeam(""); loadTrades(); onRefresh();
+    setMyAssets([emptyAsset()]); setTheirAssets([emptyAsset()]); setNotes(""); setTargetTeam(""); loadTrades(); onRefresh();
   };
 
   const respond = async (id: string, action: string) => {
@@ -216,20 +276,57 @@ function TradesView({ teamId, leagueSlug, contracts, allTeams, onRefresh }: { te
     return <span style={{ color: m[s] ?? "#888", fontSize: 11, fontWeight: 600 }}>{s.replace("_", " ")}</span>;
   };
 
-  const AssetPicker = ({ assets, set, ctrts, label }: { assets: { cid: string; ret: string }[]; set: React.Dispatch<React.SetStateAction<{ cid: string; ret: string }[]>>; ctrts: Contract[]; label: string }) => (
+  const AssetPicker = ({ assets, set, ctrts, picks, label }: {
+    assets: AssetRow[];
+    set: React.Dispatch<React.SetStateAction<AssetRow[]>>;
+    ctrts: Contract[]; picks: DraftPick[]; label: string;
+  }) => (
     <div>
-      <div style={{ color: "#555", fontSize: 12, marginBottom: 5 }}>{label}</div>
+      <div style={{ color: "#555", fontSize: 12, marginBottom: 5, fontWeight: 600 }}>{label}</div>
       {assets.map((a, i) => (
-        <div key={i} style={{ display: "flex", gap: 6, marginBottom: 5 }}>
-          <select style={{ ...st.input, flex: 2 }} value={a.cid} onChange={e => set(p => p.map((x, j) => j === i ? { ...x, cid: e.target.value } : x))}>
-            <option value="">— Player —</option>
-            {ctrts.map(c => <option key={c.id} value={c.id}>{c.players.mc_username} ({fmt(c.amount)})</option>)}
-          </select>
-          <input type="number" placeholder="Ret." value={a.ret} onChange={e => set(p => p.map((x, j) => j === i ? { ...x, ret: e.target.value } : x))} style={{ ...st.input, width: 70, flex: "none" }} />
-          <button onClick={() => set(p => p.filter((_, j) => j !== i))} style={{ ...ownerBtn("danger"), padding: "6px 8px" }}>✕</button>
+        <div key={i} style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: 8, padding: "8px", marginBottom: 6 }}>
+          {/* Type toggle */}
+          <div style={{ display: "flex", gap: 4, marginBottom: 6 }}>
+            {(["contract", "pick"] as const).map(t => (
+              <button key={t} onClick={() => set(p => p.map((x, j) => j === i ? { ...emptyAsset(), type: t } : x))}
+                style={{ padding: "3px 10px", borderRadius: 5, fontSize: 11, fontWeight: 600, cursor: "pointer", border: "1px solid",
+                  background: a.type === t ? (t === "contract" ? "#1d4ed8" : "#78350f") : "#181818",
+                  borderColor: a.type === t ? (t === "contract" ? "#3b82f6" : "#f59e0b") : "#333",
+                  color: a.type === t ? "#fff" : "#555" }}>
+                {t === "contract" ? "Player" : "Pick"}
+              </button>
+            ))}
+            <button onClick={() => set(p => p.filter((_, j) => j !== i))} style={{ marginLeft: "auto", ...ownerBtn("danger"), padding: "2px 8px", fontSize: 11 }}>✕</button>
+          </div>
+
+          {a.type === "contract" ? (
+            <div style={{ display: "flex", gap: 6 }}>
+              <select style={{ ...st.input, flex: 1 }} value={a.cid} onChange={e => set(p => p.map((x, j) => j === i ? { ...x, cid: e.target.value, ret: "" } : x))}>
+                <option value="">— Player —</option>
+                {ctrts.map(c => <option key={c.id} value={c.id}>{c.players.mc_username} ({fmt(c.amount)})</option>)}
+              </select>
+              {a.cid && (() => {
+                const c = ctrts.find(x => x.id === a.cid);
+                const maxRet = c ? Math.floor(c.amount * 0.1) : 0;
+                return maxRet > 0 ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                    <input type="number" placeholder="Retain" min={0} max={maxRet} step={100} value={a.ret}
+                      onChange={e => set(p => p.map((x, j) => j === i ? { ...x, ret: e.target.value } : x))}
+                      style={{ ...st.input, width: 80, flex: "none" }} />
+                    <span style={{ color: "#555", fontSize: 10, textAlign: "center" }}>max {fmt(maxRet)}</span>
+                  </div>
+                ) : null;
+              })()}
+            </div>
+          ) : (
+            <select style={st.input} value={a.pickId} onChange={e => set(p => p.map((x, j) => j === i ? { ...x, pickId: e.target.value } : x))}>
+              <option value="">— Draft Pick —</option>
+              {picks.map(p => <option key={p.id} value={p.id}>{pickLabel(p)}</option>)}
+            </select>
+          )}
         </div>
       ))}
-      <button onClick={() => set(p => [...p, { cid: "", ret: "" }])} style={{ ...ownerBtn(), fontSize: 12, padding: "4px 10px" }}>+ Add</button>
+      <button onClick={() => set(p => [...p, emptyAsset()])} style={{ ...ownerBtn(), fontSize: 12, padding: "4px 10px" }}>+ Add</button>
     </div>
   );
 
@@ -245,12 +342,12 @@ function TradesView({ teamId, leagueSlug, contracts, allTeams, onRefresh }: { te
           </select>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 10 }}>
-          <AssetPicker assets={myAssets} set={setMyAssets} ctrts={contracts} label="You send" />
-          <AssetPicker assets={theirAssets} set={setTheirAssets} ctrts={theirContracts} label="You receive" />
+          <AssetPicker assets={myAssets} set={setMyAssets} ctrts={contracts} picks={myPicks} label="You send" />
+          <AssetPicker assets={theirAssets} set={setTheirAssets} ctrts={theirContracts} picks={theirPicks} label="You receive" />
         </div>
         <input style={{ ...st.input, marginBottom: 10 }} placeholder="Notes (optional)" value={notes} onChange={e => setNotes(e.target.value)} />
         <div style={{ background: "#0a0d12", border: "1px solid #1a2030", borderRadius: 8, padding: "7px 12px", marginBottom: 10, color: "#444", fontSize: 12 }}>
-          Retention: max 2,000 per side · max 10% per contract · max 3 retentions per team
+          Cap retention: max 2,000 per side · max 10% per contract · max 3 retentions per team
         </div>
         {err && <div style={{ color: "#fca5a5", background: "#450a0a", border: "1px solid #7f1d1d", borderRadius: 8, padding: "7px 12px", marginBottom: 8, fontSize: 13 }}>{err}</div>}
         <button onClick={submit} disabled={busy} style={{ ...ownerBtn("primary"), opacity: busy ? 0.5 : 1 }}>{busy ? "Submitting…" : "Propose Trade"}</button>
@@ -274,17 +371,20 @@ function TradesView({ teamId, leagueSlug, contracts, allTeams, onRefresh }: { te
                 ].map(s => (
                   <div key={s.label}>
                     <div style={{ color: "#444", fontSize: 11, marginBottom: 4 }}>{s.label}</div>
-                    {s.assets.length === 0 ? <span style={{ color: "#333", fontSize: 12 }}>—</span> : s.assets.map(a => (
-                      <div key={a.id} style={{ color: "#888", fontSize: 12 }}>
-                        {a.contracts?.players.mc_username ?? "?"} ({fmt(a.contracts?.amount ?? 0)})
-                        {(a.retention_amount ?? 0) > 0 && <span style={{ color: "#a855f7", marginLeft: 4 }}>ret. {fmt(a.retention_amount)}</span>}
-                      </div>
-                    ))}
+                    {s.assets.length === 0
+                      ? <span style={{ color: "#333", fontSize: 12 }}>—</span>
+                      : s.assets.map(a => <TradeAssetDisplay key={a.id} asset={a} />)
+                    }
                   </div>
                 ))}
               </div>
               {t.notes && <div style={{ color: "#555", fontSize: 12, fontStyle: "italic", marginBottom: 6 }}>"{t.notes}"</div>}
               {t.admin_note && <div style={{ color: "#a78bfa", fontSize: 12, marginBottom: 6 }}>Admin: {t.admin_note}</div>}
+              {t.status === "admin_review" && (
+                <div style={{ color: "#a855f7", fontSize: 12, background: "#1a0a2e", border: "1px solid #4c1d95", borderRadius: 6, padding: "5px 10px", marginBottom: 6 }}>
+                  Both sides agreed — awaiting admin approval
+                </div>
+              )}
               <div style={{ display: "flex", gap: 8 }}>
                 {!iProp && t.status === "pending" && <button onClick={() => respond(t.id, "accept")} style={ownerBtn("success")}>Accept</button>}
                 {!iProp && t.status === "pending" && <button onClick={() => respond(t.id, "reject")} style={ownerBtn("danger")}>Reject</button>}
@@ -309,19 +409,22 @@ export default function OwnerPortalView({ teamRecord, leagueSlug, onBack }: {
   const [retentions, setRetentions] = useState<CapRetention[]>([]);
   const [auctions, setAuctions] = useState<Auction[]>([]);
   const [allTeams, setAllTeams] = useState<Team[]>([]);
+  const [myPicks, setMyPicks] = useState<DraftPick[]>([]);
   const [tab, setTab] = useState<"roster" | "bid" | "trades">("roster");
 
   const load = useCallback(async () => {
-    const [c, ret, a, teams] = await Promise.all([
+    const [c, ret, a, teams, picks] = await Promise.all([
       fetch(`/api/contracts?league=${leagueSlug}&team_id=${team.id}`).then(r => r.json()),
       fetch(`/api/cap-retentions?league=${leagueSlug}&team_id=${team.id}`).then(r => r.json()),
       fetch(`/api/auction?league=${leagueSlug}&status=active`).then(r => r.json()),
       fetch(`/api/teams?league=${leagueSlug}`).then(r => r.json()),
+      fetch(`/api/draft-picks?league=${leagueSlug}&team_id=${team.id}`).then(r => r.json()),
     ]);
     setContracts(Array.isArray(c) ? c : []);
     setRetentions(Array.isArray(ret) ? ret : []);
     setAuctions(Array.isArray(a) ? a : []);
     setAllTeams(Array.isArray(teams) ? teams : []);
+    setMyPicks(Array.isArray(picks) ? picks : []);
   }, [leagueSlug, team.id]);
 
   useEffect(() => { load(); }, [load]);
@@ -357,7 +460,7 @@ export default function OwnerPortalView({ teamRecord, leagueSlug, onBack }: {
 
       {tab === "roster" && <RosterView contracts={contracts} retentions={retentions} />}
       {tab === "bid" && <BidView auctions={auctions} teamId={team.id} contracts={contracts} onRefresh={load} />}
-      {tab === "trades" && <TradesView teamId={team.id} leagueSlug={leagueSlug} contracts={contracts} allTeams={allTeams} onRefresh={load} />}
+      {tab === "trades" && <TradesView teamId={team.id} leagueSlug={leagueSlug} contracts={contracts} allTeams={allTeams} myPicks={myPicks} onRefresh={load} />}
     </div>
   );
 }

@@ -2972,12 +2972,13 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
 // ─── Tab: Owners ──────────────────────────────────────────────────────────────
 
 function OwnersTab({ league }: { league: string }) {
-  type OwnerRow = { id: string; discord_id: string; league: string; teams: { id: string; name: string; abbreviation: string } };
+  type OwnerRow = { id: string; discord_id: string; league: string; season: string | null; teams: { id: string; name: string; abbreviation: string } };
   type TeamRow = { id: string; name: string; abbreviation: string };
   const [owners, setOwners] = useState<OwnerRow[]>([]);
   const [teams, setTeams] = useState<TeamRow[]>([]);
   const [discordId, setDiscordId] = useState("");
   const [teamId, setTeamId] = useState("");
+  const [season, setSeason] = useState("Season 7");
   const [err, setErr] = useState("");
 
   const refresh = useCallback(async () => {
@@ -2997,7 +2998,7 @@ function OwnersTab({ league }: { league: string }) {
     const r = await fetch("/api/team-owners", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ discord_id: discordId.trim(), team_id: teamId, league }),
+      body: JSON.stringify({ discord_id: discordId.trim(), team_id: teamId, league, season }),
     });
     const d = await r.json();
     if (!r.ok) return setErr(d.error);
@@ -3009,34 +3010,168 @@ function OwnersTab({ league }: { league: string }) {
     refresh();
   };
 
+  // Group by season for display
+  const bySeason = owners.reduce<Record<string, OwnerRow[]>>((acc, o) => {
+    const s = o.season ?? "Unknown";
+    if (!acc[s]) acc[s] = [];
+    acc[s].push(o);
+    return acc;
+  }, {});
+
   return (
     <div>
       <div className={card} style={{ marginBottom: 16 }}>
         <div className="text-sm font-semibold text-slate-300 mb-4">Assign Team Owner</div>
-        <div className="flex gap-3 flex-wrap">
-          <input className={input} placeholder="Discord User ID" value={discordId} onChange={(e) => setDiscordId(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
-          <select className={input} value={teamId} onChange={(e) => setTeamId(e.target.value)} style={{ flex: 1, minWidth: 160 }}>
+        <div className="flex gap-3 flex-wrap mb-2">
+          <input className={input} placeholder="Discord User ID" value={discordId} onChange={(e) => setDiscordId(e.target.value)} style={{ flex: 2, minWidth: 160 }} />
+          <select className={input} value={teamId} onChange={(e) => setTeamId(e.target.value)} style={{ flex: 2, minWidth: 160 }}>
             <option value="">— Select team —</option>
             {teams.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.abbreviation})</option>)}
+          </select>
+          <select className={input} value={season} onChange={(e) => setSeason(e.target.value)} style={{ flex: 1, minWidth: 120 }}>
+            {SEASONS.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
           <button className={btnPrimary} onClick={add}>Assign</button>
         </div>
         <ErrMsg msg={err} />
-        <p className="text-xs text-slate-500 mt-2">Discord ID is the numeric user ID, not the username. Use Developer Mode in Discord to copy it.</p>
+        <p className="text-xs text-slate-500 mt-2">Discord ID is the numeric user ID. Use Developer Mode in Discord to copy it.</p>
       </div>
-      <div className="flex flex-col gap-2">
-        {owners.length === 0 ? (
-          <div className="text-slate-600 text-sm text-center py-6">No team owners assigned yet.</div>
-        ) : owners.map((o) => (
-          <div key={o.id} className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-950 px-4 py-3">
-            <div className="flex-1">
-              <div className="text-white font-medium text-sm">{o.teams?.name ?? "Unknown Team"}</div>
-              <div className="text-slate-500 text-xs font-mono">{o.discord_id}</div>
-            </div>
-            <button className={btnDanger} onClick={() => remove(o.id)}>Remove</button>
+      {Object.keys(bySeason).sort((a, b) => b.localeCompare(a)).map(s => (
+        <div key={s} className="mb-4">
+          <div className="text-xs text-slate-500 font-semibold uppercase tracking-wider mb-2 px-1">{s}</div>
+          <div className="flex flex-col gap-2">
+            {bySeason[s].map((o) => (
+              <div key={o.id} className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-950 px-4 py-3">
+                <div className="flex-1">
+                  <div className="text-white font-medium text-sm">{o.teams?.name ?? "Unknown Team"} <span className="text-slate-500">({o.teams?.abbreviation})</span></div>
+                  <div className="text-slate-500 text-xs font-mono">{o.discord_id}</div>
+                </div>
+                <button className={btnDanger} onClick={() => remove(o.id)}>Remove</button>
+              </div>
+            ))}
           </div>
+        </div>
+      ))}
+      {owners.length === 0 && <div className="text-slate-600 text-sm text-center py-6">No team owners assigned yet.</div>}
+    </div>
+  );
+}
+
+// ─── Tab: Draft Picks ──────────────────────────────────────────────────────────
+
+function DraftPicksTab({ league }: { league: string }) {
+  type Pick = {
+    id: string; league: string; season: string; round: number; pick_number: number | null;
+    notes: string | null; status: string;
+    original_team: { id: string; name: string; abbreviation: string; color2: string | null } | null;
+    current_team: { id: string; name: string; abbreviation: string; color2: string | null } | null;
+  };
+  type TeamRow = { id: string; name: string; abbreviation: string };
+
+  const [picks, setPicks] = useState<Pick[]>([]);
+  const [teams, setTeams] = useState<TeamRow[]>([]);
+  const [filterSeason, setFilterSeason] = useState("Season 7");
+  const [err, setErr] = useState("");
+
+  // Create form
+  const [season, setSeason] = useState("Season 7");
+  const [round, setRound] = useState("1");
+  const [pickNum, setPickNum] = useState("");
+  const [origTeam, setOrigTeam] = useState("");
+  const [currTeam, setCurrTeam] = useState("");
+  const [notes, setNotes] = useState("");
+
+  const refresh = useCallback(async () => {
+    const [p, t] = await Promise.all([
+      fetch(`/api/draft-picks?league=${league}&season=${encodeURIComponent(filterSeason)}&status=all`).then(r => r.json()),
+      fetch(`/api/teams?league=${league}`).then(r => r.json()),
+    ]);
+    setPicks(Array.isArray(p) ? p : []);
+    setTeams(Array.isArray(t) ? t : []);
+  }, [league, filterSeason]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const add = async () => {
+    setErr("");
+    if (!origTeam || !round || !season) return setErr("Season, round, and original team required");
+    const r = await fetch("/api/draft-picks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ league, season, round: Number(round), pick_number: pickNum ? Number(pickNum) : null, original_team_id: origTeam, current_team_id: currTeam || origTeam, notes: notes || null }),
+    });
+    const d = await r.json();
+    if (!r.ok) return setErr(d.error);
+    setRound("1"); setPickNum(""); setOrigTeam(""); setCurrTeam(""); setNotes(""); refresh();
+  };
+
+  const remove = async (id: string) => {
+    if (!confirm("Delete this draft pick?")) return;
+    await fetch("/api/draft-picks", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+    refresh();
+  };
+
+  const pickLabel = (p: Pick) => `${p.season} R${p.round}${p.pick_number != null ? ` #${p.pick_number}` : ""}`;
+
+  return (
+    <div>
+      <div className={card} style={{ marginBottom: 16 }}>
+        <div className="text-sm font-semibold text-slate-300 mb-4">Add Draft Pick</div>
+        <div className="flex gap-3 flex-wrap mb-3">
+          <select className={input} value={season} onChange={e => setSeason(e.target.value)} style={{ flex: 1, minWidth: 120 }}>
+            {SEASONS.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <input className={input} type="number" placeholder="Round" min={1} max={5} value={round} onChange={e => setRound(e.target.value)} style={{ width: 80, flex: "none" }} />
+          <input className={input} type="number" placeholder="Pick # (opt)" value={pickNum} onChange={e => setPickNum(e.target.value)} style={{ width: 110, flex: "none" }} />
+        </div>
+        <div className="flex gap-3 flex-wrap mb-3">
+          <select className={input} value={origTeam} onChange={e => { setOrigTeam(e.target.value); if (!currTeam) setCurrTeam(e.target.value); }} style={{ flex: 1, minWidth: 160 }}>
+            <option value="">— Original team —</option>
+            {teams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.abbreviation})</option>)}
+          </select>
+          <select className={input} value={currTeam} onChange={e => setCurrTeam(e.target.value)} style={{ flex: 1, minWidth: 160 }}>
+            <option value="">— Current owner (defaults to original) —</option>
+            {teams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.abbreviation})</option>)}
+          </select>
+        </div>
+        <div className="flex gap-3">
+          <input className={input} placeholder="Notes (optional)" value={notes} onChange={e => setNotes(e.target.value)} />
+          <button className={btnPrimary} onClick={add}>Add Pick</button>
+        </div>
+        <ErrMsg msg={err} />
+      </div>
+
+      <div className="flex gap-2 mb-4 flex-wrap">
+        {["Season 7", "Season 6", "Season 5"].map(s => (
+          <button key={s} className={filterSeason === s ? btnPrimary : btnSecondary} onClick={() => setFilterSeason(s)}>{s}</button>
         ))}
       </div>
+
+      {picks.length === 0
+        ? <div className="text-slate-600 text-sm text-center py-6">No draft picks found.</div>
+        : (
+          <div className="flex flex-col gap-2">
+            {picks.map(p => (
+              <div key={p.id} className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-950 px-4 py-3">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-white font-semibold text-sm">{pickLabel(p)}</span>
+                    {p.status !== "active" && <span className="text-xs text-slate-500 bg-slate-800 rounded px-1.5 py-0.5">{p.status}</span>}
+                  </div>
+                  <div className="text-slate-500 text-xs mt-0.5">
+                    Orig: <span className="text-slate-400">{p.original_team?.abbreviation ?? "?"}</span>
+                    {p.current_team?.id !== p.original_team?.id && (
+                      <span> → Now: <span className="text-cyan-400">{p.current_team?.abbreviation ?? "?"}</span></span>
+                    )}
+                    {p.notes && <span className="ml-2 italic">{p.notes}</span>}
+                  </div>
+                </div>
+                <button className={btnDanger} onClick={() => remove(p.id)}>Delete</button>
+              </div>
+            ))}
+          </div>
+        )
+      }
     </div>
   );
 }
@@ -3295,7 +3430,13 @@ function TradesAdminTab({ league }: { league: string }) {
     status: string; proposed_at: string; resolved_at: string | null; notes: string | null; admin_note: string | null;
     proposing_team: { id: string; name: string; abbreviation: string; color2: string | null };
     receiving_team: { id: string; name: string; abbreviation: string; color2: string | null };
-    trade_assets: { id: string; from_team_id: string; contract_id: string; retention_amount: number; contracts: { id: string; mc_uuid: string; amount: number; is_two_season: boolean; players: { mc_uuid: string; mc_username: string } } | null; from_team: { id: string; name: string; abbreviation: string } | null }[];
+    trade_assets: {
+      id: string; from_team_id: string;
+      contract_id: string | null; retention_amount: number; pick_id: string | null;
+      contracts: { id: string; mc_uuid: string; amount: number; is_two_season: boolean; players: { mc_uuid: string; mc_username: string } } | null;
+      draft_picks: { id: string; season: string; round: number; pick_number: number | null; original_team: { id: string; name: string; abbreviation: string } | null } | null;
+      from_team: { id: string; name: string; abbreviation: string } | null;
+    }[];
   };
   const [trades, setTrades] = useState<TradeRow[]>([]);
   const [filterStatus, setFilterStatus] = useState("admin_review");
@@ -3369,10 +3510,19 @@ function TradesAdminTab({ league }: { league: string }) {
                   <div key={side.label}>
                     <div className="text-slate-500 text-xs mb-1.5">{side.label}</div>
                     {side.assets.length === 0 ? <div className="text-slate-700 text-sm">—</div> : side.assets.map((a) => (
-                      <div key={a.id} className="text-sm text-slate-300 mb-1">
-                        {a.contracts?.players.mc_username ?? "?"} — {(a.contracts?.amount ?? 0).toLocaleString()}
-                        {(a.contracts?.is_two_season) && <span className="text-purple-400 ml-1 text-xs">2yr</span>}
-                        {(a.retention_amount ?? 0) > 0 && <span className="text-yellow-400 ml-1 text-xs">ret. {a.retention_amount.toLocaleString()}</span>}
+                      <div key={a.id} className="text-sm mb-1">
+                        {a.pick_id && a.draft_picks ? (
+                          <span className="text-yellow-400">
+                            🏀 {a.draft_picks.season} R{a.draft_picks.round}{a.draft_picks.pick_number != null ? ` #${a.draft_picks.pick_number}` : ""}
+                            {a.draft_picks.original_team && <span className="text-slate-500 ml-1 text-xs">({a.draft_picks.original_team.abbreviation})</span>}
+                          </span>
+                        ) : (
+                          <span className="text-slate-300">
+                            {a.contracts?.players.mc_username ?? "?"} — {(a.contracts?.amount ?? 0).toLocaleString()}
+                            {a.contracts?.is_two_season && <span className="text-purple-400 ml-1 text-xs">2yr</span>}
+                            {(a.retention_amount ?? 0) > 0 && <span className="text-yellow-400 ml-1 text-xs">ret. {a.retention_amount.toLocaleString()}</span>}
+                          </span>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -3408,7 +3558,7 @@ function TradesAdminTab({ league }: { league: string }) {
 
 // ─── Main Admin Page ──────────────────────────────────────────────────────────
 
-const TABS = ["Players", "Teams", "Schedule", "Box Scores", "Accolades", "Champions", "Articles", "Stats", "Playoffs", "Owners", "Auction", "Trades"] as const;
+const TABS = ["Players", "Teams", "Schedule", "Box Scores", "Accolades", "Champions", "Articles", "Stats", "Playoffs", "Owners", "Draft Picks", "Auction", "Trades"] as const;
 type Tab = typeof TABS[number];
 const SEASONS = ["Season 1","Season 1 Playoffs","Season 2","Season 2 Playoffs","Season 3","Season 3 Playoffs","Season 4","Season 4 Playoffs","Season 5","Season 5 Playoffs","Season 6","Season 6 Playoffs","Season 7","Season 7 Playoffs"];
 
@@ -3656,6 +3806,7 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
         {activeTab === "Stats" && <StatsViewTab league={league} season={season} />}
         {activeTab === "Playoffs" && <PlayoffsTab league={league} season={season} />}
         {activeTab === "Owners" && <OwnersTab league={league} />}
+        {activeTab === "Draft Picks" && <DraftPicksTab league={league} />}
         {activeTab === "Auction" && <AuctionAdminTab league={league} />}
         {activeTab === "Trades" && <TradesAdminTab league={league} />}
       </div>

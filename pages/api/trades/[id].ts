@@ -13,8 +13,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         proposing_team:teams!trade_proposals_proposing_team_id_fkey(id, name, abbreviation, color2),
         receiving_team:teams!trade_proposals_receiving_team_id_fkey(id, name, abbreviation, color2),
         trade_assets(
-          id, from_team_id, contract_id, retention_amount,
+          id, from_team_id, contract_id, pick_id, retention_amount,
           contracts(id, mc_uuid, amount, is_two_season, players(mc_uuid, mc_username)),
+          draft_picks(id, season, round, pick_number, original_team:teams!draft_picks_original_team_id_fkey(id, name, abbreviation)),
           from_team:teams!trade_assets_from_team_id_fkey(id, name, abbreviation)
         )
       `)
@@ -33,7 +34,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const { data: trade, error: fetchErr } = await supabase
       .from("trade_proposals")
-      .select("*, trade_assets(id, from_team_id, contract_id, retention_amount, contracts(mc_uuid, amount))")
+      .select("*, trade_assets(id, from_team_id, contract_id, pick_id, retention_amount, contracts(mc_uuid, amount))")
       .eq("id", id)
       .single();
     if (fetchErr || !trade) return res.status(404).json({ error: "Trade not found" });
@@ -88,26 +89,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       // approve: execute the trade
       for (const asset of trade.trade_assets ?? []) {
-        const contract = asset.contracts;
-        if (!contract || !asset.contract_id) continue;
-
         // Determine the receiving team for this asset
         const receivingTeamId =
           asset.from_team_id === trade.proposing_team_id
             ? trade.receiving_team_id
             : trade.proposing_team_id;
 
+        // Draft pick transfer
+        if (asset.pick_id) {
+          const { error: pickErr } = await supabase
+            .from("draft_picks")
+            .update({ current_team_id: receivingTeamId })
+            .eq("id", asset.pick_id);
+          if (pickErr) return res.status(500).json({ error: pickErr.message });
+          continue;
+        }
+
+        // Contract transfer
+        const contract = asset.contracts;
+        if (!contract || !asset.contract_id) continue;
+
         const retention = Number(asset.retention_amount ?? 0);
         const newAmount = contract.amount - retention;
 
-        // Move contract + apply retention reduction
         const { error: contractErr } = await supabase
           .from("contracts")
           .update({ team_id: receivingTeamId, amount: newAmount })
           .eq("id", asset.contract_id);
         if (contractErr) return res.status(500).json({ error: contractErr.message });
 
-        // Record cap retention if any
         if (retention > 0) {
           await supabase.from("cap_retentions").insert([{
             league: trade.league,
