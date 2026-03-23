@@ -224,6 +224,17 @@ export default function AuctionPage() {
   const activeCount = auctions.filter((a) => a.status === "active").length;
   const playerChoiceCount = auctions.filter((a) => a.status === "player_choice").length;
 
+  if (leagueSlug !== "mba") {
+    return (
+      <div style={{ maxWidth: 600, margin: "60px auto", textAlign: "center", padding: "0 16px" }}>
+        <div style={{ background: "#111", border: "1px solid #222", borderRadius: 16, padding: 40 }}>
+          <div style={{ color: "#fff", fontSize: 22, fontWeight: 800, marginBottom: 8 }}>MBA Auction Only</div>
+          <div style={{ color: "#555", fontSize: 14 }}>The auction system is only available for the Minecraft Basketball Association (MBA).</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ maxWidth: 1200, margin: "0 auto", padding: "24px 16px" }}>
       {/* Header */}
@@ -241,8 +252,8 @@ export default function AuctionPage() {
         {[
           { label: "Live Auctions", value: activeCount, color: "#22d3ee" },
           { label: "Player Choice", value: playerChoiceCount, color: "#a855f7" },
-          { label: "Total Cap", value: "25,000", color: "#888" },
-          { label: "Court Cap", value: "22,000", color: "#888" },
+          { label: "Total Cap / Team", value: "25,000", color: "#888" },
+          { label: "Court Cap / Team", value: "22,000", color: "#888" },
         ].map((s) => (
           <div key={s.label} style={{ background: "#111", border: "1px solid #222", borderRadius: 10, padding: "10px 16px", minWidth: 110 }}>
             <div style={{ color: "#555", fontSize: 11 }}>{s.label}</div>
@@ -294,7 +305,7 @@ export default function AuctionPage() {
         <h2 style={{ color: "#fff", fontSize: 16, fontWeight: 700, margin: "0 0 14px" }}>Quick Rules Reference</h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 16 }}>
           {[
-            { title: "Salary Caps", items: ["Total cap: 25,000", "Court cap: 22,000", "Max per player: 12,000", "Min bid: 1,000"] },
+            { title: "Salary Caps (per team)", items: ["Total cap: 25,000 per team", "Court cap: 22,000 per team", "Max per player: 12,000", "Min bid: 1,000"] },
             { title: "Bid Rules", items: ["Increments of 250 only", "Must beat current effective value", "6-hour inactivity closes auction", "Max 2 signings per phase"] },
             { title: "2-Season Contracts", items: ["Available on bids ≥ 5,000", "Adds +500 effective value", "Must declare at time of bid", "Cap hit = actual bid only"] },
             { title: "Player Choice", items: ["If any bid within 500 of top", "Player picks their team", "Based on effective values", "All qualifying bids eligible"] },

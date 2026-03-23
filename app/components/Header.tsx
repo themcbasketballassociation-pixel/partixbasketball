@@ -12,19 +12,19 @@ const leagues = [
 ];
 
 const tabs = [
-  { label: "Home",       path: "",           global: false },
-  { label: "Teams",      path: "/teams",     global: false },
-  { label: "Standings",  path: "/standings", global: false },
-  { label: "Schedule",   path: "/schedule",  global: false },
-  { label: "Box Scores", path: "/boxscores", global: false },
-  { label: "Stats",      path: "/stats",     global: false },
-  { label: "Players",    path: "/players",   global: false },
-  { label: "Accolades",  path: "/accolades", global: false },
-  { label: "Auction",    path: "/auction",   global: false },
-  { label: "My Team",    path: "/owner",     global: false },
-  { label: "Games",      path: "/games",     global: false },
-  { label: "Links",      path: "/links",     global: true  },
-  { label: "Admin",      path: "/admin",     global: false },
+  { label: "Home",       path: "",           global: false, only: null },
+  { label: "Teams",      path: "/teams",     global: false, only: null },
+  { label: "Standings",  path: "/standings", global: false, only: null },
+  { label: "Schedule",   path: "/schedule",  global: false, only: null },
+  { label: "Box Scores", path: "/boxscores", global: false, only: null },
+  { label: "Stats",      path: "/stats",     global: false, only: null },
+  { label: "Players",    path: "/players",   global: false, only: null },
+  { label: "Accolades",  path: "/accolades", global: false, only: null },
+  { label: "Auction",    path: "/auction",   global: false, only: ["mba"] },
+  { label: "My Team",    path: "/owner",     global: false, only: null },
+  { label: "Games",      path: "/games",     global: false, only: null },
+  { label: "Links",      path: "/links",     global: true,  only: null },
+  { label: "Admin",      path: "/admin",     global: false, only: null },
 ];
 
 export default function Header() {
@@ -97,7 +97,7 @@ export default function Header() {
       {/* Nav tabs */}
       <div className="overflow-x-auto" style={{ background: "#0a0a0a", borderTop: "1px solid #181818" }}>
         <div className="mx-auto max-w-7xl px-4 sm:px-6 flex">
-          {tabs.map((tab) => {
+          {tabs.filter((tab) => !tab.only || tab.only.includes(selected)).map((tab) => {
             const href = tab.global ? tab.path : `/${selected}${tab.path}`;
             const isActive = tab.global
               ? pathname === tab.path

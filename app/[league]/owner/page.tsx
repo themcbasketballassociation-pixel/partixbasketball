@@ -47,8 +47,8 @@ function Countdown({ closesAt }: { closesAt: string }) {
 
 // ── CapBar ─────────────────────────────────────────────────────────────────────
 function CapBar({ contracts, retentions }: { contracts: Contract[]; retentions: CapRetention[] }) {
-  const TOTAL_CAP = 25000;
-  const COURT_CAP = 22000;
+  const TOTAL_CAP = 25000; // per team
+  const COURT_CAP = 22000; // per team, active roster
 
   const used = contracts.reduce((s, c) => s + c.amount, 0);
   const retentionTotal = retentions.filter((r) => r.status === "active").reduce((s, r) => s + r.retention_amount, 0);
@@ -61,7 +61,7 @@ function CapBar({ contracts, retentions }: { contracts: Contract[]; retentions: 
   return (
     <div style={{ ...innerCard, marginBottom: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-        <span style={{ color: "#888", fontSize: 13 }}>Total Cap Used</span>
+        <span style={{ color: "#888", fontSize: 13 }}>Your Team Cap Used</span>
         <span style={{ color, fontWeight: 700 }}>{fmt(totalHit)} / {fmt(TOTAL_CAP)}</span>
       </div>
       <div style={{ background: "#1a1a1a", borderRadius: 4, height: 8, overflow: "hidden", marginBottom: 8 }}>
