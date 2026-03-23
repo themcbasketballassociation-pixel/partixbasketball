@@ -2968,9 +2968,446 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
   );
 }
 
+// ─── Tab: Owners ──────────────────────────────────────────────────────────────
+
+function OwnersTab({ league }: { league: string }) {
+  type OwnerRow = { id: string; discord_id: string; league: string; teams: { id: string; name: string; abbreviation: string } };
+  type TeamRow = { id: string; name: string; abbreviation: string };
+  const [owners, setOwners] = useState<OwnerRow[]>([]);
+  const [teams, setTeams] = useState<TeamRow[]>([]);
+  const [discordId, setDiscordId] = useState("");
+  const [teamId, setTeamId] = useState("");
+  const [err, setErr] = useState("");
+
+  const refresh = useCallback(async () => {
+    const [o, t] = await Promise.all([
+      fetch(`/api/team-owners?league=${league}`).then((r) => r.json()),
+      fetch(`/api/teams?league=${league}`).then((r) => r.json()),
+    ]);
+    setOwners(Array.isArray(o) ? o : []);
+    setTeams(Array.isArray(t) ? t : []);
+  }, [league]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const add = async () => {
+    setErr("");
+    if (!discordId.trim() || !teamId) return setErr("Discord ID and team required");
+    const r = await fetch("/api/team-owners", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ discord_id: discordId.trim(), team_id: teamId, league }),
+    });
+    const d = await r.json();
+    if (!r.ok) return setErr(d.error);
+    setDiscordId(""); setTeamId(""); refresh();
+  };
+
+  const remove = async (id: string) => {
+    await fetch("/api/team-owners", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+    refresh();
+  };
+
+  return (
+    <div>
+      <div className={card} style={{ marginBottom: 16 }}>
+        <div className="text-sm font-semibold text-slate-300 mb-4">Assign Team Owner</div>
+        <div className="flex gap-3 flex-wrap">
+          <input className={input} placeholder="Discord User ID" value={discordId} onChange={(e) => setDiscordId(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
+          <select className={input} value={teamId} onChange={(e) => setTeamId(e.target.value)} style={{ flex: 1, minWidth: 160 }}>
+            <option value="">— Select team —</option>
+            {teams.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.abbreviation})</option>)}
+          </select>
+          <button className={btnPrimary} onClick={add}>Assign</button>
+        </div>
+        <ErrMsg msg={err} />
+        <p className="text-xs text-slate-500 mt-2">Discord ID is the numeric user ID, not the username. Use Developer Mode in Discord to copy it.</p>
+      </div>
+      <div className="flex flex-col gap-2">
+        {owners.length === 0 ? (
+          <div className="text-slate-600 text-sm text-center py-6">No team owners assigned yet.</div>
+        ) : owners.map((o) => (
+          <div key={o.id} className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-950 px-4 py-3">
+            <div className="flex-1">
+              <div className="text-white font-medium text-sm">{o.teams?.name ?? "Unknown Team"}</div>
+              <div className="text-slate-500 text-xs font-mono">{o.discord_id}</div>
+            </div>
+            <button className={btnDanger} onClick={() => remove(o.id)}>Remove</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Tab: Auction ──────────────────────────────────────────────────────────────
+
+function AuctionAdminTab({ league }: { league: string }) {
+  type AuctionRow = {
+    id: string; mc_uuid: string; min_price: number; status: string; phase: number;
+    season: string | null; closes_at: string; nominated_at: string;
+    winning_bid: number | null; winning_is_two_season: boolean; winning_team_id: string | null;
+    players: { mc_uuid: string; mc_username: string };
+    winning_team: { id: string; name: string; abbreviation: string } | null;
+    auction_bids: { id: string; team_id: string; amount: number; is_two_season: boolean; effective_value: number; placed_at: string; is_valid: boolean; teams: { id: string; name: string; abbreviation: string; color2: string | null } }[];
+  };
+  type TeamRow = { id: string; name: string; abbreviation: string };
+
+  const [auctions, setAuctions] = useState<AuctionRow[]>([]);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [teams, setTeams] = useState<TeamRow[]>([]);
+  const [filterStatus, setFilterStatus] = useState("active");
+
+  // Nominate form
+  const [nomUuid, setNomUuid] = useState("");
+  const [nomMinPrice, setNomMinPrice] = useState("1000");
+  const [nomPhase, setNomPhase] = useState("1");
+  const [nomSeason, setNomSeason] = useState("");
+  const [nomErr, setNomErr] = useState("");
+
+  // Close/winner state
+  const [closingId, setClosingId] = useState<string | null>(null);
+  const [winnerTeam, setWinnerTeam] = useState("");
+  const [winnerBid, setWinnerBid] = useState("");
+  const [winnerIs2s, setWinnerIs2s] = useState(false);
+  const [closeErr, setCloseErr] = useState("");
+
+  // Finalize (create contract) state
+  const [finalizeId, setFinalizeId] = useState<string | null>(null);
+  const [finalizeErr, setFinalizeErr] = useState("");
+
+  const refresh = useCallback(async () => {
+    const [a, p, t] = await Promise.all([
+      fetch(`/api/auction?league=${league}${filterStatus !== "all" ? `&status=${filterStatus}` : ""}`).then((r) => r.json()),
+      fetch("/api/players").then((r) => r.json()),
+      fetch(`/api/teams?league=${league}`).then((r) => r.json()),
+    ]);
+    setAuctions(Array.isArray(a) ? a : []);
+    setPlayers(Array.isArray(p) ? p : []);
+    setTeams(Array.isArray(t) ? t : []);
+  }, [league, filterStatus]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const nominate = async () => {
+    setNomErr("");
+    if (!nomUuid) return setNomErr("Select a player");
+    const r = await fetch("/api/auction", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ league, mc_uuid: nomUuid, min_price: parseInt(nomMinPrice) || 1000, phase: parseInt(nomPhase) || 1, season: nomSeason || null }),
+    });
+    const d = await r.json();
+    if (!r.ok) return setNomErr(d.error);
+    setNomUuid(""); setNomMinPrice("1000"); refresh();
+  };
+
+  const closeAuction = async (auctionId: string) => {
+    setCloseErr("");
+    if (!winnerTeam) return setCloseErr("Select winning team");
+    if (!winnerBid) return setCloseErr("Enter winning bid");
+    const r = await fetch(`/api/auction/${auctionId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "closed", winning_team_id: winnerTeam, winning_bid: parseInt(winnerBid), winning_is_two_season: winnerIs2s }),
+    });
+    if (!r.ok) { const d = await r.json(); return setCloseErr(d.error); }
+    setClosingId(null); setWinnerTeam(""); setWinnerBid(""); setWinnerIs2s(false); refresh();
+  };
+
+  const setPlayerChoice = async (auctionId: string) => {
+    await fetch(`/api/auction/${auctionId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "player_choice" }),
+    });
+    refresh();
+  };
+
+  const finalizeContract = async (auction: AuctionRow) => {
+    setFinalizeErr("");
+    if (!auction.winning_team_id || !auction.winning_bid) return setFinalizeErr("Set a winning team and bid first");
+    const r = await fetch("/api/contracts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        league, mc_uuid: auction.mc_uuid, team_id: auction.winning_team_id,
+        amount: auction.winning_bid, is_two_season: auction.winning_is_two_season,
+        phase: auction.phase, season: auction.season,
+      }),
+    });
+    if (!r.ok) { const d = await r.json(); return setFinalizeErr(d.error); }
+    // Mark auction as signed
+    await fetch(`/api/auction/${auction.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "signed" }),
+    });
+    setFinalizeId(null); refresh();
+  };
+
+  const PLAYER_CHOICE_WINDOW = 500;
+
+  return (
+    <div>
+      {/* Nominate player */}
+      <div className={card} style={{ marginBottom: 16 }}>
+        <div className="text-sm font-semibold text-slate-300 mb-4">Nominate Player for Auction</div>
+        <div className="flex gap-3 flex-wrap mb-3">
+          <div style={{ flex: 2, minWidth: 160 }}>
+            <PlayerSearchSelect players={players} value={nomUuid} onChange={setNomUuid} placeholder="Search player…" />
+          </div>
+          <input className={input} type="number" placeholder="Min Price" value={nomMinPrice} onChange={(e) => setNomMinPrice(e.target.value)} style={{ flex: 1, minWidth: 100 }} />
+          <input className={input} type="number" placeholder="Phase" value={nomPhase} onChange={(e) => setNomPhase(e.target.value)} style={{ flex: 1, minWidth: 80 }} />
+          <input className={input} placeholder="Season (opt)" value={nomSeason} onChange={(e) => setNomSeason(e.target.value)} style={{ flex: 1, minWidth: 100 }} />
+          <button className={btnPrimary} onClick={nominate}>Start Auction</button>
+        </div>
+        <ErrMsg msg={nomErr} />
+      </div>
+
+      {/* Filter */}
+      <div className="flex gap-2 mb-4">
+        {["active", "player_choice", "closed", "signed", "all"].map((s) => (
+          <button key={s} className={`${btn} text-xs ${filterStatus === s ? "bg-zinc-600 text-white" : "bg-slate-800 text-slate-400"} border border-slate-700`} onClick={() => setFilterStatus(s)}>
+            {s}
+          </button>
+        ))}
+        <button className={`${btnSecondary} text-xs ml-auto`} onClick={refresh}>Refresh</button>
+      </div>
+
+      {/* Auction list */}
+      {auctions.length === 0 ? (
+        <div className="text-slate-600 text-sm text-center py-8">No auctions found.</div>
+      ) : (
+        <div className="flex flex-col gap-4">
+          {auctions.map((a) => {
+            const validBids = (a.auction_bids ?? []).filter((b) => b.is_valid);
+            const sortedBids = [...validBids].sort((x, y) => y.effective_value - x.effective_value);
+            const topBid = sortedBids[0] ?? null;
+            const isExpired = new Date(a.closes_at) < new Date() && a.status === "active";
+            const choiceBids = topBid ? sortedBids.filter((b) => topBid.effective_value - b.effective_value <= PLAYER_CHOICE_WINDOW) : [];
+            const needsChoice = choiceBids.length > 1;
+
+            return (
+              <div key={a.id} className="rounded-xl border border-slate-700 bg-slate-950 p-4">
+                <div className="flex items-center gap-3 mb-3">
+                  <img src={`https://minotar.net/avatar/${a.players.mc_username}/40`} className="w-10 h-10 rounded-lg border border-slate-700" onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/40"; }} alt="" />
+                  <div className="flex-1">
+                    <div className="text-white font-bold">{a.players.mc_username}</div>
+                    <div className="text-slate-500 text-xs">Phase {a.phase}{a.season ? ` · S${a.season}` : ""} · Min: {a.min_price.toLocaleString()}</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs px-2 py-0.5 rounded-full border font-semibold ${
+                      a.status === "active" ? "border-cyan-800 bg-cyan-950 text-cyan-400" :
+                      a.status === "player_choice" ? "border-purple-800 bg-purple-950 text-purple-400" :
+                      a.status === "signed" ? "border-green-800 bg-green-950 text-green-400" :
+                      "border-slate-700 bg-slate-900 text-slate-500"
+                    }`}>{a.status}</span>
+                    {isExpired && <span className="text-xs px-2 py-0.5 rounded-full border border-orange-800 bg-orange-950 text-orange-400 font-semibold">EXPIRED</span>}
+                  </div>
+                </div>
+
+                {/* Bid list */}
+                {sortedBids.length > 0 && (
+                  <div className="mb-3 flex flex-col gap-1">
+                    {sortedBids.slice(0, 6).map((b, i) => (
+                      <div key={b.id} className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm ${i === 0 ? "bg-slate-800 border border-slate-600" : "bg-slate-900 border border-slate-800"}`}>
+                        <span className="text-slate-400 w-5 text-center">{i + 1}</span>
+                        <span className="text-white flex-1">{b.teams?.name ?? b.team_id.slice(0, 8)}</span>
+                        <span className="text-cyan-400 font-bold">{b.effective_value.toLocaleString()}</span>
+                        <span className="text-slate-500 text-xs">{b.amount.toLocaleString()}{b.is_two_season ? " 2yr" : ""}</span>
+                        {topBid && i > 0 && topBid.effective_value - b.effective_value <= PLAYER_CHOICE_WINDOW && (
+                          <span className="text-xs text-yellow-400 border border-yellow-800 rounded px-1">choice</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {a.winning_team && (
+                  <div className="mb-3 rounded-lg border border-green-800 bg-green-950 px-3 py-2 text-sm text-green-300">
+                    Winner: {a.winning_team.name} — {(a.winning_bid ?? 0).toLocaleString()}{a.winning_is_two_season ? " (2-season)" : ""}
+                  </div>
+                )}
+
+                {/* Actions */}
+                {(a.status === "active" || a.status === "player_choice") && (
+                  <div className="mt-3">
+                    {closingId === a.id ? (
+                      <div className="flex flex-col gap-2">
+                        <div className="flex gap-2 flex-wrap">
+                          <select className={input} value={winnerTeam} onChange={(e) => setWinnerTeam(e.target.value)} style={{ flex: 1, minWidth: 140 }}>
+                            <option value="">— Winner —</option>
+                            {teams.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.abbreviation})</option>)}
+                          </select>
+                          <input className={input} type="number" placeholder="Winning bid" value={winnerBid} onChange={(e) => setWinnerBid(e.target.value)} style={{ flex: 1, minWidth: 120 }} />
+                          <label className="flex items-center gap-1 text-purple-400 text-sm cursor-pointer">
+                            <input type="checkbox" checked={winnerIs2s} onChange={(e) => setWinnerIs2s(e.target.checked)} style={{ accentColor: "#a855f7" }} /> 2-season
+                          </label>
+                          <button className={btnPrimary} onClick={() => closeAuction(a.id)}>Confirm Close</button>
+                          <button className={btnSecondary} onClick={() => setClosingId(null)}>Cancel</button>
+                        </div>
+                        <ErrMsg msg={closeErr} />
+                      </div>
+                    ) : (
+                      <div className="flex gap-2 flex-wrap">
+                        <button className={btnSecondary} onClick={() => { setClosingId(a.id); setCloseErr(""); if (topBid) { setWinnerTeam(topBid.team_id); setWinnerBid(String(topBid.amount)); setWinnerIs2s(topBid.is_two_season); } }}>Close Auction</button>
+                        {needsChoice && a.status === "active" && (
+                          <button className="rounded-lg px-3 py-1.5 text-sm font-medium transition bg-purple-950 hover:bg-purple-900 text-purple-300 border border-purple-800" onClick={() => setPlayerChoice(a.id)}>Set Player Choice</button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Finalize → create contract */}
+                {a.status === "closed" && a.winning_team_id && (
+                  <div className="mt-3">
+                    {finalizeId === a.id ? (
+                      <div>
+                        <p className="text-slate-400 text-sm mb-2">Create contract: {a.players.mc_username} → {a.winning_team?.name} for {(a.winning_bid ?? 0).toLocaleString()}{a.winning_is_two_season ? " (2-season)" : ""}?</p>
+                        <div className="flex gap-2">
+                          <button className={btnPrimary} onClick={() => finalizeContract(a)}>Confirm & Sign</button>
+                          <button className={btnSecondary} onClick={() => setFinalizeId(null)}>Cancel</button>
+                        </div>
+                        <ErrMsg msg={finalizeErr} />
+                      </div>
+                    ) : (
+                      <button className="rounded-lg px-3 py-1.5 text-sm font-medium transition bg-green-950 hover:bg-green-900 text-green-300 border border-green-800" onClick={() => { setFinalizeId(a.id); setFinalizeErr(""); }}>Finalize Signing</button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Tab: Trades ───────────────────────────────────────────────────────────────
+
+function TradesAdminTab({ league }: { league: string }) {
+  type TradeRow = {
+    id: string; league: string; proposing_team_id: string; receiving_team_id: string;
+    status: string; proposed_at: string; resolved_at: string | null; notes: string | null; admin_note: string | null;
+    proposing_team: { id: string; name: string; abbreviation: string; color2: string | null };
+    receiving_team: { id: string; name: string; abbreviation: string; color2: string | null };
+    trade_assets: { id: string; from_team_id: string; contract_id: string; retention_amount: number; contracts: { id: string; mc_uuid: string; amount: number; is_two_season: boolean; players: { mc_uuid: string; mc_username: string } } | null; from_team: { id: string; name: string; abbreviation: string } | null }[];
+  };
+  const [trades, setTrades] = useState<TradeRow[]>([]);
+  const [filterStatus, setFilterStatus] = useState("admin_review");
+  const [adminNotes, setAdminNotes] = useState<Record<string, string>>({});
+  const [acting, setActing] = useState<Record<string, boolean>>({});
+  const [errs, setErrs] = useState<Record<string, string>>({});
+
+  const refresh = useCallback(async () => {
+    const r = await fetch(`/api/trades?league=${league}${filterStatus !== "all" ? `&status=${filterStatus}` : ""}`);
+    const d = await r.json();
+    setTrades(Array.isArray(d) ? d : []);
+  }, [league, filterStatus]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const act = async (tradeId: string, action: string) => {
+    setActing((a) => ({ ...a, [tradeId]: true }));
+    setErrs((e) => ({ ...e, [tradeId]: "" }));
+    const r = await fetch(`/api/trades/${tradeId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, admin_note: adminNotes[tradeId] ?? null }),
+    });
+    const d = await r.json();
+    setActing((a) => ({ ...a, [tradeId]: false }));
+    if (!r.ok) setErrs((e) => ({ ...e, [tradeId]: d.error }));
+    else refresh();
+  };
+
+  const statusColors: Record<string, string> = {
+    pending: "text-yellow-400 border-yellow-800 bg-yellow-950",
+    admin_review: "text-purple-400 border-purple-800 bg-purple-950",
+    approved: "text-green-400 border-green-800 bg-green-950",
+    rejected: "text-red-400 border-red-800 bg-red-950",
+    denied: "text-red-400 border-red-800 bg-red-950",
+    cancelled: "text-slate-500 border-slate-700 bg-slate-900",
+  };
+
+  return (
+    <div>
+      <div className="flex gap-2 mb-4 flex-wrap">
+        {["admin_review", "pending", "approved", "rejected", "denied", "all"].map((s) => (
+          <button key={s} className={`${btn} text-xs ${filterStatus === s ? "bg-zinc-600 text-white" : "bg-slate-800 text-slate-400"} border border-slate-700`} onClick={() => setFilterStatus(s)}>
+            {s.replace("_", " ")}
+          </button>
+        ))}
+        <button className={`${btnSecondary} text-xs ml-auto`} onClick={refresh}>Refresh</button>
+      </div>
+
+      {trades.length === 0 ? (
+        <div className="text-slate-600 text-sm text-center py-8">No trades found with status "{filterStatus}".</div>
+      ) : (
+        <div className="flex flex-col gap-4">
+          {trades.map((t) => (
+            <div key={t.id} className="rounded-xl border border-slate-700 bg-slate-950 p-4">
+              <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                <div className="text-white font-semibold">
+                  {t.proposing_team.name} <span className="text-slate-500">→</span> {t.receiving_team.name}
+                </div>
+                <span className={`text-xs px-2 py-0.5 rounded-full border font-semibold ${statusColors[t.status] ?? "text-slate-400 border-slate-700 bg-slate-900"}`}>
+                  {t.status.replace("_", " ")}
+                </span>
+              </div>
+
+              {/* Assets */}
+              <div className="grid grid-cols-2 gap-4 mb-3">
+                {[
+                  { label: `${t.proposing_team.abbreviation} sends`, assets: (t.trade_assets ?? []).filter((a) => a.from_team_id === t.proposing_team_id) },
+                  { label: `${t.receiving_team.abbreviation} sends`, assets: (t.trade_assets ?? []).filter((a) => a.from_team_id === t.receiving_team_id) },
+                ].map((side) => (
+                  <div key={side.label}>
+                    <div className="text-slate-500 text-xs mb-1.5">{side.label}</div>
+                    {side.assets.length === 0 ? <div className="text-slate-700 text-sm">—</div> : side.assets.map((a) => (
+                      <div key={a.id} className="text-sm text-slate-300 mb-1">
+                        {a.contracts?.players.mc_username ?? "?"} — {(a.contracts?.amount ?? 0).toLocaleString()}
+                        {(a.contracts?.is_two_season) && <span className="text-purple-400 ml-1 text-xs">2yr</span>}
+                        {(a.retention_amount ?? 0) > 0 && <span className="text-yellow-400 ml-1 text-xs">ret. {a.retention_amount.toLocaleString()}</span>}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+
+              {t.notes && <div className="text-slate-500 text-sm italic mb-3">"{t.notes}"</div>}
+
+              {/* Admin actions */}
+              {t.status === "admin_review" && (
+                <div className="flex flex-col gap-2">
+                  <input
+                    className={input}
+                    placeholder="Admin note (optional)"
+                    value={adminNotes[t.id] ?? ""}
+                    onChange={(e) => setAdminNotes((n) => ({ ...n, [t.id]: e.target.value }))}
+                  />
+                  <div className="flex gap-2">
+                    <button className="rounded-lg px-3 py-1.5 text-sm font-medium bg-green-950 hover:bg-green-900 text-green-300 border border-green-800 transition" disabled={acting[t.id]} onClick={() => act(t.id, "approve")}>Approve</button>
+                    <button className={btnDanger} disabled={acting[t.id]} onClick={() => act(t.id, "deny")}>Deny</button>
+                  </div>
+                  {errs[t.id] && <ErrMsg msg={errs[t.id]} />}
+                </div>
+              )}
+              {t.admin_note && <div className="text-purple-400 text-sm mt-2">Admin note: {t.admin_note}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Admin Page ──────────────────────────────────────────────────────────
 
-const TABS = ["Players", "Teams", "Schedule", "Box Scores", "Accolades", "Champions", "Articles", "Stats", "Playoffs"] as const;
+const TABS = ["Players", "Teams", "Schedule", "Box Scores", "Accolades", "Champions", "Articles", "Stats", "Playoffs", "Owners", "Auction", "Trades"] as const;
 type Tab = typeof TABS[number];
 const SEASONS = ["Season 1","Season 1 Playoffs","Season 2","Season 2 Playoffs","Season 3","Season 3 Playoffs","Season 4","Season 4 Playoffs","Season 5","Season 5 Playoffs","Season 6","Season 6 Playoffs","Season 7","Season 7 Playoffs"];
 
@@ -3082,6 +3519,9 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
         {activeTab === "Articles" && <ArticlesTab league={league} />}
         {activeTab === "Stats" && <StatsViewTab league={league} season={season} />}
         {activeTab === "Playoffs" && <PlayoffsTab league={league} season={season} />}
+        {activeTab === "Owners" && <OwnersTab league={league} />}
+        {activeTab === "Auction" && <AuctionAdminTab league={league} />}
+        {activeTab === "Trades" && <TradesAdminTab league={league} />}
       </div>
     </div>
   );

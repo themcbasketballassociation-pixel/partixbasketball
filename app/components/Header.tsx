@@ -20,6 +20,8 @@ const tabs = [
   { label: "Stats",      path: "/stats",     global: false },
   { label: "Players",    path: "/players",   global: false },
   { label: "Accolades",  path: "/accolades", global: false },
+  { label: "Auction",    path: "/auction",   global: false },
+  { label: "My Team",    path: "/owner",     global: false },
   { label: "Games",      path: "/games",     global: false },
   { label: "Links",      path: "/links",     global: true  },
   { label: "Admin",      path: "/admin",     global: false },
