@@ -2,6 +2,7 @@
 import { useSession, signIn, signOut } from "next-auth/react";
 import { useEffect, useState, useCallback, useMemo, useRef, useLayoutEffect } from "react";
 import React from "react";
+import OwnerPortalView from "../../components/OwnerPortalView";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -3417,6 +3418,8 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
 
   const { data: session, status } = useSession();
   const [authorized, setAuthorized] = useState<boolean | null>(null);
+  const [ownerRecord, setOwnerRecord] = useState<{ teams: { id: string; name: string; abbreviation: string; color2: string | null; division: string | null; logo_url: string | null } } | null | "loading">("loading");
+  const [portal, setPortal] = useState<"admin" | "owner" | "board" | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("Players");
   const [dbError, setDbError] = useState("");
   const [season, setSeason] = useState("Season 7");
@@ -3426,8 +3429,14 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
       fetch("/api/admin/check")
         .then((r) => r.json())
         .then((data) => setAuthorized(data.authorized));
+      fetch(`/api/owner/team?league=${league}`)
+        .then((r) => r.json())
+        .then((data) => setOwnerRecord(Array.isArray(data) && data.length > 0 ? data[0] : null))
+        .catch(() => setOwnerRecord(null));
+    } else if (status !== "loading") {
+      setOwnerRecord(null);
     }
-  }, [status]);
+  }, [status, league]);
 
   useEffect(() => {
     if (!league) return;
@@ -3439,14 +3448,15 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
       .catch(() => setDbError("Database unreachable — make sure your Supabase project is active at supabase.com and tables have been created."));
   }, [league]);
 
-  if (status === "loading") return <div className="rounded-2xl border border-slate-800 bg-slate-900 p-10 text-center text-slate-500">Loading...</div>;
+  if (status === "loading" || ownerRecord === "loading")
+    return <div className="rounded-2xl border border-slate-800 bg-slate-900 p-10 text-center text-slate-500">Loading...</div>;
 
   if (status !== "authenticated") {
     return (
       <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
         <div className="px-6 py-5 border-b border-slate-800">
-          <h2 className="text-2xl font-bold text-white">Admin Login</h2>
-          <p className="text-slate-400 text-sm mt-0.5">Sign in with Discord to access admin tools.</p>
+          <h2 className="text-2xl font-bold text-white">Portal Login</h2>
+          <p className="text-slate-400 text-sm mt-0.5">Sign in with Discord to access your portal.</p>
         </div>
         <div className="p-8">
           <button className={`${btnPrimary} text-base px-6 py-3`} onClick={() => signIn("discord")}>Sign in with Discord</button>
@@ -3455,20 +3465,143 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
     );
   }
 
-  if (authorized === false) {
+  const isAdmin = authorized === true;
+  const isOwner = ownerRecord !== null;
+  const hasAccess = isAdmin || isOwner;
+
+  // Still checking admin status
+  if (authorized === null)
+    return <div className="rounded-2xl border border-slate-800 bg-slate-900 p-10 text-center text-slate-500">Checking access...</div>;
+
+  if (!hasAccess) {
     return (
       <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
-        <div className="px-6 py-5 border-b border-slate-800"><h2 className="text-2xl font-bold text-white">Access Denied</h2></div>
+        <div className="px-6 py-5 border-b border-slate-800"><h2 className="text-2xl font-bold text-white">No Access</h2></div>
         <div className="p-8">
-          <p className="text-slate-400 mb-4">Your Discord account is not authorized for admin access.</p>
+          <p className="text-slate-400 mb-4">Your Discord account is not linked to any team or admin role. Contact the commissioner.</p>
           <button className={btnSecondary} onClick={() => signOut()}>Sign out</button>
         </div>
       </div>
     );
   }
 
-  if (authorized === null) return <div className="rounded-2xl border border-slate-800 bg-slate-900 p-10 text-center text-slate-500">Checking access...</div>;
+  // ── Portal hub landing ─────────────────────────────────────────────────────
+  if (portal === null) {
+    const portals = [
+      {
+        id: "admin" as const,
+        label: "Admin",
+        desc: "Manage players, teams, games, auctions, and trades",
+        color: "#3b82f6",
+        border: "#1d4ed8",
+        bg: "#0a1628",
+        available: isAdmin,
+        badge: isAdmin ? null : "No Access",
+      },
+      {
+        id: "owner" as const,
+        label: "Team Owner Portal",
+        desc: isOwner
+          ? `${(ownerRecord as any).teams?.name ?? "Your Team"} — roster, bidding, trades`
+          : "Your Discord account is not linked to a team",
+        color: "#f59e0b",
+        border: "#b45309",
+        bg: "#1c1000",
+        available: isAdmin || isOwner,
+        badge: (!isAdmin && !isOwner) ? "No Access" : null,
+      },
+      {
+        id: "board" as const,
+        label: "Board Portal",
+        desc: "Commissioner tools — coming soon",
+        color: "#6b7280",
+        border: "#374151",
+        bg: "#0d0d0d",
+        available: false,
+        badge: "Coming Soon",
+      },
+    ];
 
+    return (
+      <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
+        <div className="px-6 py-5 border-b border-slate-800 flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-white">Portals</h2>
+            <p className="text-slate-500 text-sm mt-0.5">{league.toUpperCase()} · {session?.user?.name}</p>
+          </div>
+          <button className={btnSecondary} onClick={() => signOut()}>Sign out</button>
+        </div>
+        <div className="p-6 grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))" }}>
+          {portals.map((p) => (
+            <button
+              key={p.id}
+              disabled={!p.available}
+              onClick={p.available ? () => setPortal(p.id) : undefined}
+              className="text-left rounded-xl border p-5 transition-all duration-150 flex flex-col gap-3"
+              style={{
+                background: p.available ? p.bg : "#0a0a0a",
+                borderColor: p.available ? p.border : "#1a1a1a",
+                opacity: p.available ? 1 : 0.5,
+                cursor: p.available ? "pointer" : "default",
+              }}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-base font-bold" style={{ color: p.available ? p.color : "#444" }}>{p.label}</span>
+                {p.badge && (
+                  <span className="text-xs px-2 py-0.5 rounded-full border" style={{ color: "#666", borderColor: "#2a2a2a", background: "#111" }}>{p.badge}</span>
+                )}
+              </div>
+              <p className="text-sm" style={{ color: p.available ? "#888" : "#444" }}>{p.desc}</p>
+              {p.available && (
+                <span className="text-xs font-semibold" style={{ color: p.color }}>Enter →</span>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Board portal (placeholder) ─────────────────────────────────────────────
+  if (portal === "board") {
+    return (
+      <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
+        <div className="px-6 py-5 border-b border-slate-800 flex items-center gap-3">
+          <button className={btnSecondary} onClick={() => setPortal(null)}>← Back</button>
+          <h2 className="text-xl font-bold text-white">Board Portal</h2>
+        </div>
+        <div className="p-12 text-center">
+          <div className="text-slate-500 text-lg font-semibold mb-2">Coming Soon</div>
+          <div className="text-slate-600 text-sm">Commissioner tools will be available here.</div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Owner portal ───────────────────────────────────────────────────────────
+  if (portal === "owner") {
+    const record = isOwner ? ownerRecord as any : null;
+    if (!record) {
+      return (
+        <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
+          <div className="px-6 py-5 border-b border-slate-800 flex items-center gap-3">
+            <button className={btnSecondary} onClick={() => setPortal(null)}>← Back</button>
+            <h2 className="text-xl font-bold text-white">Team Owner Portal</h2>
+          </div>
+          <div className="p-8 text-slate-500">You are not assigned to a team in this league.</div>
+        </div>
+      );
+    }
+    return (
+      <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
+        <div className="p-6">
+          <OwnerPortalView teamRecord={record} leagueSlug={league} onBack={() => setPortal(null)} />
+        </div>
+      </div>
+    );
+  }
+
+  // ── Admin portal ───────────────────────────────────────────────────────────
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
       {dbError && (
@@ -3478,9 +3611,12 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
       )}
 
       <div className="px-6 py-5 border-b border-slate-800 flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h2 className="text-2xl font-bold text-white">Admin Dashboard</h2>
-          <p className="text-slate-400 text-sm mt-0.5">{league.toUpperCase()} · {session.user?.name}</p>
+        <div className="flex items-center gap-3">
+          <button className={btnSecondary} onClick={() => setPortal(null)}>← Portals</button>
+          <div>
+            <h2 className="text-2xl font-bold text-white">Admin Dashboard</h2>
+            <p className="text-slate-400 text-sm mt-0.5">{league.toUpperCase()} · {session?.user?.name}</p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
