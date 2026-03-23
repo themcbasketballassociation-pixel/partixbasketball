@@ -3072,8 +3072,12 @@ function DraftPicksTab({ league }: { league: string }) {
   const [teams, setTeams] = useState<TeamRow[]>([]);
   const [filterSeason, setFilterSeason] = useState("Season 7");
   const [err, setErr] = useState("");
+  const [seedMsg, setSeedMsg] = useState("");
+  const [seedBusy, setSeedBusy] = useState(false);
+  const [seedSeason, setSeedSeason] = useState("Season 7");
+  const [showManual, setShowManual] = useState(false);
 
-  // Create form
+  // Manual override form
   const [season, setSeason] = useState("Season 7");
   const [round, setRound] = useState("1");
   const [pickNum, setPickNum] = useState("");
@@ -3091,6 +3095,23 @@ function DraftPicksTab({ league }: { league: string }) {
   }, [league, filterSeason]);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  const seed = async () => {
+    setSeedMsg(""); setSeedBusy(true);
+    const r = await fetch("/api/draft-picks/seed", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ league, base_season: seedSeason }),
+    });
+    const d = await r.json();
+    setSeedBusy(false);
+    if (!r.ok) { setSeedMsg(`Error: ${d.error}`); return; }
+    setSeedMsg(d.created === 0
+      ? `All picks already exist (${d.skipped} skipped)`
+      : `Created ${d.created} picks for ${d.teams} teams across ${d.seasons?.join(", ")}`
+    );
+    refresh();
+  };
 
   const add = async () => {
     setErr("");
@@ -3111,67 +3132,113 @@ function DraftPicksTab({ league }: { league: string }) {
     refresh();
   };
 
-  const pickLabel = (p: Pick) => `${p.season} R${p.round}${p.pick_number != null ? ` #${p.pick_number}` : ""}`;
+  const pickLbl = (p: Pick) => `${p.season} R${p.round}${p.pick_number != null ? ` #${p.pick_number}` : ""}`;
+
+  // Group picks by season → round → team for cleaner display
+  const grouped: Record<string, Record<number, Pick[]>> = {};
+  for (const p of picks) {
+    if (!grouped[p.season]) grouped[p.season] = {};
+    if (!grouped[p.season][p.round]) grouped[p.season][p.round] = [];
+    grouped[p.season][p.round].push(p);
+  }
 
   return (
     <div>
+      {/* Auto-generate section */}
       <div className={card} style={{ marginBottom: 16 }}>
-        <div className="text-sm font-semibold text-slate-300 mb-4">Add Draft Pick</div>
-        <div className="flex gap-3 flex-wrap mb-3">
-          <select className={input} value={season} onChange={e => setSeason(e.target.value)} style={{ flex: 1, minWidth: 120 }}>
-            {SEASONS.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
-          <input className={input} type="number" placeholder="Round" min={1} max={5} value={round} onChange={e => setRound(e.target.value)} style={{ width: 80, flex: "none" }} />
-          <input className={input} type="number" placeholder="Pick # (opt)" value={pickNum} onChange={e => setPickNum(e.target.value)} style={{ width: 110, flex: "none" }} />
+        <div className="text-sm font-semibold text-slate-300 mb-1">Auto-Generate Picks</div>
+        <p className="text-xs text-slate-500 mb-3">
+          Every team gets Round 1 &amp; Round 2 picks for the base season + next season (2 seasons total). Skips picks that already exist.
+        </p>
+        <div className="flex gap-3 items-center flex-wrap">
+          <div>
+            <div className="text-xs text-slate-500 mb-1">Base season (current)</div>
+            <select className={input} value={seedSeason} onChange={e => setSeedSeason(e.target.value)} style={{ minWidth: 140 }}>
+              {SEASONS.filter(s => !s.includes("Playoff")).map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <button className={btnPrimary} onClick={seed} disabled={seedBusy} style={{ marginTop: 16 }}>
+            {seedBusy ? "Generating…" : "Generate Picks for All Teams"}
+          </button>
         </div>
-        <div className="flex gap-3 flex-wrap mb-3">
-          <select className={input} value={origTeam} onChange={e => { setOrigTeam(e.target.value); if (!currTeam) setCurrTeam(e.target.value); }} style={{ flex: 1, minWidth: 160 }}>
-            <option value="">— Original team —</option>
-            {teams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.abbreviation})</option>)}
-          </select>
-          <select className={input} value={currTeam} onChange={e => setCurrTeam(e.target.value)} style={{ flex: 1, minWidth: 160 }}>
-            <option value="">— Current owner (defaults to original) —</option>
-            {teams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.abbreviation})</option>)}
-          </select>
-        </div>
-        <div className="flex gap-3">
-          <input className={input} placeholder="Notes (optional)" value={notes} onChange={e => setNotes(e.target.value)} />
-          <button className={btnPrimary} onClick={add}>Add Pick</button>
-        </div>
-        <ErrMsg msg={err} />
+        {seedMsg && (
+          <p className={`text-xs mt-2 ${seedMsg.startsWith("Error") ? "text-red-400" : "text-green-400"}`}>{seedMsg}</p>
+        )}
       </div>
 
+      {/* Manual override */}
+      <button className={`${btnSecondary} text-xs mb-3`} onClick={() => setShowManual(v => !v)}>
+        {showManual ? "▲ Hide manual override" : "▼ Manual pick override"}
+      </button>
+      {showManual && (
+        <div className={card} style={{ marginBottom: 16 }}>
+          <div className="text-sm font-semibold text-slate-300 mb-3">Add Single Pick (override)</div>
+          <div className="flex gap-3 flex-wrap mb-3">
+            <select className={input} value={season} onChange={e => setSeason(e.target.value)} style={{ flex: 1, minWidth: 120 }}>
+              {SEASONS.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <input className={input} type="number" placeholder="Round" min={1} max={2} value={round} onChange={e => setRound(e.target.value)} style={{ width: 80, flex: "none" }} />
+            <input className={input} type="number" placeholder="Pick # (opt)" value={pickNum} onChange={e => setPickNum(e.target.value)} style={{ width: 110, flex: "none" }} />
+          </div>
+          <div className="flex gap-3 flex-wrap mb-3">
+            <select className={input} value={origTeam} onChange={e => { setOrigTeam(e.target.value); if (!currTeam) setCurrTeam(e.target.value); }} style={{ flex: 1, minWidth: 160 }}>
+              <option value="">— Original team —</option>
+              {teams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.abbreviation})</option>)}
+            </select>
+            <select className={input} value={currTeam} onChange={e => setCurrTeam(e.target.value)} style={{ flex: 1, minWidth: 160 }}>
+              <option value="">— Current owner (defaults to original) —</option>
+              {teams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.abbreviation})</option>)}
+            </select>
+          </div>
+          <div className="flex gap-3">
+            <input className={input} placeholder="Notes (optional)" value={notes} onChange={e => setNotes(e.target.value)} />
+            <button className={btnPrimary} onClick={add}>Add Pick</button>
+          </div>
+          <ErrMsg msg={err} />
+        </div>
+      )}
+
+      {/* Season filter + list */}
       <div className="flex gap-2 mb-4 flex-wrap">
-        {["Season 7", "Season 6", "Season 5"].map(s => (
+        {["Season 7", "Season 8", "Season 6"].map(s => (
           <button key={s} className={filterSeason === s ? btnPrimary : btnSecondary} onClick={() => setFilterSeason(s)}>{s}</button>
         ))}
       </div>
 
-      {picks.length === 0
-        ? <div className="text-slate-600 text-sm text-center py-6">No draft picks found.</div>
-        : (
-          <div className="flex flex-col gap-2">
-            {picks.map(p => (
-              <div key={p.id} className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-950 px-4 py-3">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-white font-semibold text-sm">{pickLabel(p)}</span>
-                    {p.status !== "active" && <span className="text-xs text-slate-500 bg-slate-800 rounded px-1.5 py-0.5">{p.status}</span>}
-                  </div>
-                  <div className="text-slate-500 text-xs mt-0.5">
-                    Orig: <span className="text-slate-400">{p.original_team?.abbreviation ?? "?"}</span>
-                    {p.current_team?.id !== p.original_team?.id && (
-                      <span> → Now: <span className="text-cyan-400">{p.current_team?.abbreviation ?? "?"}</span></span>
-                    )}
-                    {p.notes && <span className="ml-2 italic">{p.notes}</span>}
-                  </div>
+      {picks.length === 0 ? (
+        <div className="text-slate-600 text-sm text-center py-6">No picks for {filterSeason}. Use "Generate Picks" above.</div>
+      ) : (
+        Object.keys(grouped).sort().map(s => (
+          <div key={s} className="mb-4">
+            {[1, 2].map(rnd => grouped[s]?.[rnd] ? (
+              <div key={rnd} className="mb-3">
+                <div className="text-xs text-slate-500 font-semibold uppercase tracking-wider mb-2 px-1">{s} · Round {rnd}</div>
+                <div className="flex flex-col gap-1.5">
+                  {grouped[s][rnd].sort((a, b) => (a.original_team?.abbreviation ?? "").localeCompare(b.original_team?.abbreviation ?? "")).map(p => (
+                    <div key={p.id} className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-950 px-4 py-2.5">
+                      <div className="flex-1 flex items-center gap-3">
+                        <span className="text-white font-medium text-sm w-10">{p.original_team?.abbreviation ?? "?"}</span>
+                        {p.current_team?.id !== p.original_team?.id ? (
+                          <span className="text-xs">
+                            <span className="text-slate-500 line-through">{p.original_team?.abbreviation}</span>
+                            <span className="text-cyan-400 ml-1">→ {p.current_team?.abbreviation}</span>
+                            <span className="text-amber-400 ml-1.5 font-semibold">TRADED</span>
+                          </span>
+                        ) : (
+                          <span className="text-slate-600 text-xs">owns original pick</span>
+                        )}
+                        {p.notes && <span className="text-slate-500 text-xs italic">{p.notes}</span>}
+                        {p.status !== "active" && <span className="text-xs text-slate-500 bg-slate-800 rounded px-1.5">{p.status}</span>}
+                      </div>
+                      <button className={btnDanger} onClick={() => remove(p.id)} style={{ padding: "3px 10px", fontSize: 12 }}>Delete</button>
+                    </div>
+                  ))}
                 </div>
-                <button className={btnDanger} onClick={() => remove(p.id)}>Delete</button>
               </div>
-            ))}
+            ) : null)}
           </div>
-        )
-      }
+        ))
+      )}
     </div>
   );
 }

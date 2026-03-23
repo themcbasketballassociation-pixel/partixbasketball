@@ -66,17 +66,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!asset.from_team_id || (!asset.contract_id && !asset.pick_id))
         return res.status(400).json({ error: "Each asset requires from_team_id and either contract_id or pick_id" });
 
-      // Draft pick asset — validate ownership, no retention allowed
+      // Draft pick asset — validate ownership + 2-season rule, no retention allowed
       if (asset.pick_id) {
         const { data: pick } = await supabase
           .from("draft_picks")
-          .select("id, current_team_id, status")
+          .select("id, current_team_id, status, season")
           .eq("id", asset.pick_id)
           .maybeSingle();
         if (!pick) return res.status(400).json({ error: `Draft pick ${asset.pick_id} not found` });
         if (pick.status !== "active") return res.status(400).json({ error: `Draft pick ${asset.pick_id} is not active` });
         if (pick.current_team_id !== asset.from_team_id)
           return res.status(400).json({ error: `Draft pick ${asset.pick_id} is not owned by the sending team` });
+
+        // 2-season rule: find current base season from the earliest picks in this league
+        const { data: basePicks } = await supabase
+          .from("draft_picks")
+          .select("season")
+          .eq("league", league as string)
+          .eq("status", "active")
+          .order("season")
+          .limit(1);
+        if (basePicks?.length) {
+          const baseNum = parseInt(basePicks[0].season.match(/\d+/)?.[0] ?? "0");
+          const pickNum = parseInt((pick.season as string).match(/\d+/)?.[0] ?? "0");
+          if (pickNum > baseNum + 1) {
+            return res.status(400).json({
+              error: `Cannot trade a pick more than 2 seasons in the future (max: Season ${baseNum + 1})`,
+            });
+          }
+        }
         continue; // no retention validation for picks
       }
 
