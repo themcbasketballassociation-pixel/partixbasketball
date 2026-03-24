@@ -305,12 +305,12 @@ export default function AuctionPage() {
         <h2 style={{ color: "#fff", fontSize: 16, fontWeight: 700, margin: "0 0 14px" }}>Quick Rules Reference</h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 16 }}>
           {[
-            { title: "Salary Caps (per team)", items: ["Total cap: 25,000 per team", "Court cap: 22,000 per team", "Max per player: 12,000", "Min bid: 1,000"] },
-            { title: "Bid Rules", items: ["Increments of 250 only", "Must beat current effective value", "12-hour inactivity closes auction", "Max 2 signings per phase"] },
+            { title: "Salary Caps (per team)", items: ["Total cap: 25,000 per team", "Court cap: 22,000 per team", "Max per player: 12,000", "Min bid: 1,000", "Pending bids hold cap until player signs"] },
+            { title: "Bid Rules", items: ["Increments of 250 only", "Must beat current effective value", "12-hour inactivity closes auction and then player can accept", "Max 2 signings per phase"] },
             { title: "2-Season Contracts", items: ["Available on bids ≥ 5,000", "Adds +500 effective value", "Must declare at time of bid", "Cap hit = actual bid only"] },
             { title: "Player Choice", items: ["If any bid within 500 of top", "Player picks their team", "Based on effective values", "All qualifying bids eligible"] },
             { title: "Roster Viability", items: ["Highest contract + new bid ≤ 20,000", "Must fit 2 more min-salary players", "Invalid bids are void", "Clock doesn't reset on void bids"] },
-            { title: "Trades", items: ["Max 2,000 cap retention per side", "10% max per contract", "Retention = sending team keeps paying", "Max 3 retentions per team"] },
+            { title: "Trades & Retention", items: ["Retention = the trading team reduces a player's contract amount", "Max 10% off any single contract", "Max 2 contracts retained per team total", "Retained amount stays on the sending team's cap"] },
           ].map((section) => (
             <div key={section.title}>
               <div style={{ color: "#aaa", fontSize: 12, fontWeight: 700, marginBottom: 6 }}>{section.title}</div>
