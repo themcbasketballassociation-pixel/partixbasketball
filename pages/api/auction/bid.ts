@@ -134,8 +134,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     .single();
   if (bidErr) return res.status(500).json({ error: bidErr.message });
 
-  // Reset the 6-hour clock
-  const newClosesAt = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString();
+  // Reset the 12-hour clock
+  const newClosesAt = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();
   await supabase.from("auctions").update({ closes_at: newClosesAt }).eq("id", auction_id);
 
   const warning =

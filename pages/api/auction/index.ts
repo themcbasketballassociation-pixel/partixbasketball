@@ -46,7 +46,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .maybeSingle();
     if (existing) return res.status(400).json({ error: "Player already in an active auction" });
 
-    const closesAt = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString();
+    const closesAt = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();
     const { data, error } = await supabase
       .from("auctions")
       .insert([{
