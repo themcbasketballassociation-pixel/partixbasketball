@@ -114,7 +114,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Roster viability: highest existing contract + bid ≤ 20,000
   if (maxExisting + amount > VIABILITY_MAX)
     return res.status(400).json({
-      error: `Roster viability check failed: highest contract (${maxExisting}) + bid (${amount}) = ${maxExisting + amount} > ${VIABILITY_MAX}. No room for 2 more minimum-priced players.`,
+      error: `Roster viability check failed: owner's contract (${maxExisting}) + highest bid (${amount}) = ${maxExisting + amount} > ${VIABILITY_MAX}. No room for 2 more minimum-priced players.`,
     });
 
   // ── Phase signing limit (can bid but flagged) ────────────────────────────────

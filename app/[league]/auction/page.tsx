@@ -309,7 +309,7 @@ export default function AuctionPage() {
             { title: "Bid Rules", items: ["Increments of 250 only", "Must beat current effective value", "After 12 hours of no new bids, the player can accept a team's offer", "Max 2 signings per phase"] },
             { title: "2-Season Contracts", items: ["Available on bids ≥ 5,000", "Adds +500 effective value", "Must declare at time of bid", "Cap hit = actual bid only"] },
             { title: "Player Choice", items: ["If any bid within 500 of top", "Player picks their team", "Based on effective values", "All qualifying bids eligible"] },
-            { title: "Roster Viability", items: ["Highest contract + new bid ≤ 20,000", "Must fit 2 more min-salary players", "Invalid bids are void", "Clock doesn't reset on void bids"] },
+            { title: "Roster Viability", items: ["Owner's contract + highest bid ≤ 20,000", "Must fit 2 more min-salary players", "Invalid bids are void", "Clock doesn't reset on void bids"] },
             { title: "Trades & Retention", items: ["Retention = the trading team reduces a player's contract amount", "Max 10% off any single contract", "Max 2 contracts retained per team total", "Retained amount stays on the sending team's cap"] },
           ].map((section) => (
             <div key={section.title}>
