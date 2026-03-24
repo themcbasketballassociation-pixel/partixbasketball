@@ -20,7 +20,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "POST") {
     const admin = await requireAdmin(req, res);
     if (!admin) return;
-    const { mc_uuid, team_id, league, season } = req.body;
+    const { mc_uuid, team_id, league: leagueRaw, season } = req.body;
+    const league = resolveLeague(leagueRaw);
     if (!mc_uuid || !team_id || !league) return res.status(400).json({ error: "mc_uuid, team_id, league required" });
     // Delete any existing assignment for this player in this league, then insert fresh
     await supabase.from("player_teams").delete().eq("mc_uuid", mc_uuid).eq("league", league);
