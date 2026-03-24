@@ -487,16 +487,20 @@ export default function OwnerPage() {
   const [allTeams, setAllTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"roster" | "bid" | "trades">("roster");
+  const [isBoardMember, setIsBoardMember] = useState(false);
 
   const loadAll = useCallback(async () => {
     if (status === "loading") return;
     if (status !== "authenticated") { setLoading(false); return; }
     try {
-      const [ownerRes, auctionsRes, teamsRes] = await Promise.all([
+      const [ownerRes, auctionsRes, teamsRes, boardRes] = await Promise.all([
         fetch(`/api/owner/team?league=${leagueSlug}`),
         fetch(`/api/auction?league=${leagueSlug}&status=active`),
         fetch(`/api/teams?league=${leagueSlug}`),
+        fetch(`/api/board-members?league=${leagueSlug}&check=me`),
       ]);
+      const boardData = await boardRes.json().catch(() => ({}));
+      setIsBoardMember(!!boardData.isMember);
       const ownerData = await ownerRes.json();
       const auctionData = await auctionsRes.json();
       const teamsData = await teamsRes.json();
@@ -569,7 +573,15 @@ export default function OwnerPage() {
             <div style={{ color: "#22d3ee", fontWeight: 700, fontSize: 22 }}>{fmt(totalUsed)} <span style={{ color: "#333", fontSize: 16 }}>/ 25,000</span></div>
             <div style={{ color: "#555", fontSize: 12 }}>cap used</div>
           </div>
-          <button onClick={() => signOut()} style={{ ...btn(), fontSize: 12, padding: "6px 12px" }}>Sign out</button>
+          <div style={{ display: "flex", flexDirection: "column" as const, gap: 6, alignItems: "flex-end" }}>
+            {isBoardMember && (
+              <a href={`/${leagueSlug}/board`}
+                style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid #7c3aed", background: "#4c1d95", color: "#c4b5fd", fontSize: 12, fontWeight: 700, textDecoration: "none", cursor: "pointer" }}>
+                🗳 Board Portal
+              </a>
+            )}
+            <button onClick={() => signOut()} style={{ ...btn(), fontSize: 12, padding: "6px 12px" }}>Sign out</button>
+          </div>
         </div>
 
         {/* Tabs */}
