@@ -22,9 +22,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!admin) return;
     const { mc_uuid, team_id, league, season } = req.body;
     if (!mc_uuid || !team_id || !league) return res.status(400).json({ error: "mc_uuid, team_id, league required" });
+    // Delete any existing assignment for this player in this league, then insert fresh
+    await supabase.from("player_teams").delete().eq("mc_uuid", mc_uuid).eq("league", league);
     const { error } = await supabase
       .from("player_teams")
-      .upsert([{ mc_uuid, team_id, league, season: season ?? null }], { onConflict: "mc_uuid,league" });
+      .insert([{ mc_uuid, team_id, league, season: season ?? null }]);
     if (error) return res.status(500).json({ error: error.message });
     return res.status(200).json({ success: true });
   }
