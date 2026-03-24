@@ -918,7 +918,7 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
                             <PlayerSearchSelect
                               players={unassigned}
                               value={addingToTeam[t.id] ?? ""}
-                              onChange={(uuid) => setAddingToTeam((prev) => ({ ...prev, [t.id]: uuid }))}
+                              onChange={(uuid) => { setAddingToTeam((prev) => ({ ...prev, [t.id]: uuid })); setErr(""); }}
                               placeholder="Add player..."
                             />
                             <button
@@ -928,6 +928,7 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
                               style={{ whiteSpace: "nowrap" }}
                             >Add</button>
                           </div>
+                          {err && <p className="text-xs text-red-400 mt-1">{err}</p>}
                         </div>
                       );
                     })()}

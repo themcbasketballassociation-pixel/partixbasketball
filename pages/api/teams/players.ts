@@ -22,13 +22,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!admin) return;
     const { mc_uuid, team_id, league, season } = req.body;
     if (!mc_uuid || !team_id || !league) return res.status(400).json({ error: "mc_uuid, team_id, league required" });
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from("player_teams")
-      .upsert([{ mc_uuid, team_id, league, season: season ?? null }], { onConflict: "mc_uuid,league" })
-      .select()
-      .single();
+      .upsert([{ mc_uuid, team_id, league, season: season ?? null }], { onConflict: "mc_uuid,league" });
     if (error) return res.status(500).json({ error: error.message });
-    return res.status(200).json(data);
+    return res.status(200).json({ success: true });
   }
 
   if (req.method === "DELETE") {

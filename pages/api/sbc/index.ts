@@ -26,7 +26,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const counts = { start: 0, bench: 0, cut: 0 };
       for (const row of (data ?? [])) {
         const vote = pos === "v1" ? row.v1 : pos === "v2" ? row.v2 : row.v3;
-        if (vote === "start" || vote === "bench" || vote === "cut") counts[vote]++;
+        if (vote === "start" || vote === "bench" || vote === "cut") counts[vote as keyof typeof counts]++;
       }
       return counts;
     };
