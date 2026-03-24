@@ -24,7 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!mc_uuid || !team_id || !league) return res.status(400).json({ error: "mc_uuid, team_id, league required" });
     const { data, error } = await supabase
       .from("player_teams")
-      .upsert([{ mc_uuid, team_id, league, season: season ?? null }], { onConflict: "mc_uuid,league,season" })
+      .upsert([{ mc_uuid, team_id, league, season: season ?? null }], { onConflict: "mc_uuid,league" })
       .select()
       .single();
     if (error) return res.status(500).json({ error: error.message });

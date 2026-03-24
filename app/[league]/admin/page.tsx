@@ -3623,9 +3623,469 @@ function TradesAdminTab({ league }: { league: string }) {
   );
 }
 
+// ─── Board: constants ─────────────────────────────────────────────────────────
+
+const BOARD_SEASONS = ["Season 1","Season 2","Season 3","Season 4","Season 5","Season 6","Season 7"];
+const BOARD_AWARDS = [
+  { key: "MVP",  label: "Most Valuable Player" },
+  { key: "DPOY", label: "Defensive Player of the Year" },
+  { key: "ROY",  label: "Rookie of the Year" },
+  { key: "MIP",  label: "Most Improved Player" },
+  { key: "SMOY", label: "6th Man of the Year" },
+];
+// Points: player rank 1=10 … 10=1; team rank 1=N … N=1; award 1=5, 2=3, 3=1
+function boardPlayerPts(rank: number) { return Math.max(0, 11 - rank); }
+function boardAwardPts(rank: number)  { return rank === 1 ? 5 : rank === 2 ? 3 : 1; }
+
+// ─── Tab: Board Members (admin) ───────────────────────────────────────────────
+
+function BoardMembersTab({ league }: { league: string }) {
+  type Member = { id: string; discord_id: string; league: string; season: string; name: string | null };
+  const [members, setMembers] = useState<Member[]>([]);
+  const [discordId, setDiscordId] = useState("");
+  const [season, setLocalSeason] = useState("Season 7");
+  const [name, setName] = useState("");
+  const [err, setErr] = useState("");
+
+  const refresh = useCallback(async () => {
+    const data = await fetch(`/api/board-members?league=${league}`).then(r => r.json());
+    setMembers(Array.isArray(data) ? data : []);
+  }, [league]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const add = async () => {
+    setErr("");
+    if (!discordId.trim()) return setErr("Discord ID required");
+    const r = await fetch("/api/board-members", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ discord_id: discordId.trim(), league, season, name: name.trim() || null }),
+    });
+    const d = await r.json();
+    if (!r.ok) return setErr(d.error);
+    setDiscordId(""); setName(""); refresh();
+  };
+
+  const remove = async (id: string) => {
+    await fetch("/api/board-members", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+    refresh();
+  };
+
+  const bySeason = members.reduce<Record<string, Member[]>>((acc, m) => {
+    const s = m.season ?? "Unknown";
+    if (!acc[s]) acc[s] = [];
+    acc[s].push(m); return acc;
+  }, {});
+
+  return (
+    <div>
+      <div className={card} style={{ marginBottom: 16 }}>
+        <div className="text-sm font-semibold text-slate-300 mb-4">Add Board Member</div>
+        <div className="flex gap-3 flex-wrap mb-2">
+          <input className={input} placeholder="Discord User ID" value={discordId} onChange={e => setDiscordId(e.target.value)} style={{ flex: 2, minWidth: 160 }} />
+          <input className={input} placeholder="Display name (optional)" value={name} onChange={e => setName(e.target.value)} style={{ flex: 2, minWidth: 140 }} />
+          <select className={input} value={season} onChange={e => setLocalSeason(e.target.value)} style={{ flex: 1, minWidth: 120 }}>
+            {BOARD_SEASONS.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <button className={btnPrimary} onClick={add}>Add</button>
+        </div>
+        <ErrMsg msg={err} />
+        <p className="text-xs text-slate-500 mt-2">Use Developer Mode in Discord to copy the numeric User ID.</p>
+      </div>
+      {Object.keys(bySeason).sort((a, b) => b.localeCompare(a)).map(s => (
+        <div key={s} className="mb-4">
+          <div className="text-xs text-slate-500 font-semibold uppercase tracking-wider mb-2 px-1">{s}</div>
+          <div className="flex flex-col gap-2">
+            {bySeason[s].map(m => (
+              <div key={m.id} className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-950 px-4 py-3">
+                <div className="flex-1">
+                  <div className="text-white font-medium text-sm">{m.name ?? "Unnamed"}</div>
+                  <div className="text-slate-500 text-xs font-mono">{m.discord_id}</div>
+                </div>
+                <button className={btnDanger} onClick={() => remove(m.id)}>Remove</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+      {members.length === 0 && <div className="text-slate-600 text-sm text-center py-6">No board members registered yet.</div>}
+    </div>
+  );
+}
+
+// ─── Board Portal View ────────────────────────────────────────────────────────
+
+function BoardPortalView({ league, onBack }: { league: string; onBack: () => void }) {
+  type PlayerRow = { mc_uuid: string; mc_username: string };
+  type TeamRow   = { id: string; name: string; abbreviation: string };
+
+  const [ballotSeason, setBallotSeason] = useState("Season 7");
+  const [boardTab, setBoardTab] = useState<"ballot" | "results">("ballot");
+
+  // Data
+  const [players, setPlayers]   = useState<PlayerRow[]>([]);
+  const [teams, setTeams]       = useState<TeamRow[]>([]);
+  const [loading, setLoading]   = useState(true);
+
+  // Ballot state
+  const [playerRanks, setPlayerRanks] = useState<string[]>(Array(10).fill(""));
+  const [teamRanks, setTeamRanks]     = useState<string[]>([]);
+  const [awardVotes, setAwardVotes]   = useState<Record<string, Record<string, string>>>({}); // {awardKey: {rank: mc_uuid}}
+
+  // Save state
+  const [saving, setSaving]   = useState(false);
+  const [saveMsg, setSaveMsg] = useState("");
+
+  // Results
+  const [results, setResults]       = useState<any>(null);
+  const [resultsLoading, setResultsLoading] = useState(false);
+
+  // Load players + teams
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([
+      fetch(`/api/teams/players?league=${league}`).then(r => r.json()),
+      fetch(`/api/teams?league=${league}`).then(r => r.json()),
+    ]).then(([pt, t]) => {
+      const seen = new Set<string>();
+      const ps: PlayerRow[] = [];
+      for (const entry of (Array.isArray(pt) ? pt : [])) {
+        if (entry.players && !seen.has(entry.mc_uuid)) {
+          seen.add(entry.mc_uuid);
+          ps.push({ mc_uuid: entry.mc_uuid, mc_username: entry.players.mc_username });
+        }
+      }
+      ps.sort((a, b) => a.mc_username.localeCompare(b.mc_username));
+      const ts: TeamRow[] = Array.isArray(t) ? t : [];
+      setPlayers(ps);
+      setTeams(ts);
+      setTeamRanks(Array(ts.length).fill(""));
+      setLoading(false);
+    });
+  }, [league]);
+
+  // Load my votes whenever season changes
+  useEffect(() => {
+    if (!ballotSeason || players.length === 0 || teams.length === 0) return;
+    fetch(`/api/board-votes?league=${league}&season=${encodeURIComponent(ballotSeason)}`)
+      .then(r => r.json())
+      .then((data: any[]) => {
+        if (!Array.isArray(data)) return;
+        const pr = Array(10).fill("");
+        const tr = Array(teams.length).fill("");
+        const av: Record<string, Record<string, string>> = {};
+        for (const v of data) {
+          if (v.vote_type === "player" && v.rank >= 1 && v.rank <= 10) pr[v.rank - 1] = v.mc_uuid ?? "";
+          else if (v.vote_type === "team" && v.rank >= 1 && v.rank <= teams.length) tr[v.rank - 1] = v.team_id ?? "";
+          else if (v.vote_type === "award" && v.category) {
+            if (!av[v.category]) av[v.category] = {};
+            av[v.category][String(v.rank)] = v.mc_uuid ?? "";
+          }
+        }
+        setPlayerRanks(pr);
+        setTeamRanks(tr);
+        setAwardVotes(av);
+      });
+  }, [ballotSeason, players.length, teams.length, league]);
+
+  // Load results
+  useEffect(() => {
+    if (boardTab !== "results") return;
+    setResultsLoading(true);
+    fetch(`/api/board-votes/results?league=${league}&season=${encodeURIComponent(ballotSeason)}`)
+      .then(r => r.json())
+      .then(d => { setResults(d); setResultsLoading(false); })
+      .catch(() => setResultsLoading(false));
+  }, [boardTab, league, ballotSeason]);
+
+  const saveBallot = async () => {
+    setSaving(true); setSaveMsg("");
+    const votes: any[] = [];
+    playerRanks.forEach((uuid, i) => { if (uuid) votes.push({ vote_type: "player", rank: i + 1, mc_uuid: uuid, category: null }); });
+    teamRanks.forEach((tid, i)   => { if (tid)  votes.push({ vote_type: "team",   rank: i + 1, team_id: tid, category: null }); });
+    for (const [aKey, ranks] of Object.entries(awardVotes)) {
+      for (const [rank, uuid] of Object.entries(ranks)) {
+        if (uuid) votes.push({ vote_type: "award", category: aKey, rank: parseInt(rank), mc_uuid: uuid });
+      }
+    }
+    const r = await fetch("/api/board-votes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ league, season: ballotSeason, votes }),
+    });
+    if (r.ok) setSaveMsg("✓ Ballot saved!");
+    else { const d = await r.json(); setSaveMsg(d.error ?? "Error saving"); }
+    setSaving(false);
+    setTimeout(() => setSaveMsg(""), 4000);
+  };
+
+  // Helpers to build options excluding already-used choices in that list
+  function playerOpts(selectedUuids: string[], thisVal: string) {
+    const used = new Set(selectedUuids.filter(u => u && u !== thisVal));
+    return players.filter(p => !used.has(p.mc_uuid));
+  }
+  function teamOpts(selectedIds: string[], thisVal: string) {
+    const used = new Set(selectedIds.filter(u => u && u !== thisVal));
+    return teams.filter(t => !used.has(t.id));
+  }
+  function awardPlayerOpts(awardKey: string, thisRank: string) {
+    const ranks = awardVotes[awardKey] ?? {};
+    const used = new Set(Object.entries(ranks).filter(([r]) => r !== thisRank).map(([, u]) => u).filter(Boolean));
+    return players.filter(p => !used.has(p.mc_uuid));
+  }
+
+  const ordinal = (n: number) => ["1st","2nd","3rd","4th","5th","6th","7th","8th","9th","10th"][n] ?? `${n+1}th`;
+
+  if (loading) return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
+      <div className="px-6 py-5 border-b border-slate-800 flex items-center gap-3">
+        <button className={btnSecondary} onClick={onBack}>← Back</button>
+        <h2 className="text-xl font-bold text-white">Board Portal</h2>
+      </div>
+      <div className="p-10 text-center text-slate-500">Loading...</div>
+    </div>
+  );
+
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
+      {/* Header */}
+      <div className="px-6 py-5 border-b border-slate-800 flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          <button className={btnSecondary} onClick={onBack}>← Back</button>
+          <h2 className="text-xl font-bold text-white">Board Portal</h2>
+        </div>
+        <div className="flex items-center gap-3">
+          <label className="text-xs text-slate-400 font-medium">Season:</label>
+          <select className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-white focus:border-zinc-500 focus:outline-none"
+            value={ballotSeason} onChange={e => setBallotSeason(e.target.value)}>
+            {BOARD_SEASONS.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex border-b border-slate-800">
+        {(["ballot", "results"] as const).map(t => (
+          <button key={t} onClick={() => setBoardTab(t)}
+            className={`px-5 py-3 text-sm font-medium capitalize transition ${boardTab === t ? "border-b-2 border-purple-500 text-white" : "text-slate-500 hover:text-slate-300"}`}>
+            {t === "ballot" ? "My Ballot" : "Results"}
+          </button>
+        ))}
+      </div>
+
+      <div className="p-6">
+        {/* ── BALLOT ── */}
+        {boardTab === "ballot" && (
+          <div className="space-y-8">
+            {/* Top 10 Players */}
+            <div>
+              <div className="text-base font-bold text-white mb-1">Top 10 Players</div>
+              <div className="text-xs text-slate-500 mb-4">1st = 10 pts · 10th = 1 pt</div>
+              <div className="flex flex-col gap-2">
+                {playerRanks.map((val, i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <span className="text-slate-400 text-sm font-mono w-8 text-right flex-shrink-0">{ordinal(i)}</span>
+                    <select
+                      className="flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-purple-500 focus:outline-none"
+                      value={val}
+                      onChange={e => {
+                        const next = [...playerRanks];
+                        next[i] = e.target.value;
+                        setPlayerRanks(next);
+                      }}
+                    >
+                      <option value="">— Select player —</option>
+                      {playerOpts(playerRanks, val).map(p => (
+                        <option key={p.mc_uuid} value={p.mc_uuid}>{p.mc_username}</option>
+                      ))}
+                    </select>
+                    {val && (
+                      <span className="text-xs font-bold text-purple-400 w-12 flex-shrink-0">+{boardPlayerPts(i + 1)} pts</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Top X Teams */}
+            {teams.length > 0 && (
+              <div>
+                <div className="text-base font-bold text-white mb-1">Team Rankings</div>
+                <div className="text-xs text-slate-500 mb-4">1st = {teams.length} pts · last = 1 pt</div>
+                <div className="flex flex-col gap-2">
+                  {teamRanks.map((val, i) => (
+                    <div key={i} className="flex items-center gap-3">
+                      <span className="text-slate-400 text-sm font-mono w-8 text-right flex-shrink-0">{ordinal(i)}</span>
+                      <select
+                        className="flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-purple-500 focus:outline-none"
+                        value={val}
+                        onChange={e => {
+                          const next = [...teamRanks];
+                          next[i] = e.target.value;
+                          setTeamRanks(next);
+                        }}
+                      >
+                        <option value="">— Select team —</option>
+                        {teamOpts(teamRanks, val).map(t => (
+                          <option key={t.id} value={t.id}>{t.name} ({t.abbreviation})</option>
+                        ))}
+                      </select>
+                      {val && (
+                        <span className="text-xs font-bold text-purple-400 w-12 flex-shrink-0">+{teams.length - i} pts</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Awards */}
+            <div>
+              <div className="text-base font-bold text-white mb-1">Award Votes</div>
+              <div className="text-xs text-slate-500 mb-4">Top 3 per award · 1st = 5 pts · 2nd = 3 pts · 3rd = 1 pt</div>
+              <div className="grid gap-6 sm:grid-cols-2">
+                {BOARD_AWARDS.map(award => (
+                  <div key={award.key} className="rounded-xl border border-slate-700 bg-slate-950 p-4">
+                    <div className="text-sm font-semibold text-purple-300 mb-3">{award.label}</div>
+                    <div className="flex flex-col gap-2">
+                      {[1, 2, 3].map(rank => {
+                        const val = awardVotes[award.key]?.[String(rank)] ?? "";
+                        return (
+                          <div key={rank} className="flex items-center gap-2">
+                            <span className="text-slate-500 text-xs w-6 flex-shrink-0">{ordinal(rank - 1)}</span>
+                            <select
+                              className="flex-1 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-white focus:border-purple-500 focus:outline-none"
+                              value={val}
+                              onChange={e => {
+                                setAwardVotes(prev => ({
+                                  ...prev,
+                                  [award.key]: { ...(prev[award.key] ?? {}), [String(rank)]: e.target.value },
+                                }));
+                              }}
+                            >
+                              <option value="">— Select player —</option>
+                              {awardPlayerOpts(award.key, String(rank)).map(p => (
+                                <option key={p.mc_uuid} value={p.mc_uuid}>{p.mc_username}</option>
+                              ))}
+                            </select>
+                            {val && <span className="text-xs text-purple-400 font-bold w-10 flex-shrink-0">+{boardAwardPts(rank)}</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Save */}
+            <div className="flex items-center gap-4 pt-2">
+              <button
+                className={`rounded-lg px-6 py-2.5 text-sm font-semibold transition ${saving ? "bg-slate-700 text-slate-400" : "bg-purple-700 hover:bg-purple-600 text-white"}`}
+                onClick={saveBallot} disabled={saving}>
+                {saving ? "Saving..." : "Save Ballot"}
+              </button>
+              {saveMsg && (
+                <span className={`text-sm font-medium ${saveMsg.startsWith("✓") ? "text-green-400" : "text-red-400"}`}>{saveMsg}</span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── RESULTS ── */}
+        {boardTab === "results" && (
+          <div className="space-y-8">
+            {resultsLoading && <div className="text-slate-500 text-sm text-center py-8">Loading results...</div>}
+            {!resultsLoading && results && (
+              <>
+                <div className="text-xs text-slate-500 mb-2">{results.totalVoters} board member{results.totalVoters !== 1 ? "s" : ""} voted</div>
+
+                {/* Player standings */}
+                {results.players?.length > 0 && (
+                  <div>
+                    <div className="text-base font-bold text-white mb-3">Player Rankings</div>
+                    <div className="flex flex-col gap-2">
+                      {results.players.map((row: any, i: number) => {
+                        const p = players.find(pl => pl.mc_uuid === row.mc_uuid);
+                        return (
+                          <div key={row.mc_uuid} className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-950 px-4 py-3">
+                            <span className="text-slate-400 font-mono text-sm w-6 flex-shrink-0">#{row.place}</span>
+                            <img src={`https://minotar.net/avatar/${p?.mc_username ?? "MHF_Steve"}/24`} className="w-6 h-6 rounded flex-shrink-0" alt="" />
+                            <span className="text-white font-medium flex-1 text-sm">{p?.mc_username ?? row.mc_uuid}</span>
+                            <span className="text-purple-400 font-bold text-sm">{row.points} pts</span>
+                            <span className="text-slate-600 text-xs">{row.votes} vote{row.votes !== 1 ? "s" : ""}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Team standings */}
+                {results.teams?.length > 0 && (
+                  <div>
+                    <div className="text-base font-bold text-white mb-3">Team Rankings</div>
+                    <div className="flex flex-col gap-2">
+                      {results.teams.map((row: any) => {
+                        const t = teams.find(tm => tm.id === row.team_id);
+                        return (
+                          <div key={row.team_id} className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-950 px-4 py-3">
+                            <span className="text-slate-400 font-mono text-sm w-6 flex-shrink-0">#{row.place}</span>
+                            <span className="text-white font-medium flex-1 text-sm">{t ? `${t.name} (${t.abbreviation})` : row.team_id}</span>
+                            <span className="text-purple-400 font-bold text-sm">{row.points} pts</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Award results */}
+                {Object.keys(results.awards ?? {}).length > 0 && (
+                  <div>
+                    <div className="text-base font-bold text-white mb-3">Award Results</div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {BOARD_AWARDS.filter(a => results.awards[a.key]?.length > 0).map(award => (
+                        <div key={award.key} className="rounded-xl border border-slate-700 bg-slate-950 p-4">
+                          <div className="text-sm font-semibold text-purple-300 mb-3">{award.label}</div>
+                          <div className="flex flex-col gap-2">
+                            {results.awards[award.key].map((row: any) => {
+                              const p = players.find(pl => pl.mc_uuid === row.mc_uuid);
+                              return (
+                                <div key={row.mc_uuid} className="flex items-center gap-2">
+                                  <span className="text-slate-500 text-xs w-6">#{row.place}</span>
+                                  <img src={`https://minotar.net/avatar/${p?.mc_username ?? "MHF_Steve"}/20`} className="w-5 h-5 rounded flex-shrink-0" alt="" />
+                                  <span className="text-white text-sm flex-1">{p?.mc_username ?? row.mc_uuid}</span>
+                                  <span className="text-purple-400 text-xs font-bold">{row.points} pts</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {results.players?.length === 0 && results.teams?.length === 0 && (
+                  <div className="text-slate-600 text-sm text-center py-8">No votes submitted yet for {ballotSeason}.</div>
+                )}
+              </>
+            )}
+            {!resultsLoading && !results && (
+              <div className="text-slate-600 text-sm text-center py-8">Could not load results.</div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Admin Page ──────────────────────────────────────────────────────────
 
-const TABS = ["Players", "Teams", "Schedule", "Box Scores", "Accolades", "Champions", "Articles", "Stats", "Playoffs", "Owners", "Draft Picks", "Auction", "Trades"] as const;
+const TABS = ["Players", "Teams", "Schedule", "Box Scores", "Accolades", "Champions", "Articles", "Stats", "Playoffs", "Owners", "Draft Picks", "Auction", "Trades", "Board"] as const;
 type Tab = typeof TABS[number];
 const SEASONS = ["Season 1","Season 1 Playoffs","Season 2","Season 2 Playoffs","Season 3","Season 3 Playoffs","Season 4","Season 4 Playoffs","Season 5","Season 5 Playoffs","Season 6","Season 6 Playoffs","Season 7","Season 7 Playoffs"];
 
@@ -3636,6 +4096,7 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
   const { data: session, status } = useSession();
   const [authorized, setAuthorized] = useState<boolean | null>(null);
   const [ownerRecord, setOwnerRecord] = useState<{ teams: { id: string; name: string; abbreviation: string; color2: string | null; division: string | null; logo_url: string | null } } | null | "loading">("loading");
+  const [isBoardMember, setIsBoardMember] = useState<boolean | "loading">("loading");
   const [portal, setPortal] = useState<"admin" | "owner" | "board" | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("Players");
   const [dbError, setDbError] = useState("");
@@ -3650,8 +4111,13 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
         .then((r) => r.json())
         .then((data) => setOwnerRecord(Array.isArray(data) && data.length > 0 ? data[0] : null))
         .catch(() => setOwnerRecord(null));
+      fetch(`/api/board-members?league=${league}&check=me`)
+        .then((r) => r.json())
+        .then((data) => setIsBoardMember(data.isMember === true))
+        .catch(() => setIsBoardMember(false));
     } else if (status !== "loading") {
       setOwnerRecord(null);
+      setIsBoardMember(false);
     }
   }, [status, league]);
 
@@ -3665,7 +4131,7 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
       .catch(() => setDbError("Database unreachable — make sure your Supabase project is active at supabase.com and tables have been created."));
   }, [league]);
 
-  if (status === "loading" || ownerRecord === "loading")
+  if (status === "loading" || ownerRecord === "loading" || isBoardMember === "loading")
     return <div className="rounded-2xl border border-slate-800 bg-slate-900 p-10 text-center text-slate-500">Loading...</div>;
 
   if (status !== "authenticated") {
@@ -3684,7 +4150,8 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
 
   const isAdmin = authorized === true;
   const isOwner = ownerRecord !== null;
-  const hasAccess = isAdmin || isOwner;
+  const isBoardMemberBool = isBoardMember === true;
+  const hasAccess = isAdmin || isOwner || isBoardMemberBool;
 
   // Still checking admin status
   if (authorized === null)
@@ -3730,12 +4197,14 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
       {
         id: "board" as const,
         label: "Board Portal",
-        desc: "Commissioner tools — coming soon",
-        color: "#6b7280",
-        border: "#374151",
-        bg: "#0d0d0d",
-        available: false,
-        badge: "Coming Soon",
+        desc: (isAdmin || isBoardMemberBool)
+          ? "Cast your player, team, and award rankings"
+          : "You are not registered as a board member",
+        color: "#8b5cf6",
+        border: "#6d28d9",
+        bg: "#0d0a1a",
+        available: isAdmin || isBoardMemberBool,
+        badge: (!isAdmin && !isBoardMemberBool) ? "No Access" : null,
       },
     ];
 
@@ -3779,20 +4248,9 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
     );
   }
 
-  // ── Board portal (placeholder) ─────────────────────────────────────────────
+  // ── Board portal ───────────────────────────────────────────────────────────
   if (portal === "board") {
-    return (
-      <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
-        <div className="px-6 py-5 border-b border-slate-800 flex items-center gap-3">
-          <button className={btnSecondary} onClick={() => setPortal(null)}>← Back</button>
-          <h2 className="text-xl font-bold text-white">Board Portal</h2>
-        </div>
-        <div className="p-12 text-center">
-          <div className="text-slate-500 text-lg font-semibold mb-2">Coming Soon</div>
-          <div className="text-slate-600 text-sm">Commissioner tools will be available here.</div>
-        </div>
-      </div>
-    );
+    return <BoardPortalView league={league} onBack={() => setPortal(null)} />;
   }
 
   // ── Owner portal ───────────────────────────────────────────────────────────
@@ -3876,6 +4334,7 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
         {activeTab === "Draft Picks" && <DraftPicksTab league={league} />}
         {activeTab === "Auction" && <AuctionAdminTab league={league} />}
         {activeTab === "Trades" && <TradesAdminTab league={league} />}
+        {activeTab === "Board" && <BoardMembersTab league={league} />}
       </div>
     </div>
   );

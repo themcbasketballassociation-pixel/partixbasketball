@@ -28,14 +28,14 @@ const GAMES = [
     desc: "Group 16 players into 4 categories of 4. Watch out for overlapping players — 4 attempts only.",
   },
   {
-    href: "crossword",
-    emoji: "✏️",
-    title: "Mini Crossword",
-    desc: "Fill in the player names using basketball stats as clues. Pure letters-only usernames required.",
+    href: "sbc",
+    emoji: "⚖️",
+    title: "Start · Bench · Cut",
+    desc: "Three players, three labels. Assign each player Start, Bench, or Cut — then see how everyone else voted.",
   },
 ];
 
-const STORAGE_PREFIXES = ["partix:wordle", "partix:grid", "partix:conn", "partix:xwd"];
+const STORAGE_PREFIXES = ["partix:wordle", "partix:grid", "partix:conn"];
 
 export default function GamesPage({ params }: { params?: Promise<{ league?: string }> }) {
   const resolved = React.use(params ?? Promise.resolve({})) as { league?: string };

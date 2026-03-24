@@ -117,21 +117,26 @@ function generateGroups(
     }
   }
 
-  const statThresholds = [
-    { map: maxSznPPG, min: 30, label: "30+ PPG Season",   desc: "Had a 30+ PPG regular season" },
-    { map: maxSznPPG, min: 25, label: "25+ PPG Season",   desc: "Had a 25+ PPG regular season" },
-    { map: maxSznPPG, min: 20, label: "20+ PPG Season",   desc: "Had a 20+ PPG regular season" },
-    { map: maxSznPPG, min: 15, label: "15+ PPG Season",   desc: "Had a 15+ PPG regular season" },
-    { map: maxSznRPG, min: 10, label: "10+ RPG Season",   desc: "Had a 10+ RPG regular season" },
-    { map: maxSznRPG, min: 7,  label: "7+ RPG Season",    desc: "Had a 7+ RPG regular season"  },
-    { map: maxSznAPG, min: 8,  label: "8+ APG Season",    desc: "Had an 8+ APG regular season" },
-    { map: maxSznAPG, min: 5,  label: "5+ APG Season",    desc: "Had a 5+ APG regular season"  },
-    { map: maxPOPPG,  min: 20, label: "20+ PPG Playoffs", desc: "Averaged 20+ PPG in a playoff run" },
-    { map: maxPOPPG,  min: 15, label: "15+ PPG Playoffs", desc: "Averaged 15+ PPG in a playoff run" },
+  // Exclusive ranges — each player qualifies for at most one bucket per stat
+  type StatRange = { map: Record<string, number>; min: number; max?: number; label: string; desc: string };
+  const statThresholds: StatRange[] = [
+    { map: maxSznPPG, min: 30,          label: "30+ PPG Season",   desc: "Had a 30+ PPG regular season" },
+    { map: maxSznPPG, min: 25, max: 30, label: "25-29 PPG Season", desc: "Had a 25-29 PPG regular season" },
+    { map: maxSznPPG, min: 20, max: 25, label: "20-24 PPG Season", desc: "Had a 20-24 PPG regular season" },
+    { map: maxSznPPG, min: 15, max: 20, label: "15-19 PPG Season", desc: "Had a 15-19 PPG regular season" },
+    { map: maxSznRPG, min: 10,          label: "10+ RPG Season",   desc: "Had a 10+ RPG regular season" },
+    { map: maxSznRPG, min: 7,  max: 10, label: "7-9 RPG Season",   desc: "Had a 7-9 RPG regular season"  },
+    { map: maxSznAPG, min: 8,           label: "8+ APG Season",    desc: "Had an 8+ APG regular season" },
+    { map: maxSznAPG, min: 5,  max: 8,  label: "5-7 APG Season",   desc: "Had a 5-7 APG regular season"  },
+    { map: maxPOPPG,  min: 20,          label: "20+ PPG Playoffs", desc: "Averaged 20+ PPG in a playoff run" },
+    { map: maxPOPPG,  min: 15, max: 20, label: "15-19 PPG Playoffs", desc: "Averaged 15-19 PPG in a playoff run" },
   ];
 
-  for (const { map, min, label, desc } of statThresholds) {
-    const pool = players.filter(p => (map[p.mc_uuid] ?? 0) >= min);
+  for (const { map, min, max, label, desc } of statThresholds) {
+    const pool = players.filter(p => {
+      const val = map[p.mc_uuid] ?? 0;
+      return val >= min && (max === undefined || val < max);
+    });
     if (pool.length >= 4) candidates.push({ label, description: desc, pool, type: "stat" });
   }
 
