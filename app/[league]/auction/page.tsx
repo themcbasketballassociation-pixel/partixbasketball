@@ -306,7 +306,7 @@ export default function AuctionPage() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 16 }}>
           {[
             { title: "Salary Caps (per team)", items: ["Total cap: 25,000 per team", "Court cap: 22,000 per team", "Max per player: 12,000", "Min bid: 1,000", "Pending bids hold cap until player signs"] },
-            { title: "Bid Rules", items: ["Increments of 250 only", "Must beat current effective value", "12-hour inactivity closes auction and then player can accept", "Max 2 signings per phase"] },
+            { title: "Bid Rules", items: ["Increments of 250 only", "Must beat current effective value", "After 12 hours of no new bids, the player can accept a team's offer", "Max 2 signings per phase"] },
             { title: "2-Season Contracts", items: ["Available on bids ≥ 5,000", "Adds +500 effective value", "Must declare at time of bid", "Cap hit = actual bid only"] },
             { title: "Player Choice", items: ["If any bid within 500 of top", "Player picks their team", "Based on effective values", "All qualifying bids eligible"] },
             { title: "Roster Viability", items: ["Highest contract + new bid ≤ 20,000", "Must fit 2 more min-salary players", "Invalid bids are void", "Clock doesn't reset on void bids"] },
