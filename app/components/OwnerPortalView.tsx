@@ -108,6 +108,13 @@ function BidView({ auctions, teamId, contracts, onRefresh }: { auctions: Auction
   const existingTotal = contracts.reduce((s, c) => s + c.amount, 0);
   const active = auctions.filter(a => a.status === "active");
 
+  // Pending cap holds: team's highest bid per active auction (counts against cap until player signs)
+  const pendingHolds = active.reduce((sum, a) => {
+    const my = myBid(a);
+    return sum + (my ? my.amount : 0);
+  }, 0);
+  const availableCap = Math.max(0, 25000 - existingTotal - pendingHolds);
+
   const topBid = (a: Auction) => [...(a.auction_bids ?? [])].filter(b => b.is_valid).sort((x, y) => y.effective_value - x.effective_value)[0] ?? null;
   const myBid = (a: Auction) => [...(a.auction_bids ?? [])].filter(b => b.is_valid && b.team_id === teamId).sort((x, y) => y.effective_value - x.effective_value)[0] ?? null;
 
@@ -126,9 +133,18 @@ function BidView({ auctions, teamId, contracts, onRefresh }: { auctions: Auction
 
   return (
     <div>
-      <div style={{ ...st.innerCard, display: "flex", gap: 20, flexWrap: "wrap", marginBottom: 14 }}>
-        <span style={{ color: "#555", fontSize: 13 }}>Cap left: <strong style={{ color: "#22d3ee" }}>{fmt(25000 - existingTotal)}</strong></span>
-        <span style={{ color: "#555", fontSize: 13 }}>Max new bid: <strong style={{ color: "#f97316" }}>{fmt(Math.max(0, 20000 - maxExisting))}</strong></span>
+      <div style={{ ...st.innerCard, marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginBottom: 6 }}>
+          <span style={{ color: "#555", fontSize: 13 }}>Signed: <strong style={{ color: "#ccc" }}>{fmt(existingTotal)}</strong></span>
+          {pendingHolds > 0 && <span style={{ color: "#555", fontSize: 13 }}>Bid holds: <strong style={{ color: "#f59e0b" }}>{fmt(pendingHolds)}</strong></span>}
+          <span style={{ color: "#555", fontSize: 13 }}>Available cap: <strong style={{ color: availableCap < 2000 ? "#ef4444" : "#22d3ee" }}>{fmt(availableCap)}</strong></span>
+          <span style={{ color: "#555", fontSize: 13 }}>Max new bid: <strong style={{ color: "#f97316" }}>{fmt(Math.max(0, 20000 - maxExisting))}</strong></span>
+        </div>
+        {pendingHolds > 0 && (
+          <div style={{ color: "#78350f", background: "#1c1000", border: "1px solid #78350f", borderRadius: 6, padding: "5px 10px", fontSize: 12 }}>
+            Your pending bids hold <strong style={{ color: "#f59e0b" }}>{fmt(pendingHolds)}</strong> of cap space. This is released if the player signs elsewhere. You cannot bid beyond your available cap.
+          </div>
+        )}
       </div>
       {active.map(a => {
         const top = topBid(a); const my = myBid(a);

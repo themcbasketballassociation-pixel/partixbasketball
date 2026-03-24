@@ -83,9 +83,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const existingTotal = existingAmounts.reduce((s, a) => s + a, 0);
   const maxExisting = existingAmounts.reduce((m, a) => Math.max(m, a), 0);
 
-  // Total cap: cannot exceed 25,000
-  if (existingTotal + amount > TOTAL_CAP)
-    return res.status(400).json({ error: `Bid would exceed total cap (${TOTAL_CAP}). Team currently at ${existingTotal}.` });
+  // Pending cap holds: team's highest valid bid on every OTHER active/player_choice auction.
+  // A bid commits cap until the player signs somewhere (then that auction closes and the hold releases).
+  const [{ data: otherBids }, { data: openAuctions }] = await Promise.all([
+    supabase
+      .from("auction_bids")
+      .select("auction_id, amount")
+      .eq("team_id", team_id)
+      .eq("is_valid", true)
+      .neq("auction_id", auction_id),
+    supabase
+      .from("auctions")
+      .select("id")
+      .in("status", ["active", "player_choice"]),
+  ]);
+  const openIds = new Set((openAuctions ?? []).map((a: any) => a.id as string));
+  const holdByAuction: Record<string, number> = {};
+  for (const b of (otherBids ?? []) as { auction_id: string; amount: number }[]) {
+    if (openIds.has(b.auction_id))
+      holdByAuction[b.auction_id] = Math.max(holdByAuction[b.auction_id] ?? 0, b.amount);
+  }
+  const pendingCapHold = Object.values(holdByAuction).reduce((s, a) => s + a, 0);
+
+  // Total cap: signed contracts + pending bid holds + new bid must not exceed 25,000
+  if (existingTotal + pendingCapHold + amount > TOTAL_CAP)
+    return res.status(400).json({
+      error: `Bid exceeds total cap of ${TOTAL_CAP.toLocaleString()}. Signed: ${existingTotal.toLocaleString()}, Pending bid holds: ${pendingCapHold.toLocaleString()}, New bid: ${amount.toLocaleString()}. Would total ${(existingTotal + pendingCapHold + amount).toLocaleString()}.`,
+    });
 
   // Roster viability: highest existing contract + bid ≤ 20,000
   if (maxExisting + amount > VIABILITY_MAX)
