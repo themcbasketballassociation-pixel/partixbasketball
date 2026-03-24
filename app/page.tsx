@@ -1,7 +1,7 @@
 "use client";
 import React, { useEffect, useState } from "react";
 
-type Article = { id: string; league: string; title: string; body: string; created_at: string };
+type Article = { id: string; league: string; title: string; body: string; created_at: string; image_url?: string | null };
 
 const leagueLabel: Record<string, string> = {
   pba: "MBA", mba: "MBA",
@@ -66,6 +66,7 @@ export default function Home() {
                     {new Date(a.created_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
                   </span>
                 </div>
+                {a.image_url && <img src={a.image_url} alt="" className="rounded-xl mb-3 max-h-64 object-cover w-full" />}
                 <h2 className="text-xl font-bold text-white mb-2 leading-snug">{a.title}</h2>
                 <p className="text-sm leading-relaxed whitespace-pre-line" style={{ color: "#888" }}>{a.body}</p>
               </article>

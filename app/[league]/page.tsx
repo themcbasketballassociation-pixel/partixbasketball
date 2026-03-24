@@ -20,7 +20,7 @@ const leagueColor: Record<string, string> = {
   pbgl: "#BB3430", mbgl: "#BB3430",
 };
 
-type Article = { id: string; league: string; title: string; body: string; created_at: string };
+type Article = { id: string; league: string; title: string; body: string; created_at: string; image_url?: string | null };
 type Team = { id: string; name: string; abbreviation: string; logo_url: string | null };
 type Game = {
   id: string; scheduled_at: string; status: string;
@@ -143,6 +143,7 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
                       {new Date(a.created_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
                     </span>
                   </div>
+                  {a.image_url && <img src={a.image_url} alt="" className="rounded-xl mb-3 max-h-64 object-cover w-full" />}
                   <h2 className="text-xl font-bold text-white mb-2 leading-snug">{a.title}</h2>
                   <p className="text-sm leading-relaxed whitespace-pre-line" style={{ color: "#888" }}>{a.body}</p>
                 </article>

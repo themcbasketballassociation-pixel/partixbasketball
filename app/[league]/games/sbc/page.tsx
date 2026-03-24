@@ -48,11 +48,26 @@ const BAR_COLORS: Record<"start" | "bench" | "cut", string> = {
 // ── Pick 3 players for the day ────────────────────────────────────────────────
 
 function pickDaily(dayNum: number, players: Player[], statsMap: Record<string, StatRow>): Player[] {
-  // Prefer players who have stats
   const withStats = players.filter(p => statsMap[p.mc_uuid]);
   const pool = withStats.length >= 3 ? withStats : players;
+  if (pool.length < 3) return pool;
+
+  // Sort by composite score so we can pick players with similar stats
+  const score = (p: Player) => {
+    const s = statsMap[p.mc_uuid];
+    if (!s) return 0;
+    return (s.ppg ?? 0) + 0.5 * (s.rpg ?? 0) + 0.5 * (s.apg ?? 0);
+  };
+  const sorted = [...pool].sort((a, b) => score(a) - score(b));
+
   const rng = seededRng((SEASON_SEED + dayNum) * 97 + 13);
-  return shuffled(pool, rng).slice(0, 3);
+  // Pick a window of 6 consecutive (by score) players, then randomly take 3
+  // This ensures all 3 players have similar stat lines, making choices non-obvious
+  const windowSize = Math.min(6, sorted.length);
+  const maxStart = sorted.length - windowSize;
+  const start = Math.floor(rng() * (maxStart + 1));
+  const window = sorted.slice(start, start + windowSize);
+  return shuffled(window, rng).slice(0, 3);
 }
 
 // ── Result bar ────────────────────────────────────────────────────────────────

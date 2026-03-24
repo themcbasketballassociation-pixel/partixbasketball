@@ -390,12 +390,24 @@ function GridShareModal({
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function AnswerCell({ validPlayers }: { validPlayers: Player[] }) {
-  const show = validPlayers.slice(0, 7);
-  const more = validPlayers.length - show.length;
+function AnswerCell({ validPlayers, guessedPlayer }: { validPlayers: Player[]; guessedPlayer?: Player }) {
+  const others = validPlayers.filter(p => p.mc_uuid !== guessedPlayer?.mc_uuid);
+  const show = others.slice(0, guessedPlayer ? 6 : 7);
+  const more = others.length - show.length;
   return (
     <div className="rounded-xl border-2 border-slate-700 bg-slate-950 p-2 min-h-[90px] max-h-44 overflow-y-auto">
-      {show.length === 0 ? (
+      {guessedPlayer && (
+        <div className="flex items-center gap-1.5 mb-1 pb-1 border-b border-green-900">
+          <img
+            src={`https://minotar.net/avatar/${guessedPlayer.mc_username}/20`}
+            className="w-5 h-5 rounded flex-shrink-0 ring-1 ring-green-600"
+            onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/20"; }}
+          />
+          <span className="text-[11px] text-green-400 font-bold truncate leading-tight">{guessedPlayer.mc_username}</span>
+          <span className="text-[9px] text-green-700 ml-auto flex-shrink-0">your pick</span>
+        </div>
+      )}
+      {show.length === 0 && !guessedPlayer ? (
         <p className="text-slate-600 text-[10px] text-center mt-4">No valid players</p>
       ) : (
         <div className="space-y-1">
@@ -817,12 +829,13 @@ export default function GridPage({ params }: { params?: Promise<{ league?: strin
                   <CategoryHeader cat={row} />
                   {cols.map((col, ci) => {
                     const idx = ri * 3 + ci;
-                    if (isDone && showAnswers && cells[idx].status !== "correct") {
+                    if (isDone && showAnswers) {
                       const valid = allPlayers.filter(p =>
                         playerFits(p.mc_uuid, rows[ri], ptMap, statsMap, ringMap, accoladeMap) &&
                         playerFits(p.mc_uuid, col,      ptMap, statsMap, ringMap, accoladeMap)
                       );
-                      return <AnswerCell key={ci} validPlayers={valid} />;
+                      const guessed = cells[idx].status === "correct" ? cells[idx].player : undefined;
+                      return <AnswerCell key={ci} validPlayers={valid} guessedPlayer={guessed} />;
                     }
                     return (
                       <GridCell

@@ -30,7 +30,7 @@ type Accolade = {
   id: string; league: string; mc_uuid: string; type: string;
   season: string; description: string | null; players: Player;
 };
-type Article = { id: string; league: string; title: string; body: string; created_at: string };
+type Article = { id: string; league: string; title: string; body: string; created_at: string; image_url?: string | null };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1808,6 +1808,12 @@ function ArticlesTab({ league }: { league: string }) {
   const [articles, setArticles] = useState<Article[]>([]);
   const [newTitle, setNewTitle] = useState("");
   const [newBody, setNewBody] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [discordWebhook, setDiscordWebhook] = useState(() => {
+    if (typeof window !== "undefined") return localStorage.getItem(`discord_webhook_${league}`) ?? "";
+    return "";
+  });
   const [err, setErr] = useState("");
   const [posting, setPosting] = useState(false);
 
@@ -1818,17 +1824,59 @@ function ArticlesTab({ league }: { league: string }) {
 
   useEffect(() => { refresh(); }, [refresh]);
 
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null;
+    setImageFile(file);
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => setImagePreview(reader.result as string);
+      reader.readAsDataURL(file);
+    } else {
+      setImagePreview(null);
+    }
+  };
+
+  const saveWebhook = (val: string) => {
+    setDiscordWebhook(val);
+    if (typeof window !== "undefined") localStorage.setItem(`discord_webhook_${league}`, val);
+  };
+
   const addArticle = async () => {
     if (!newTitle.trim() || !newBody.trim()) { setErr("Title and body are required."); return; }
     setErr(""); setPosting(true);
+
+    let image_url: string | null = null;
+    if (imageFile) {
+      const reader = new FileReader();
+      const base64 = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve((reader.result as string).split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(imageFile);
+      });
+      const up = await fetch("/api/articles/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ base64, filename: imageFile.name, contentType: imageFile.type }),
+      });
+      if (!up.ok) { const d = await up.json(); setErr(d.error ?? "Image upload failed"); setPosting(false); return; }
+      const upData = await up.json();
+      image_url = upData.url;
+    }
+
     const r = await fetch("/api/articles", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ league, title: newTitle.trim(), body: newBody.trim() }),
+      body: JSON.stringify({
+        league,
+        title: newTitle.trim(),
+        body: newBody.trim(),
+        image_url,
+        discord_webhook: discordWebhook.trim() || null,
+      }),
     });
     const data = await r.json();
     if (!r.ok) { setErr(data.error ?? "Failed to post"); setPosting(false); return; }
-    setNewTitle(""); setNewBody(""); setPosting(false); refresh();
+    setNewTitle(""); setNewBody(""); setImageFile(null); setImagePreview(null); setPosting(false); refresh();
   };
 
   const deleteArticle = async (id: string) => {
@@ -1845,6 +1893,35 @@ function ArticlesTab({ league }: { league: string }) {
         <div className="space-y-2">
           <input className={input} placeholder="Title" value={newTitle} onChange={(e) => { setNewTitle(e.target.value); setErr(""); }} />
           <textarea className={`${input} h-28 resize-y`} placeholder="Write your announcement here..." value={newBody} onChange={(e) => { setNewBody(e.target.value); setErr(""); }} />
+          {/* Image upload */}
+          <div>
+            <label className="block text-xs text-slate-400 mb-1">Image / Logo (optional)</label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleImageChange}
+              className="block text-sm text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-700 file:text-slate-200 hover:file:bg-slate-600 cursor-pointer"
+            />
+            {imagePreview && (
+              <div className="mt-2 relative inline-block">
+                <img src={imagePreview} alt="preview" className="max-h-40 rounded-lg border border-slate-700 object-contain" />
+                <button
+                  onClick={() => { setImageFile(null); setImagePreview(null); }}
+                  className="absolute top-1 right-1 rounded-full bg-slate-900/80 text-slate-400 hover:text-red-400 text-xs px-1.5 py-0.5"
+                >✕</button>
+              </div>
+            )}
+          </div>
+          {/* Discord webhook */}
+          <div>
+            <label className="block text-xs text-slate-400 mb-1">Discord Webhook URL (optional — posts to channel on submit)</label>
+            <input
+              className={input}
+              placeholder="https://discord.com/api/webhooks/..."
+              value={discordWebhook}
+              onChange={(e) => saveWebhook(e.target.value)}
+            />
+          </div>
         </div>
         <button className={`${btnPrimary} mt-3`} onClick={addArticle} disabled={posting}>{posting ? "Posting..." : "Post"}</button>
         <ErrMsg msg={err} />
@@ -1862,6 +1939,7 @@ function ArticlesTab({ league }: { league: string }) {
                       <span className="font-semibold text-white">{a.title}</span>
                       <span className="text-slate-500 text-xs">{new Date(a.created_at).toLocaleDateString()}</span>
                     </div>
+                    {a.image_url && <img src={a.image_url} alt="" className="mt-2 max-h-24 rounded-lg object-contain border border-slate-800" />}
                     <p className="mt-1 text-slate-400 text-sm line-clamp-2">{a.body}</p>
                   </div>
                   <button className={btnDanger} onClick={() => deleteArticle(a.id)}>Delete</button>
