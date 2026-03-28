@@ -12,6 +12,7 @@ const SEASONS = ["Season 1","Season 1 Playoffs","Season 2","Season 2 Playoffs","
 type StatRow = {
   mc_uuid: string; mc_username: string; rank: number; gp: number;
   ppg: string; rpg: string; apg: string; spg: string; bpg: string; fg_pct: string;
+  mpg: number | null;
 };
 
 export default function StatsPage({ params }: { params?: Promise<{ league?: string }> }) {
@@ -22,6 +23,9 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
   const [stats, setStats] = React.useState<StatRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [season, setSeason] = React.useState("Season 7");
+
+  const seasonNum = parseInt(season.replace(/\D/g, "")) || 0;
+  const showMpg = seasonNum >= 6;
 
   React.useEffect(() => {
     if (!slug) return;
@@ -56,7 +60,7 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
           <table className="min-w-full text-sm">
             <thead>
               <tr className="border-b border-slate-800">
-                {["#","Player","GP","PPG","RPG","APG","SPG","BPG","FG%"].map((h) => (
+                {["#","Player","GP","PPG","RPG","APG","SPG","BPG","FG%",...(showMpg ? ["MPG"] : [])].map((h) => (
                   <th key={h} className={`px-3 py-3 text-xs font-semibold uppercase tracking-widest text-slate-500 ${h === "Player" ? "text-left" : "text-center"}`}>{h}</th>
                 ))}
               </tr>
@@ -78,6 +82,7 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
                   <td className="px-3 py-3 text-center text-slate-300">{s.spg}</td>
                   <td className="px-3 py-3 text-center text-slate-300">{s.bpg}</td>
                   <td className="px-3 py-3 text-center text-slate-300">{s.fg_pct}%</td>
+                  {showMpg && <td className="px-3 py-3 text-center text-slate-300">{s.mpg != null ? s.mpg.toFixed(1) : "—"}</td>}
                 </tr>
               ))}
             </tbody>

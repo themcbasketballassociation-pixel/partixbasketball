@@ -15,7 +15,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { error: uploadError } = await supabase.storage.from("team-logos").upload(filePath, buffer, { upsert: true, contentType: mime ?? "image/png" });
   if (uploadError) return res.status(500).json({ error: uploadError.message });
   const { data: urlData } = supabase.storage.from("team-logos").getPublicUrl(filePath);
-  const logo_url = urlData.publicUrl;
+  const logo_url = `${urlData.publicUrl}?t=${Date.now()}`;
   const { data, error } = await supabase.from("teams").update({ logo_url }).eq("id", team_id).select().single();
   if (error) return res.status(500).json({ error: error.message });
   return res.status(200).json(data);

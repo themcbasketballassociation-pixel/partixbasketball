@@ -20,6 +20,7 @@ function mergePlayerRows(rows: Record<string, unknown>[]) {
   let wThreePct = 0, threeGames = 0;
   let wOReb = 0, oRebGames = 0;
   let wDReb = 0, dRebGames = 0;
+  let wMpg = 0, mpgGames = 0;
   for (const r of rows) {
     const g = (r.gp as number) ?? 0;
     gp += g;
@@ -41,6 +42,9 @@ function mergePlayerRows(rows: Record<string, unknown>[]) {
     if (orP > 0) { wOReb += orP * g; oRebGames += g; }
     const drP = (r.drpg as number) ?? 0;
     if (drP > 0) { wDReb += drP * g; dRebGames += g; }
+    // Minutes per game — only tracked Season 6+
+    const mpgP = (r.mpg as number) ?? 0;
+    if (mpgP > 0) { wMpg += mpgP * g; mpgGames += g; }
   }
   const r1 = (n: number) => Math.round(n * 10) / 10;
   return {
@@ -59,6 +63,7 @@ function mergePlayerRows(rows: Record<string, unknown>[]) {
     topg: gp > 0 ? r1(wTo / gp) : null,
     pass_attempts_pg: gp > 0 ? r1(wPass / gp) : null,
     possession_time_pg: gp > 0 ? Math.round(wPoss / gp) : null,
+    mpg: mpgGames > 0 ? r1(wMpg / mpgGames) : null,
   };
 }
 
@@ -69,11 +74,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   // POST — save manual season-level stats for a player
   if (req.method === "POST") {
-    const { mc_uuid, season, gp, ppg, rpg, orpg, drpg, apg, spg, bpg, fg_pct, three_pt_made, three_pt_pct, topg, pass_attempts_pg, possession_time_pg } = req.body;
+    const { mc_uuid, season, gp, ppg, rpg, orpg, drpg, apg, spg, bpg, fg_pct, three_pt_made, three_pt_pct, topg, pass_attempts_pg, possession_time_pg, mpg } = req.body;
     if (!mc_uuid || !season) return res.status(400).json({ error: "mc_uuid, season required" });
     const { data, error } = await supabase
       .from("stats")
-      .upsert([{ mc_uuid, league, season, gp: gp ?? null, ppg: ppg ?? null, rpg: rpg ?? null, orpg: orpg ?? null, drpg: drpg ?? null, apg: apg ?? null, spg: spg ?? null, bpg: bpg ?? null, fg_pct: fg_pct ?? null, three_pt_made: three_pt_made ?? null, three_pt_pct: three_pt_pct ?? null, topg: topg ?? null, pass_attempts_pg: pass_attempts_pg ?? null, possession_time_pg: possession_time_pg ?? null }], { onConflict: "mc_uuid,league,season" })
+      .upsert([{ mc_uuid, league, season, gp: gp ?? null, ppg: ppg ?? null, rpg: rpg ?? null, orpg: orpg ?? null, drpg: drpg ?? null, apg: apg ?? null, spg: spg ?? null, bpg: bpg ?? null, fg_pct: fg_pct ?? null, three_pt_made: three_pt_made ?? null, three_pt_pct: three_pt_pct ?? null, topg: topg ?? null, pass_attempts_pg: pass_attempts_pg ?? null, possession_time_pg: possession_time_pg ?? null, mpg: mpg ?? null }], { onConflict: "mc_uuid,league,season" })
       .select()
       .single();
     if (error) return res.status(500).json({ error: error.message });

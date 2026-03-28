@@ -1958,6 +1958,7 @@ function ArticlesTab({ league }: { league: string }) {
 function StatsViewTab({ league, season: initialSeason }: { league: string; season: string }) {
   const seasonNum = parseInt(initialSeason.replace(/\D/g, "")) || 0;
   const isS5Plus = seasonNum >= 5;
+  const isS6Plus = seasonNum >= 6;
   const STAT_FIELDS = [
     { key: "gp",       label: "GP",   hint: "Games Played",       slash: false },
     { key: "pts",      label: "PTS",  hint: "Total Points",        slash: false },
@@ -1975,6 +1976,9 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
     { key: "three_fg", label: "3FG%", hint: "5/12 or just 44.9",  slash: false },
     { key: "pass_total",  label: "PASS", hint: "Total Pass Attempts",      slash: false },
     { key: "poss_total",  label: "POSS", hint: "Total Possession Seconds", slash: false },
+    ...(isS6Plus ? [
+      { key: "min_total", label: "MIN", hint: "Total Minutes",              slash: false },
+    ] : []),
   ];
 
   const [players, setPlayers] = useState<Player[]>([]);
@@ -1994,6 +1998,7 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
   const [loadedTopg, setLoadedTopg] = useState<number | null>(null);
   const [loadedPassPg, setLoadedPassPg] = useState<number | null>(null);
   const [loadedPossPg, setLoadedPossPg] = useState<number | null>(null);
+  const [loadedMpg, setLoadedMpg] = useState<number | null>(null);
 
   const refreshAllStats = useCallback(() => {
     fetch(`/api/stats?league=${league}&season=${encodeURIComponent(initialSeason)}`)
@@ -2031,6 +2036,7 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
     setLoadedTopg(row.topg ?? null);
     setLoadedPassPg(row.pass_attempts_pg ?? null);
     setLoadedPossPg(row.possession_time_pg ?? null);
+    setLoadedMpg(row.mpg ?? null);
     setHasExisting(true);
     setFields({
       gp:   String(row.gp ?? ""),
@@ -2046,6 +2052,7 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
       to_total:  gp && row.topg != null ? String(round(row.topg * gp)) : "",
       pass_total: gp && row.pass_attempts_pg != null ? String(round(row.pass_attempts_pg * gp)) : "",
       poss_total: gp && row.possession_time_pg != null ? String(Math.round(row.possession_time_pg * gp)) : "",
+      min_total: gp && row.mpg != null ? String(Math.round(row.mpg * gp * 10) / 10) : "",
     });
   }, []);
 
@@ -2056,7 +2063,7 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
     setFields({});
     setHasExisting(false);
     setLoadedFgPct(null); setLoadedThreePct(null); setLoadedThreeMade(null);
-    setLoadedTopg(null); setLoadedPassPg(null); setLoadedPossPg(null);
+    setLoadedTopg(null); setLoadedPassPg(null); setLoadedPossPg(null); setLoadedMpg(null);
 
     // Immediate pre-fill from cached overview stats so form isn't blank
     if (allStats[selectedUuid]) applyStatsRow(allStats[selectedUuid]);
@@ -2080,7 +2087,7 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
     setFields({});
     setHasExisting(false);
     setLoadedFgPct(null); setLoadedThreePct(null); setLoadedThreeMade(null);
-    setLoadedTopg(null); setLoadedPassPg(null); setLoadedPossPg(null);
+    setLoadedTopg(null); setLoadedPassPg(null); setLoadedPossPg(null); setLoadedMpg(null);
     setSavedPlayers((prev) => { const s = new Set(prev); s.delete(selectedUuid); return s; });
     refreshAllStats();
   };
@@ -2136,16 +2143,18 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
     const to_total  = fields.to_total?.trim()   ? parseFloat(fields.to_total)  || null : null;
     const pass_tot  = fields.pass_total?.trim() ? parseFloat(fields.pass_total) || null : null;
     const poss_tot  = fields.poss_total?.trim() ? parseInt(fields.poss_total)   || null : null;
+    const min_tot   = fields.min_total?.trim()  ? parseFloat(fields.min_total)  || null : null;
     const topg             = (gp && to_total != null) ? r1(to_total / gp) : loadedTopg;
     const pass_attempts_pg = (gp && pass_tot != null) ? r1(pass_tot / gp) : loadedPassPg;
     const possession_time_pg = (gp && poss_tot != null) ? Math.round(poss_tot / gp) : loadedPossPg;
+    const mpg              = (gp && min_tot != null) ? r1(min_tot / gp) : loadedMpg;
     const r = await fetch(`/api/stats?league=${encodeURIComponent(league)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         league, season: initialSeason, mc_uuid: selectedUuid,
         gp, ppg, rpg, orpg, drpg, apg, spg, bpg, fg_pct, three_pt_made, three_pt_pct,
-        topg, pass_attempts_pg, possession_time_pg,
+        topg, pass_attempts_pg, possession_time_pg, mpg,
       }),
     });
     setSaving(false);
