@@ -2487,10 +2487,9 @@ function TeamSlot({ m, side, teams, saving, onUpdate, slotRef, conf }: {
 
   const confColors = CONF_COLORS[conf] ?? CONF_COLORS.W;
   const isLoser = !!(m.winner_id && teamId && m.winner_id !== teamId);
-  // color2 = team primary color (only color column currently in DB)
-  const teamColor = team?.color2 ?? null;
+  const teamColor = team?.color2 ?? team?.color ?? null;
   const pillBg  = isWinner ? (teamColor ?? "#166534") : isLoser ? (teamColor ?? confColors.bg) : teamColor ?? confColors.bg;
-  const logoBg  = isWinner ? (teamColor ?? confColors.darkBg) : isLoser ? (teamColor ?? confColors.darkBg) : teamColor ?? confColors.darkBg;
+  const logoBg  = teamColor ?? confColors.darkBg;
 
   return (
     <div ref={slotRef as React.Ref<HTMLDivElement>}
@@ -2531,7 +2530,7 @@ function TeamSlot({ m, side, teams, saving, onUpdate, slotRef, conf }: {
       </div>
 
       {/* Right: logo panel */}
-      <div style={{ width:58, height:SLOT_H, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", background:logoBg, borderLeft:"1px solid rgba(0,0,0,0.25)" }}>
+      <div style={{ width:58, height:SLOT_H, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", background:logoBg, borderLeft:"1px solid rgba(0,0,0,0.35)", boxShadow:"inset 0 0 0 1000px rgba(0,0,0,0.18)" }}>
         {team?.logo_url
           ? <img src={team.logo_url} style={{ width:44, height:44, objectFit:"contain" }} alt="" />
           : <div style={{ width:36, height:36, display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.85rem", fontWeight:700, color:"#2a2a2a" }}>?</div>
@@ -2698,13 +2697,13 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
         const x2=r2.right-ir.left+sh, y2=r2.top+r2.height/2-ir.top+sv;
         const xw=rw.left-ir.left+sh,  yw=rw.top+rw.height/2-ir.top+sv;
         const mx=(Math.max(x1,x2)+xw)/2, ym=(y1+y2)/2;
-        paths.push({d:`M ${x1} ${y1} H ${mx} V ${y2} H ${x2} M ${mx} ${ym} H ${xw}`,key});
+        paths.push({d:`M ${x1} ${y1} H ${mx} V ${y2} H ${x2} M ${mx} ${ym} V ${yw} H ${xw}`,key});
       } else {
         const x1=r1.left-ir.left+sh, y1=r1.top+r1.height/2-ir.top+sv;
         const x2=r2.left-ir.left+sh, y2=r2.top+r2.height/2-ir.top+sv;
         const xw=rw.right-ir.left+sh, yw=rw.top+rw.height/2-ir.top+sv;
         const mx=(Math.min(x1,x2)+xw)/2, ym=(y1+y2)/2;
-        paths.push({d:`M ${x1} ${y1} H ${mx} V ${y2} H ${x2} M ${mx} ${ym} H ${xw}`,key});
+        paths.push({d:`M ${x1} ${y1} H ${mx} V ${y2} H ${x2} M ${mx} ${ym} V ${yw} H ${xw}`,key});
       }
     };
 
@@ -2770,7 +2769,7 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
     setConnectors(paths);
   }, [rounds, westRounds, eastRounds, finalsMatchup, isConferenceBracket]);
 
-  useLayoutEffect(() => { const t=setTimeout(recalcConnectors,40); return ()=>clearTimeout(t); }, [recalcConnectors]);
+  useLayoutEffect(() => { const t=setTimeout(recalcConnectors,80); return ()=>clearTimeout(t); }, [recalcConnectors]);
 
   const upsert = async (payload: object) => {
     const r = await fetch("/api/playoff-brackets", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) });
