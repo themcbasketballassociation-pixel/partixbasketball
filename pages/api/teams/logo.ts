@@ -5,9 +5,19 @@ import { requireAdmin } from "../../../lib/adminAuth";
 export const config = { api: { bodyParser: { sizeLimit: "10mb" } } };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   const admin = await requireAdmin(req, res);
   if (!admin) return;
+
+  if (req.method === "DELETE") {
+    const { team_id } = req.body;
+    if (!team_id) return res.status(400).json({ error: "team_id required" });
+    // Clear logo_url in DB (don't bother deleting from storage)
+    const { data, error } = await supabase.from("teams").update({ logo_url: null }).eq("id", team_id).select().single();
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json(data);
+  }
+
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   const { team_id, base64, mime, ext } = req.body;
   if (!team_id || !base64) return res.status(400).json({ error: "team_id and base64 required" });
   const buffer = Buffer.from(base64, "base64");

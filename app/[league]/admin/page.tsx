@@ -673,6 +673,17 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
     refresh();
   };
 
+  const deleteLogo = async (teamId: string) => {
+    const r = await fetch("/api/teams/logo", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ team_id: teamId }),
+    });
+    const data = await r.json();
+    if (!r.ok) { setErr(data.error ?? "Logo delete failed"); }
+    refresh();
+  };
+
   const saveColors = async (teamId: string, color2: string | null) => {
     setSavingColor(teamId);
     await fetch(`/api/teams/${teamId}`, {
@@ -880,6 +891,9 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
                           }}
                         />
                       </label>
+                      {t.logo_url && (
+                        <button className={btnDanger} onClick={() => deleteLogo(t.id)}>Delete Logo</button>
+                      )}
                         <button className={btnSecondary} onClick={() => { setEditing(t.id); setEditName(t.name); setEditAbbr(t.abbreviation); setEditDivision(t.division ?? ""); setErr(""); }}>Edit</button>
                         <button className={btnDanger} onClick={() => deleteTeam(t.id)}>Delete</button>
                       </div>
