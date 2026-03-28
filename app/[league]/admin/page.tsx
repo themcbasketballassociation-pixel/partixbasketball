@@ -2774,7 +2774,16 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
     setConnectors(paths);
   }, [rounds, westRounds, eastRounds, finalsMatchup, isConferenceBracket]);
 
-  useLayoutEffect(() => { const t=setTimeout(recalcConnectors,80); return ()=>clearTimeout(t); }, [recalcConnectors]);
+  useLayoutEffect(() => {
+    // Double-rAF after timeout to ensure layout (including padding shifts) is fully painted
+    let raf1: number, raf2: number;
+    const t = setTimeout(() => {
+      raf1 = requestAnimationFrame(() => {
+        raf2 = requestAnimationFrame(recalcConnectors);
+      });
+    }, 60);
+    return () => { clearTimeout(t); cancelAnimationFrame(raf1); cancelAnimationFrame(raf2); };
+  }, [recalcConnectors]);
 
   const upsert = async (payload: object) => {
     const r = await fetch("/api/playoff-brackets", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) });
@@ -2909,13 +2918,32 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
     seedsInit.current = false;
   };
 
+  // Helper: compute the actual paddingTop applied to a first-round column (accounts for bye alignment)
+  const calcByePaddingTop = useCallback((col: {matchups: BracketMatchup[]}, ri: number, nextMatchups: BracketMatchup[]): number => {
+    const origIdx = col.matchups.findIndex(m => m.team1_id && m.team2_id);
+    const nM = origIdx >= 0 ? nextMatchups[Math.floor(origIdx/2)] : null;
+    if (nM && nM.team1_id !== null && nM.team2_id === null)
+      return Math.max(0, topOffsetForRound(ri+1) + SLOT_H + INNER_GAP + SLOT_H/2 - MATCHUP_H/2);
+    if (nM && nM.team1_id === null && nM.team2_id !== null)
+      return Math.max(0, topOffsetForRound(ri+1) + SLOT_H/2 - MATCHUP_H/2);
+    return topOffsetForRound(ri);
+  }, []);
+
   const canvasH = useMemo(() => {
     if (isConferenceBracket) {
       let maxH = MATCHUP_H;
       // West: ri = index from left (R1=0)
-      westRounds.forEach((col,ri)=>{ const n=col.matchups.length; const h=topOffsetForRound(ri)+n*MATCHUP_H+Math.max(0,n-1)*gapForRound(ri); if(h>maxH) maxH=h; });
+      westRounds.forEach((col,ri)=>{
+        const n=col.matchups.length;
+        const pt = ri===0 && ri+1<westRounds.length ? calcByePaddingTop(col, ri, westRounds[ri+1].matchups) : topOffsetForRound(ri);
+        const h=pt+n*MATCHUP_H+Math.max(0,n-1)*gapForRound(ri); if(h>maxH) maxH=h;
+      });
       // East: eastRounds[i] uses riFromRight = i
-      eastRounds.forEach((col,i)=>{ const n=col.matchups.length; const h=topOffsetForRound(i)+n*MATCHUP_H+Math.max(0,n-1)*gapForRound(i); if(h>maxH) maxH=h; });
+      eastRounds.forEach((col,i)=>{
+        const n=col.matchups.length;
+        const pt = i===0 && i+1<eastRounds.length ? calcByePaddingTop(col, i, eastRounds[i+1].matchups) : topOffsetForRound(i);
+        const h=pt+n*MATCHUP_H+Math.max(0,n-1)*gapForRound(i); if(h>maxH) maxH=h;
+      });
       return maxH + 80;
     }
     let max=200;
@@ -3004,17 +3032,9 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
                     const visibleMatchups = isFirstRound
                       ? col.matchups.filter(m => m.team1_id && m.team2_id)
                       : col.matchups;
-                    // When a single R0 matchup connects to a bye slot, align it with the correct R1 slot
-                    let colPaddingTop = topOffsetForRound(ri);
-                    if (isFirstRound && visibleMatchups.length > 0 && ri + 1 < westRounds.length) {
-                      const origIdx = col.matchups.findIndex(m => m.team1_id && m.team2_id);
-                      const nM = origIdx >= 0 ? westRounds[ri+1].matchups[Math.floor(origIdx/2)] : null;
-                      if (nM && nM.team1_id !== null && nM.team2_id === null) {
-                        colPaddingTop = Math.max(0, topOffsetForRound(ri+1) + SLOT_H + INNER_GAP + SLOT_H/2 - MATCHUP_H/2);
-                      } else if (nM && nM.team1_id === null && nM.team2_id !== null) {
-                        colPaddingTop = Math.max(0, topOffsetForRound(ri+1) + SLOT_H/2 - MATCHUP_H/2);
-                      }
-                    }
+                    const colPaddingTop = isFirstRound && ri + 1 < westRounds.length
+                      ? calcByePaddingTop(col, ri, westRounds[ri+1].matchups)
+                      : topOffsetForRound(ri);
                     return (
                       <div key={col.name} style={{ width:240, flexShrink:0 }}>
                         <div style={{ fontSize:"0.6rem", fontWeight:700, color:"#ef4444", textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:10, textAlign:"center" }}>
@@ -3043,16 +3063,9 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
                     const visibleMatchups = isFirstRound
                       ? col.matchups.filter(m => m.team1_id && m.team2_id)
                       : col.matchups;
-                    let colPaddingTop = topOffsetForRound(riFromRight);
-                    if (isFirstRound && visibleMatchups.length > 0 && riFromRight + 1 < eastRounds.length) {
-                      const origIdx = col.matchups.findIndex(m => m.team1_id && m.team2_id);
-                      const nM = origIdx >= 0 ? eastRounds[riFromRight+1].matchups[Math.floor(origIdx/2)] : null;
-                      if (nM && nM.team1_id !== null && nM.team2_id === null) {
-                        colPaddingTop = Math.max(0, topOffsetForRound(riFromRight+1) + SLOT_H + INNER_GAP + SLOT_H/2 - MATCHUP_H/2);
-                      } else if (nM && nM.team1_id === null && nM.team2_id !== null) {
-                        colPaddingTop = Math.max(0, topOffsetForRound(riFromRight+1) + SLOT_H/2 - MATCHUP_H/2);
-                      }
-                    }
+                    const colPaddingTop = isFirstRound && riFromRight + 1 < eastRounds.length
+                      ? calcByePaddingTop(col, riFromRight, eastRounds[riFromRight+1].matchups)
+                      : topOffsetForRound(riFromRight);
                     return (
                       <div key={col.name} style={{ width:240, flexShrink:0 }}>
                         <div style={{ fontSize:"0.6rem", fontWeight:700, color:"#3b82f6", textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:10, textAlign:"center" }}>
