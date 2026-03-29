@@ -4394,9 +4394,103 @@ function BackupTab() {
   );
 }
 
+// ─── SigningsAdminTab ──────────────────────────────────────────────────────────
+function SigningsAdminTab({ league }: { league: string }) {
+  type SigningRow = { id: string; mc_uuid: string; amount: number; is_two_season: boolean; phase: number; season: string | null; status: string; players: { mc_uuid: string; mc_username: string }; teams: { id: string; name: string; abbreviation: string } };
+
+  const [signings, setSignings] = useState<SigningRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [actionMsg, setActionMsg] = useState<Record<string, string>>({});
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const r = await fetch(`/api/contracts?league=${league}&status=pending_approval`);
+    const d = await r.json();
+    setSignings(Array.isArray(d) ? d : []);
+    setLoading(false);
+  }, [league]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const decide = async (id: string, action: "approve" | "reject") => {
+    const newStatus = action === "approve" ? "active" : "rejected";
+    const r = await fetch(`/api/contracts/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: newStatus }),
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      setActionMsg((m) => ({ ...m, [id]: d.error }));
+    } else {
+      setActionMsg((m) => ({ ...m, [id]: action === "approve" ? "✓ Approved" : "✗ Rejected" }));
+      load();
+    }
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <div className="text-sm font-semibold text-slate-300">Pending Signing Requests</div>
+        <button className={`${btnPrimary} text-xs`} onClick={load}>Refresh</button>
+      </div>
+      {loading ? (
+        <div className="text-slate-600 text-sm text-center py-8">Loading…</div>
+      ) : signings.length === 0 ? (
+        <div className="text-slate-600 text-sm text-center py-8">No pending signing requests.</div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {signings.map((s) => (
+            <div key={s.id} className={card}>
+              <div className="flex items-center gap-3">
+                <img
+                  src={`https://minotar.net/avatar/${s.players.mc_username}/40`}
+                  className="w-10 h-10 rounded-lg border border-slate-700"
+                  onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/40"; }}
+                  alt=""
+                />
+                <div className="flex-1">
+                  <div className="text-white font-bold">{s.players.mc_username}</div>
+                  <div className="text-slate-500 text-xs">
+                    {s.teams?.name ?? "Unknown team"} · Phase {s.phase}{s.season ? ` · ${s.season}` : ""}
+                    {s.is_two_season && <span className="text-purple-400 ml-1">· 2-season</span>}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-cyan-400 font-bold text-lg">{s.amount.toLocaleString()}</div>
+                  <div className="text-slate-600 text-xs">salary</div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => decide(s.id, "approve")}
+                    className="rounded-lg px-3 py-1.5 text-sm font-semibold bg-green-900 hover:bg-green-800 text-green-300 border border-green-700 transition"
+                  >
+                    Approve
+                  </button>
+                  <button
+                    onClick={() => decide(s.id, "reject")}
+                    className="rounded-lg px-3 py-1.5 text-sm font-semibold bg-red-950 hover:bg-red-900 text-red-300 border border-red-800 transition"
+                  >
+                    Reject
+                  </button>
+                </div>
+              </div>
+              {actionMsg[s.id] && (
+                <div className={`mt-2 text-xs px-3 py-1.5 rounded-lg border ${actionMsg[s.id].startsWith("✓") ? "text-green-400 bg-green-950 border-green-800" : actionMsg[s.id].startsWith("✗") ? "text-red-400 bg-red-950 border-red-800" : "text-red-400 bg-red-950 border-red-800"}`}>
+                  {actionMsg[s.id]}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Admin Page ──────────────────────────────────────────────────────────
 
-const TABS = ["Players", "Teams", "Schedule", "Box Scores", "Accolades", "Champions", "Articles", "Stats", "Playoffs", "Owners", "Draft Picks", "Auction", "Trades", "Board"] as const;
+const TABS = ["Players", "Teams", "Schedule", "Box Scores", "Accolades", "Champions", "Articles", "Stats", "Playoffs", "Owners", "Draft Picks", "Auction", "Trades", "Signings", "Board"] as const;
 type Tab = typeof TABS[number] | "Backup";
 const SEASONS = ["Season 1","Season 1 Playoffs","Season 2","Season 2 Playoffs","Season 3","Season 3 Playoffs","Season 4","Season 4 Playoffs","Season 5","Season 5 Playoffs","Season 6","Season 6 Playoffs","Season 7","Season 7 Playoffs"];
 
@@ -4653,6 +4747,7 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
         {activeTab === "Draft Picks" && <DraftPicksTab league={league} />}
         {activeTab === "Auction" && <AuctionAdminTab league={league} />}
         {activeTab === "Trades" && <TradesAdminTab league={league} />}
+        {activeTab === "Signings" && <SigningsAdminTab league={league} />}
         {activeTab === "Board" && <BoardMembersTab league={league} />}
         {activeTab === "Backup" && (session as any)?.user?.id?.toString() === SUPER_ADMIN_ID && <BackupTab />}
       </div>

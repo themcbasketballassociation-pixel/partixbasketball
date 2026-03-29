@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
-type Team = { id: string; name: string; abbreviation: string; color2: string | null; division: string | null; logo_url: string | null };
+type Team = { id: string; name: string; abbreviation: string; color2: string | null; division: string | null; logo_url: string | null; season?: string | null };
 type Player = { mc_uuid: string; mc_username: string };
 type Contract = { id: string; league: string; mc_uuid: string; team_id: string; amount: number; is_two_season: boolean; season: string | null; phase: number; status: string; players: Player; teams: Team };
 type CapRetention = { id: string; mc_uuid: string; retention_amount: number; original_contract_id: string; status: string };
@@ -277,8 +277,8 @@ function BidTab({ auctions, teamId, contracts, onRefresh }: {
 }
 
 // ── TradeProposer ──────────────────────────────────────────────────────────────
-function TradeTab({ teamId, league, leagueSlug, contracts, allTeams, onRefresh }: {
-  teamId: string; league: string; leagueSlug: string; contracts: Contract[]; allTeams: Team[]; onRefresh: () => void;
+function TradeTab({ teamId, league, leagueSlug, contracts, allTeams, seasonTeamIds, onRefresh }: {
+  teamId: string; league: string; leagueSlug: string; contracts: Contract[]; allTeams: Team[]; seasonTeamIds: string[]; onRefresh: () => void;
 }) {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [loadingTrades, setLoadingTrades] = useState(true);
@@ -308,7 +308,8 @@ function TradeTab({ teamId, league, leagueSlug, contracts, allTeams, onRefresh }
       .then((d) => setTheirContracts(Array.isArray(d) ? d : []));
   }, [targetTeamId, leagueSlug]);
 
-  const otherTeams = allTeams.filter((t) => t.id !== teamId);
+  // Only show teams from the same season (via team_owners season filter)
+  const otherTeams = allTeams.filter((t) => t.id !== teamId && (seasonTeamIds.length === 0 || seasonTeamIds.includes(t.id)));
 
   const submitTrade = async () => {
     if (!targetTeamId) return setErr("Select a team to trade with");
@@ -369,26 +370,48 @@ function TradeTab({ teamId, league, leagueSlug, contracts, allTeams, onRefresh }
   const AssetRow = ({ assets, setAssets, contracts: ctrts, label }: { assets: typeof myAssets; setAssets: React.Dispatch<React.SetStateAction<typeof myAssets>>; contracts: Contract[]; label: string }) => (
     <div>
       <div style={{ color: "#555", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>{label}</div>
-      {assets.map((a, i) => (
-        <div key={i} style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "center" }}>
-          <select
-            style={{ ...input, flex: 2 }}
-            value={a.contract_id}
-            onChange={(e) => setAssets((prev) => prev.map((x, j) => j === i ? { ...x, contract_id: e.target.value } : x))}
-          >
-            <option value="">— Select player —</option>
-            {ctrts.map((c) => <option key={c.id} value={c.id}>{c.players.mc_username} ({fmt(c.amount)})</option>)}
-          </select>
-          <input
-            type="number"
-            placeholder="Retention"
-            value={a.retention}
-            onChange={(e) => setAssets((prev) => prev.map((x, j) => j === i ? { ...x, retention: e.target.value } : x))}
-            style={{ ...input, flex: 1, minWidth: 80 }}
-          />
-          <button onClick={() => setAssets((prev) => prev.filter((_, j) => j !== i))} style={{ ...btn("danger"), padding: "6px 10px" }}>✕</button>
-        </div>
-      ))}
+      {assets.map((a, i) => {
+        const selectedContract = ctrts.find(c => c.id === a.contract_id);
+        const maxRetention = selectedContract ? Math.min(Math.floor(selectedContract.amount * 0.10 / 250) * 250, 2000) : 0;
+        return (
+          <div key={i} style={{ marginBottom: 10 }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
+              <select
+                style={{ ...input, flex: 2 }}
+                value={a.contract_id}
+                onChange={(e) => setAssets((prev) => prev.map((x, j) => j === i ? { ...x, contract_id: e.target.value, retention: "" } : x))}
+              >
+                <option value="">— Select player —</option>
+                {ctrts.map((c) => <option key={c.id} value={c.id}>{c.players.mc_username} ({fmt(c.amount)})</option>)}
+              </select>
+              <input
+                type="number"
+                placeholder="Retain $"
+                value={a.retention}
+                onChange={(e) => setAssets((prev) => prev.map((x, j) => j === i ? { ...x, retention: e.target.value } : x))}
+                style={{ ...input, flex: 1, minWidth: 80 }}
+                step={250}
+                min={0}
+                max={maxRetention || undefined}
+              />
+              <button onClick={() => setAssets((prev) => prev.filter((_, j) => j !== i))} style={{ ...btn("danger"), padding: "6px 10px" }}>✕</button>
+            </div>
+            {selectedContract && (
+              <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 11, color: "#555", paddingLeft: 2 }}>
+                <span>Max retention: <span style={{ color: "#a855f7" }}>{fmt(maxRetention)}</span> (10% of {fmt(selectedContract.amount)})</span>
+                {maxRetention > 0 && (
+                  <button
+                    onClick={() => setAssets((prev) => prev.map((x, j) => j === i ? { ...x, retention: String(maxRetention) } : x))}
+                    style={{ ...btn(), fontSize: 11, padding: "2px 6px", color: "#a855f7", borderColor: "#4c1d95" }}
+                  >
+                    Set max
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
       <button onClick={() => setAssets((prev) => [...prev, { contract_id: "", retention: "" }])} style={{ ...btn(), fontSize: 12, padding: "4px 10px" }}>+ Add player</button>
     </div>
   );
@@ -474,19 +497,213 @@ function TradeTab({ teamId, league, leagueSlug, contracts, allTeams, onRefresh }
   );
 }
 
+// ── SigningsTab ────────────────────────────────────────────────────────────────
+function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
+  teamId: string; league: string; leagueSlug: string; contracts: Contract[]; ownerSeason: string | null; onRefresh: () => void;
+}) {
+  const TOTAL_CAP = 25000;
+  const MIN_SALARY = 1000;
+  const MAX_SALARY = 12000;
+  const SALARY_INCREMENT = 250;
+  const MAX_PER_PHASE = 2;
+
+  const [freeAgents, setFreeAgents] = useState<Player[]>([]);
+  const [pendingSignings, setPendingSignings] = useState<Contract[]>([]);
+  const [loadingFA, setLoadingFA] = useState(true);
+  const [phase, setPhase] = useState("1");
+  const [selectedPlayer, setSelectedPlayer] = useState("");
+  const [amount, setAmount] = useState("");
+  const [isTwoSeason, setIsTwoSeason] = useState(false);
+  const [err, setErr] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
+  const [signing, setSigning] = useState(false);
+
+  const loadData = useCallback(async () => {
+    setLoadingFA(true);
+    const [faRes, pendingRes] = await Promise.all([
+      fetch(`/api/contracts/sign?league=${leagueSlug}`),
+      fetch(`/api/contracts?league=${leagueSlug}&team_id=${teamId}&status=pending_approval`),
+    ]);
+    const fa = await faRes.json();
+    const pending = await pendingRes.json();
+    setFreeAgents(Array.isArray(fa) ? fa : []);
+    setPendingSignings(Array.isArray(pending) ? pending : []);
+    setLoadingFA(false);
+  }, [leagueSlug, teamId]);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  const capUsed = contracts.reduce((s, c) => s + c.amount, 0);
+  const capRemaining = TOTAL_CAP - capUsed;
+  // Count both active and pending for the selected phase
+  const phaseCount = [...contracts, ...pendingSignings].filter((c) => c.phase === parseInt(phase)).length;
+  const signingsLeft = MAX_PER_PHASE - phaseCount;
+
+  const amt = parseInt(amount) || 0;
+  const effCap = capUsed + amt;
+
+  const signPlayer = async () => {
+    if (!selectedPlayer) return setErr("Select a player");
+    if (!amt) return setErr("Enter a salary amount");
+    setErr(""); setSuccessMsg(""); setSigning(true);
+    const r = await fetch("/api/contracts/sign", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ league: leagueSlug, mc_uuid: selectedPlayer, amount: amt, is_two_season: isTwoSeason, phase: parseInt(phase) }),
+    });
+    const d = await r.json();
+    setSigning(false);
+    if (!r.ok) {
+      setErr(d.error);
+    } else {
+      setSuccessMsg(`Signing request submitted for ${freeAgents.find((p) => p.mc_uuid === selectedPlayer)?.mc_username ?? "player"} — waiting for admin approval.`);
+      setSelectedPlayer(""); setAmount(""); setIsTwoSeason(false);
+      loadData(); onRefresh();
+    }
+  };
+
+  const statusBadge = (s: string) => {
+    const styles: Record<string, { color: string; bg: string; border: string }> = {
+      pending_approval: { color: "#fbbf24", bg: "#1c1200", border: "#78350f" },
+      active: { color: "#22c55e", bg: "#052e16", border: "#166534" },
+      rejected: { color: "#ef4444", bg: "#450a0a", border: "#7f1d1d" },
+    };
+    const st = styles[s] ?? { color: "#888", bg: "#111", border: "#222" };
+    return <span style={{ color: st.color, background: st.bg, border: `1px solid ${st.border}`, borderRadius: 6, fontSize: 11, padding: "2px 8px", fontWeight: 600 }}>{s === "pending_approval" ? "pending approval" : s}</span>;
+  };
+
+  return (
+    <div>
+      {/* Cap + phase info */}
+      <div style={{ ...innerCard, marginBottom: 16, display: "flex", gap: 20, flexWrap: "wrap" as const }}>
+        <div><span style={{ color: "#555", fontSize: 12 }}>Cap remaining: </span><span style={{ color: "#22d3ee", fontWeight: 700 }}>{fmt(capRemaining)}</span></div>
+        <div>
+          <span style={{ color: "#555", fontSize: 12 }}>Phase {phase} slots used: </span>
+          <span style={{ color: signingsLeft <= 0 ? "#ef4444" : "#22c55e", fontWeight: 700 }}>{phaseCount} / {MAX_PER_PHASE}</span>
+        </div>
+      </div>
+
+      {/* Signing rules */}
+      <div style={{ background: "#0d1117", border: "1px solid #1a2030", borderRadius: 8, padding: "8px 12px", marginBottom: 16, fontSize: 12, color: "#555" }}>
+        Signings are submitted for admin approval. Rules: {fmt(MIN_SALARY)}–{fmt(MAX_SALARY)} salary · multiples of {SALARY_INCREMENT} · max {MAX_PER_PHASE} per phase · total cap {fmt(TOTAL_CAP)}
+      </div>
+
+      {signingsLeft <= 0 && (
+        <div style={{ color: "#fca5a5", background: "#450a0a", border: "1px solid #7f1d1d", borderRadius: 8, padding: "10px 14px", marginBottom: 14, fontSize: 13 }}>
+          You have used {MAX_PER_PHASE}/{MAX_PER_PHASE} slots for phase {phase} (active + pending). Select a different phase to submit more.
+        </div>
+      )}
+
+      {/* Submit form */}
+      <div style={{ ...innerCard, marginBottom: 20 }}>
+        <div style={{ color: "#aaa", fontWeight: 700, marginBottom: 14 }}>Request a Signing</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+          <div>
+            <label style={{ color: "#555", fontSize: 12, display: "block", marginBottom: 4 }}>Phase</label>
+            <select style={input} value={phase} onChange={(e) => setPhase(e.target.value)}>
+              {[1, 2, 3, 4].map((p) => <option key={p} value={p}>Phase {p}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ color: "#555", fontSize: 12, display: "block", marginBottom: 4 }}>Salary</label>
+            <input
+              type="number"
+              placeholder={`${MIN_SALARY}–${MAX_SALARY}`}
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              step={SALARY_INCREMENT}
+              min={MIN_SALARY}
+              max={Math.min(MAX_SALARY, capRemaining)}
+              style={input}
+            />
+          </div>
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ color: "#555", fontSize: 12, display: "block", marginBottom: 4 }}>Player (free agents only)</label>
+          {loadingFA ? (
+            <div style={{ color: "#444", fontSize: 13 }}>Loading free agents…</div>
+          ) : (
+            <select style={input} value={selectedPlayer} onChange={(e) => setSelectedPlayer(e.target.value)}>
+              <option value="">— Select free agent —</option>
+              {freeAgents.map((p) => <option key={p.mc_uuid} value={p.mc_uuid}>{p.mc_username}</option>)}
+            </select>
+          )}
+        </div>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, color: "#a855f7", fontSize: 13, cursor: "pointer", marginBottom: 12 }}>
+          <input type="checkbox" checked={isTwoSeason} onChange={(e) => setIsTwoSeason(e.target.checked)} style={{ accentColor: "#a855f7" }} />
+          2-season contract
+        </label>
+        {amt > 0 && (
+          <div style={{ fontSize: 12, color: "#555", marginBottom: 10 }}>
+            Cap after signing: <span style={{ color: effCap > TOTAL_CAP ? "#ef4444" : "#22d3ee", fontWeight: 600 }}>{fmt(effCap)}</span> / {fmt(TOTAL_CAP)}
+            {effCap > TOTAL_CAP && <span style={{ color: "#fca5a5", marginLeft: 8 }}>⚠ Exceeds cap!</span>}
+          </div>
+        )}
+        {err && <div style={{ color: "#fca5a5", background: "#450a0a", border: "1px solid #7f1d1d", borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 13 }}>{err}</div>}
+        {successMsg && <div style={{ color: "#86efac", background: "#052e16", border: "1px solid #166534", borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 13 }}>{successMsg}</div>}
+        <button onClick={signPlayer} disabled={signing || signingsLeft <= 0} style={{ ...btn("primary"), opacity: (signing || signingsLeft <= 0) ? 0.5 : 1 }}>
+          {signing ? "Submitting…" : "Submit Signing Request"}
+        </button>
+      </div>
+
+      {/* Pending signing requests */}
+      {pendingSignings.length > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ color: "#555", fontSize: 12, fontWeight: 600, marginBottom: 8, textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>Pending Requests</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {pendingSignings.map((c) => (
+              <div key={c.id} style={{ ...innerCard, display: "flex", alignItems: "center", gap: 12 }}>
+                <img src={`https://minotar.net/avatar/${c.players.mc_username}/32`} style={{ width: 32, height: 32, borderRadius: 6, border: "1px solid #222" }} onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/32"; }} alt="" />
+                <div style={{ flex: 1 }}>
+                  <span style={{ color: "#fff", fontWeight: 600, fontSize: 13 }}>{c.players.mc_username}</span>
+                  <span style={{ color: "#444", fontSize: 11, marginLeft: 8 }}>Phase {c.phase}</span>
+                </div>
+                <span style={{ color: "#22d3ee", fontWeight: 700, fontSize: 14 }}>{fmt(c.amount)}</span>
+                {c.is_two_season && <span style={{ color: "#a855f7", fontSize: 11 }}>2yr</span>}
+                {statusBadge(c.status)}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Active roster */}
+      {contracts.length > 0 && (
+        <div>
+          <div style={{ color: "#555", fontSize: 12, fontWeight: 600, marginBottom: 8, textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>Active Roster</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {contracts.map((c) => (
+              <div key={c.id} style={{ ...innerCard, display: "flex", alignItems: "center", gap: 12 }}>
+                <img src={`https://minotar.net/avatar/${c.players.mc_username}/32`} style={{ width: 32, height: 32, borderRadius: 6, border: "1px solid #222" }} onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/32"; }} alt="" />
+                <div style={{ flex: 1 }}>
+                  <span style={{ color: "#aaa", fontSize: 13 }}>{c.players.mc_username}</span>
+                  <span style={{ color: "#444", fontSize: 11, marginLeft: 8 }}>Phase {c.phase}</span>
+                </div>
+                <span style={{ color: "#22d3ee", fontWeight: 700, fontSize: 14 }}>{fmt(c.amount)}</span>
+                {c.is_two_season && <span style={{ color: "#a855f7", fontSize: 11 }}>2yr</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────────
 export default function OwnerPage() {
   const { data: session, status } = useSession();
   const params = useParams();
   const leagueSlug = (params?.league as string) ?? "mba";
 
-  const [ownerRecord, setOwnerRecord] = useState<{ id: string; discord_id: string; league: string; teams: Team } | null>(null);
+  const [ownerRecord, setOwnerRecord] = useState<{ id: string; discord_id: string; league: string; season?: string | null; teams: Team } | null>(null);
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [retentions, setRetentions] = useState<CapRetention[]>([]);
   const [auctions, setAuctions] = useState<Auction[]>([]);
   const [allTeams, setAllTeams] = useState<Team[]>([]);
+  const [seasonTeamIds, setSeasonTeamIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"roster" | "bid" | "trades">("roster");
+  const [tab, setTab] = useState<"roster" | "bid" | "trades" | "signings">("roster");
   const [isBoardMember, setIsBoardMember] = useState(false);
 
   const loadAll = useCallback(async () => {
@@ -509,6 +726,15 @@ export default function OwnerPage() {
       setOwnerRecord(record);
       setAuctions(Array.isArray(auctionData) ? auctionData : []);
       setAllTeams(Array.isArray(teamsData) ? teamsData : []);
+
+      // Load team IDs for the owner's season to filter the trade dropdown
+      if (record?.season) {
+        const ownersRes = await fetch(`/api/team-owners?league=${leagueSlug}&season=${encodeURIComponent(record.season)}`);
+        const ownersData = await ownersRes.json().catch(() => []);
+        setSeasonTeamIds(Array.isArray(ownersData) ? ownersData.map((o: any) => o.team_id).filter(Boolean) : []);
+      } else {
+        setSeasonTeamIds([]);
+      }
 
       if (record?.teams?.id) {
         const [contractsRes, retentionsRes] = await Promise.all([
@@ -586,7 +812,7 @@ export default function OwnerPage() {
 
         {/* Tabs */}
         <div style={{ display: "flex", borderBottom: "1px solid #1a1a1a" }}>
-          {([["roster", "My Roster"], ["bid", `Live Auctions (${auctions.filter((a) => a.status === "active").length})`], ["trades", "Trades"]] as const).map(([t, label]) => (
+          {([["roster", "My Roster"], ["signings", "Signings"], ["bid", `Live Auctions (${auctions.filter((a) => a.status === "active").length})`], ["trades", "Trades"]] as const).map(([t, label]) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -603,8 +829,9 @@ export default function OwnerPage() {
 
         <div style={{ padding: "20px 24px" }}>
           {tab === "roster" && <RosterTab contracts={contracts} retentions={retentions} />}
+          {tab === "signings" && <SigningsTab teamId={team.id} league={ownerRecord.league} leagueSlug={leagueSlug} contracts={contracts} ownerSeason={ownerRecord.season ?? null} onRefresh={loadAll} />}
           {tab === "bid" && <BidTab auctions={auctions} teamId={team.id} contracts={contracts} onRefresh={loadAll} />}
-          {tab === "trades" && <TradeTab teamId={team.id} league={ownerRecord.league} leagueSlug={leagueSlug} contracts={contracts} allTeams={allTeams} onRefresh={loadAll} />}
+          {tab === "trades" && <TradeTab teamId={team.id} league={ownerRecord.league} leagueSlug={leagueSlug} contracts={contracts} allTeams={allTeams} seasonTeamIds={seasonTeamIds} onRefresh={loadAll} />}
         </div>
       </div>
     </div>
