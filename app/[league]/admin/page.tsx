@@ -3140,13 +3140,12 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
 // ─── Tab: Owners ──────────────────────────────────────────────────────────────
 
 function OwnersTab({ league }: { league: string }) {
-  type OwnerRow = { id: string; discord_id: string; league: string; season: string | null; teams: { id: string; name: string; abbreviation: string } };
+  type OwnerRow = { id: string; discord_id: string; league: string; teams: { id: string; name: string; abbreviation: string } };
   type TeamRow = { id: string; name: string; abbreviation: string };
   const [owners, setOwners] = useState<OwnerRow[]>([]);
   const [teams, setTeams] = useState<TeamRow[]>([]);
   const [discordId, setDiscordId] = useState("");
   const [teamId, setTeamId] = useState("");
-  const [season, setSeason] = useState("Season 7");
   const [err, setErr] = useState("");
 
   const refresh = useCallback(async () => {
@@ -3166,7 +3165,7 @@ function OwnersTab({ league }: { league: string }) {
     const r = await fetch("/api/team-owners", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ discord_id: discordId.trim(), team_id: teamId, league, season }),
+      body: JSON.stringify({ discord_id: discordId.trim(), team_id: teamId, league }),
     });
     const d = await r.json();
     if (!r.ok) return setErr(d.error);
@@ -3178,13 +3177,7 @@ function OwnersTab({ league }: { league: string }) {
     refresh();
   };
 
-  // Group by season for display
-  const bySeason = owners.reduce<Record<string, OwnerRow[]>>((acc, o) => {
-    const s = o.season ?? "Unknown";
-    if (!acc[s]) acc[s] = [];
-    acc[s].push(o);
-    return acc;
-  }, {});
+  const sorted = [...owners].sort((a, b) => (a.teams?.name ?? "").localeCompare(b.teams?.name ?? ""));
 
   return (
     <div>
@@ -3194,32 +3187,24 @@ function OwnersTab({ league }: { league: string }) {
           <input className={input} placeholder="Discord User ID" value={discordId} onChange={(e) => setDiscordId(e.target.value)} style={{ flex: 2, minWidth: 160 }} />
           <select className={input} value={teamId} onChange={(e) => setTeamId(e.target.value)} style={{ flex: 2, minWidth: 160 }}>
             <option value="">— Select team —</option>
-            {teams.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.abbreviation})</option>)}
-          </select>
-          <select className={input} value={season} onChange={(e) => setSeason(e.target.value)} style={{ flex: 1, minWidth: 120 }}>
-            {SEASONS.map(s => <option key={s} value={s}>{s}</option>)}
+            {[...teams].sort((a,b)=>a.name.localeCompare(b.name)).map((t) => <option key={t.id} value={t.id}>{t.name} ({t.abbreviation})</option>)}
           </select>
           <button className={btnPrimary} onClick={add}>Assign</button>
         </div>
         <ErrMsg msg={err} />
         <p className="text-xs text-slate-500 mt-2">Discord ID is the numeric user ID. Use Developer Mode in Discord to copy it.</p>
       </div>
-      {Object.keys(bySeason).sort((a, b) => b.localeCompare(a)).map(s => (
-        <div key={s} className="mb-4">
-          <div className="text-xs text-slate-500 font-semibold uppercase tracking-wider mb-2 px-1">{s}</div>
-          <div className="flex flex-col gap-2">
-            {bySeason[s].map((o) => (
-              <div key={o.id} className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-950 px-4 py-3">
-                <div className="flex-1">
-                  <div className="text-white font-medium text-sm">{o.teams?.name ?? "Unknown Team"} <span className="text-slate-500">({o.teams?.abbreviation})</span></div>
-                  <div className="text-slate-500 text-xs font-mono">{o.discord_id}</div>
-                </div>
-                <button className={btnDanger} onClick={() => remove(o.id)}>Remove</button>
-              </div>
-            ))}
+      <div className="flex flex-col gap-2">
+        {sorted.map((o) => (
+          <div key={o.id} className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-950 px-4 py-3">
+            <div className="flex-1">
+              <div className="text-white font-medium text-sm">{o.teams?.name ?? "Unknown Team"} <span className="text-slate-500">({o.teams?.abbreviation})</span></div>
+              <div className="text-slate-500 text-xs font-mono">{o.discord_id}</div>
+            </div>
+            <button className={btnDanger} onClick={() => remove(o.id)}>Remove</button>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
       {owners.length === 0 && <div className="text-slate-600 text-sm text-center py-6">No team owners assigned yet.</div>}
     </div>
   );
