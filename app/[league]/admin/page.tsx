@@ -3142,10 +3142,12 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
 function OwnersTab({ league }: { league: string }) {
   type OwnerRow = { id: string; discord_id: string; owner_name?: string | null; league: string; season?: string | null; teams: { id: string; name: string; abbreviation: string } };
   type TeamRow = { id: string; name: string; abbreviation: string };
+  type PlayerRow = { mc_uuid: string; mc_username: string; discord_id: string | null };
   const [owners, setOwners] = useState<OwnerRow[]>([]);
   const [teams, setTeams] = useState<TeamRow[]>([]);
+  const [players, setPlayers] = useState<PlayerRow[]>([]);
   const [discordId, setDiscordId] = useState("");
-  const [ownerName, setOwnerName] = useState("");
+  const [selectedPlayerUuid, setSelectedPlayerUuid] = useState("");
   const [teamId, setTeamId] = useState("");
   const [season, setSeason] = useState("Season 7");
   const [filterSeason, setFilterSeason] = useState("Season 7");
@@ -3153,15 +3155,16 @@ function OwnersTab({ league }: { league: string }) {
   const [needsMigration, setNeedsMigration] = useState(false);
 
   const refresh = useCallback(async () => {
-    const [o, t] = await Promise.all([
+    const [o, t, p] = await Promise.all([
       fetch(`/api/team-owners?league=${league}&season=${encodeURIComponent(filterSeason)}`).then((r) => r.json()),
       fetch(`/api/teams?league=${league}&season=${encodeURIComponent(season)}`).then((r) => r.json()),
+      fetch(`/api/players`).then((r) => r.json()),
     ]);
     const ownerData = Array.isArray(o) ? o : [];
     setOwners(ownerData);
-    // If none have a season field, the column may not exist yet
     setNeedsMigration(ownerData.length > 0 && ownerData.every((x: OwnerRow) => x.season === undefined));
     setTeams(Array.isArray(t) ? t : []);
+    setPlayers(Array.isArray(p) ? p : []);
   }, [league, filterSeason, season]);
 
   useEffect(() => { refresh(); }, [refresh]);
@@ -3169,14 +3172,15 @@ function OwnersTab({ league }: { league: string }) {
   const add = async () => {
     setErr("");
     if (!discordId.trim() || !teamId) return setErr("Discord ID and team required");
+    const selectedPlayer = players.find(p => p.mc_uuid === selectedPlayerUuid);
     const r = await fetch("/api/team-owners", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ discord_id: discordId.trim(), owner_name: ownerName.trim() || null, team_id: teamId, league, season }),
+      body: JSON.stringify({ discord_id: discordId.trim(), owner_name: selectedPlayer?.mc_username ?? null, team_id: teamId, league, season }),
     });
     const d = await r.json();
     if (!r.ok) return setErr(d.error);
-    setDiscordId(""); setOwnerName(""); setTeamId(""); refresh();
+    setDiscordId(""); setSelectedPlayerUuid(""); setTeamId(""); refresh();
   };
 
   const remove = async (id: string) => {
@@ -3202,7 +3206,10 @@ function OwnersTab({ league }: { league: string }) {
       <div className={card} style={{ marginBottom: 16 }}>
         <div className="text-sm font-semibold text-slate-300 mb-4">Assign Team Owner</div>
         <div className="flex gap-3 flex-wrap mb-2">
-          <input className={input} placeholder="Owner name (display)" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} style={{ flex: 2, minWidth: 140 }} />
+          <select className={input} value={selectedPlayerUuid} onChange={(e) => setSelectedPlayerUuid(e.target.value)} style={{ flex: 2, minWidth: 160 }}>
+            <option value="">— Select player —</option>
+            {players.map((p) => <option key={p.mc_uuid} value={p.mc_uuid}>{p.mc_username}</option>)}
+          </select>
           <input className={input} placeholder="Discord User ID" value={discordId} onChange={(e) => setDiscordId(e.target.value)} style={{ flex: 2, minWidth: 140 }} />
           <select className={input} value={teamId} onChange={(e) => setTeamId(e.target.value)} style={{ flex: 2, minWidth: 160 }}>
             <option value="">— Select team —</option>
