@@ -498,155 +498,104 @@ function TradeTab({ teamId, league, leagueSlug, contracts, allTeams, seasonTeamI
 }
 
 // ── SigningsTab ────────────────────────────────────────────────────────────────
+type SigningPlayer = { mc_uuid: string; mc_username: string; min_price: number };
+
 function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
   teamId: string; league: string; leagueSlug: string; contracts: Contract[]; ownerSeason: string | null; onRefresh: () => void;
 }) {
   const TOTAL_CAP = 25000;
-  const MIN_SALARY = 1000;
-  const MAX_SALARY = 12000;
-  const SALARY_INCREMENT = 250;
-  const MAX_PER_PHASE = 2;
-
-  const [freeAgents, setFreeAgents] = useState<Player[]>([]);
+  const [available, setAvailable] = useState<SigningPlayer[]>([]);
   const [pendingSignings, setPendingSignings] = useState<Contract[]>([]);
-  const [loadingFA, setLoadingFA] = useState(true);
-  const [phase, setPhase] = useState("1");
+  const [loading, setLoading] = useState(true);
   const [selectedPlayer, setSelectedPlayer] = useState("");
-  const [amount, setAmount] = useState("");
-  const [isTwoSeason, setIsTwoSeason] = useState(false);
   const [err, setErr] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
   const [signing, setSigning] = useState(false);
 
   const loadData = useCallback(async () => {
-    setLoadingFA(true);
+    setLoading(true);
     const [faRes, pendingRes] = await Promise.all([
       fetch(`/api/contracts/sign?league=${leagueSlug}`),
       fetch(`/api/contracts?league=${leagueSlug}&team_id=${teamId}&status=pending_approval`),
     ]);
     const fa = await faRes.json();
     const pending = await pendingRes.json();
-    setFreeAgents(Array.isArray(fa) ? fa : []);
+    setAvailable(Array.isArray(fa) ? fa : []);
     setPendingSignings(Array.isArray(pending) ? pending : []);
-    setLoadingFA(false);
+    setLoading(false);
   }, [leagueSlug, teamId]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
   const capUsed = contracts.reduce((s, c) => s + c.amount, 0);
   const capRemaining = TOTAL_CAP - capUsed;
-  // Count both active and pending for the selected phase
-  const phaseCount = [...contracts, ...pendingSignings].filter((c) => c.phase === parseInt(phase)).length;
-  const signingsLeft = MAX_PER_PHASE - phaseCount;
-
-  const amt = parseInt(amount) || 0;
-  const effCap = capUsed + amt;
+  const selectedInfo = available.find((p) => p.mc_uuid === selectedPlayer);
 
   const signPlayer = async () => {
     if (!selectedPlayer) return setErr("Select a player");
-    if (!amt) return setErr("Enter a salary amount");
     setErr(""); setSuccessMsg(""); setSigning(true);
     const r = await fetch("/api/contracts/sign", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ league: leagueSlug, mc_uuid: selectedPlayer, amount: amt, is_two_season: isTwoSeason, phase: parseInt(phase) }),
+      body: JSON.stringify({ league: leagueSlug, mc_uuid: selectedPlayer }),
     });
     const d = await r.json();
     setSigning(false);
     if (!r.ok) {
       setErr(d.error);
     } else {
-      setSuccessMsg(`Signing request submitted for ${freeAgents.find((p) => p.mc_uuid === selectedPlayer)?.mc_username ?? "player"} — waiting for admin approval.`);
-      setSelectedPlayer(""); setAmount(""); setIsTwoSeason(false);
+      setSuccessMsg(`Signing request submitted for ${selectedInfo?.mc_username ?? "player"} at ${fmt(selectedInfo?.min_price ?? 0)} — waiting for admin approval.`);
+      setSelectedPlayer("");
       loadData(); onRefresh();
     }
   };
 
-  const statusBadge = (s: string) => {
-    const styles: Record<string, { color: string; bg: string; border: string }> = {
-      pending_approval: { color: "#fbbf24", bg: "#1c1200", border: "#78350f" },
-      active: { color: "#22c55e", bg: "#052e16", border: "#166534" },
-      rejected: { color: "#ef4444", bg: "#450a0a", border: "#7f1d1d" },
-    };
-    const st = styles[s] ?? { color: "#888", bg: "#111", border: "#222" };
-    return <span style={{ color: st.color, background: st.bg, border: `1px solid ${st.border}`, borderRadius: 6, fontSize: 11, padding: "2px 8px", fontWeight: 600 }}>{s === "pending_approval" ? "pending approval" : s}</span>;
-  };
-
   return (
     <div>
-      {/* Cap + phase info */}
       <div style={{ ...innerCard, marginBottom: 16, display: "flex", gap: 20, flexWrap: "wrap" as const }}>
         <div><span style={{ color: "#555", fontSize: 12 }}>Cap remaining: </span><span style={{ color: "#22d3ee", fontWeight: 700 }}>{fmt(capRemaining)}</span></div>
-        <div>
-          <span style={{ color: "#555", fontSize: 12 }}>Phase {phase} slots used: </span>
-          <span style={{ color: signingsLeft <= 0 ? "#ef4444" : "#22c55e", fontWeight: 700 }}>{phaseCount} / {MAX_PER_PHASE}</span>
-        </div>
       </div>
-
-      {/* Signing rules */}
       <div style={{ background: "#0d1117", border: "1px solid #1a2030", borderRadius: 8, padding: "8px 12px", marginBottom: 16, fontSize: 12, color: "#555" }}>
-        Signings are submitted for admin approval. Rules: {fmt(MIN_SALARY)}–{fmt(MAX_SALARY)} salary · multiples of {SALARY_INCREMENT} · max {MAX_PER_PHASE} per phase · total cap {fmt(TOTAL_CAP)}
+        Post-auction signings only · Players signed at their auction minimum price · No 2-season contracts · Requires admin approval
       </div>
 
-      {signingsLeft <= 0 && (
-        <div style={{ color: "#fca5a5", background: "#450a0a", border: "1px solid #7f1d1d", borderRadius: 8, padding: "10px 14px", marginBottom: 14, fontSize: 13 }}>
-          You have used {MAX_PER_PHASE}/{MAX_PER_PHASE} slots for phase {phase} (active + pending). Select a different phase to submit more.
-        </div>
-      )}
-
-      {/* Submit form */}
       <div style={{ ...innerCard, marginBottom: 20 }}>
         <div style={{ color: "#aaa", fontWeight: 700, marginBottom: 14 }}>Request a Signing</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-          <div>
-            <label style={{ color: "#555", fontSize: 12, display: "block", marginBottom: 4 }}>Phase</label>
-            <select style={input} value={phase} onChange={(e) => setPhase(e.target.value)}>
-              {[1, 2, 3, 4].map((p) => <option key={p} value={p}>Phase {p}</option>)}
-            </select>
-          </div>
-          <div>
-            <label style={{ color: "#555", fontSize: 12, display: "block", marginBottom: 4 }}>Salary</label>
-            <input
-              type="number"
-              placeholder={`${MIN_SALARY}–${MAX_SALARY}`}
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              step={SALARY_INCREMENT}
-              min={MIN_SALARY}
-              max={Math.min(MAX_SALARY, capRemaining)}
-              style={input}
-            />
-          </div>
-        </div>
         <div style={{ marginBottom: 12 }}>
-          <label style={{ color: "#555", fontSize: 12, display: "block", marginBottom: 4 }}>Player (free agents only)</label>
-          {loadingFA ? (
-            <div style={{ color: "#444", fontSize: 13 }}>Loading free agents…</div>
+          <label style={{ color: "#555", fontSize: 12, display: "block", marginBottom: 4 }}>Player (went undrafted in auction)</label>
+          {loading ? (
+            <div style={{ color: "#444", fontSize: 13 }}>Loading…</div>
+          ) : available.length === 0 ? (
+            <div style={{ color: "#555", fontSize: 13 }}>No players available for signing yet. Players appear here after the auction closes without a bid.</div>
           ) : (
             <select style={input} value={selectedPlayer} onChange={(e) => setSelectedPlayer(e.target.value)}>
-              <option value="">— Select free agent —</option>
-              {freeAgents.map((p) => <option key={p.mc_uuid} value={p.mc_uuid}>{p.mc_username}</option>)}
+              <option value="">— Select player —</option>
+              {available.map((p) => <option key={p.mc_uuid} value={p.mc_uuid}>{p.mc_username} — {fmt(p.min_price)}</option>)}
             </select>
           )}
         </div>
-        <label style={{ display: "flex", alignItems: "center", gap: 8, color: "#a855f7", fontSize: 13, cursor: "pointer", marginBottom: 12 }}>
-          <input type="checkbox" checked={isTwoSeason} onChange={(e) => setIsTwoSeason(e.target.checked)} style={{ accentColor: "#a855f7" }} />
-          2-season contract
-        </label>
-        {amt > 0 && (
-          <div style={{ fontSize: 12, color: "#555", marginBottom: 10 }}>
-            Cap after signing: <span style={{ color: effCap > TOTAL_CAP ? "#ef4444" : "#22d3ee", fontWeight: 600 }}>{fmt(effCap)}</span> / {fmt(TOTAL_CAP)}
-            {effCap > TOTAL_CAP && <span style={{ color: "#fca5a5", marginLeft: 8 }}>⚠ Exceeds cap!</span>}
+        {selectedInfo && (
+          <div style={{ ...innerCard, marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ color: "#555", fontSize: 13 }}>Signing salary (auction minimum)</span>
+            <span style={{ color: "#22d3ee", fontWeight: 700, fontSize: 18 }}>{fmt(selectedInfo.min_price)}</span>
+          </div>
+        )}
+        {selectedInfo && capUsed + selectedInfo.min_price > TOTAL_CAP && (
+          <div style={{ color: "#fca5a5", background: "#450a0a", border: "1px solid #7f1d1d", borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 13 }}>
+            ⚠ Exceeds cap: {fmt(capUsed)} + {fmt(selectedInfo.min_price)} = {fmt(capUsed + selectedInfo.min_price)} / {fmt(TOTAL_CAP)}
           </div>
         )}
         {err && <div style={{ color: "#fca5a5", background: "#450a0a", border: "1px solid #7f1d1d", borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 13 }}>{err}</div>}
         {successMsg && <div style={{ color: "#86efac", background: "#052e16", border: "1px solid #166534", borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 13 }}>{successMsg}</div>}
-        <button onClick={signPlayer} disabled={signing || signingsLeft <= 0} style={{ ...btn("primary"), opacity: (signing || signingsLeft <= 0) ? 0.5 : 1 }}>
+        <button
+          onClick={signPlayer}
+          disabled={signing || !selectedPlayer || (selectedInfo ? capUsed + selectedInfo.min_price > TOTAL_CAP : false)}
+          style={{ ...btn("primary"), opacity: (signing || !selectedPlayer) ? 0.5 : 1 }}
+        >
           {signing ? "Submitting…" : "Submit Signing Request"}
         </button>
       </div>
 
-      {/* Pending signing requests */}
       {pendingSignings.length > 0 && (
         <div style={{ marginBottom: 20 }}>
           <div style={{ color: "#555", fontSize: 12, fontWeight: 600, marginBottom: 8, textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>Pending Requests</div>
@@ -654,20 +603,15 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
             {pendingSignings.map((c) => (
               <div key={c.id} style={{ ...innerCard, display: "flex", alignItems: "center", gap: 12 }}>
                 <img src={`https://minotar.net/avatar/${c.players.mc_username}/32`} style={{ width: 32, height: 32, borderRadius: 6, border: "1px solid #222" }} onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/32"; }} alt="" />
-                <div style={{ flex: 1 }}>
-                  <span style={{ color: "#fff", fontWeight: 600, fontSize: 13 }}>{c.players.mc_username}</span>
-                  <span style={{ color: "#444", fontSize: 11, marginLeft: 8 }}>Phase {c.phase}</span>
-                </div>
-                <span style={{ color: "#22d3ee", fontWeight: 700, fontSize: 14 }}>{fmt(c.amount)}</span>
-                {c.is_two_season && <span style={{ color: "#a855f7", fontSize: 11 }}>2yr</span>}
-                {statusBadge(c.status)}
+                <span style={{ color: "#fff", fontWeight: 600, flex: 1 }}>{c.players.mc_username}</span>
+                <span style={{ color: "#22d3ee", fontWeight: 700 }}>{fmt(c.amount)}</span>
+                <span style={{ color: "#fbbf24", background: "#1c1200", border: "1px solid #78350f", borderRadius: 6, fontSize: 11, padding: "2px 8px", fontWeight: 600 }}>pending approval</span>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* Active roster */}
       {contracts.length > 0 && (
         <div>
           <div style={{ color: "#555", fontSize: 12, fontWeight: 600, marginBottom: 8, textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>Active Roster</div>
@@ -675,11 +619,8 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
             {contracts.map((c) => (
               <div key={c.id} style={{ ...innerCard, display: "flex", alignItems: "center", gap: 12 }}>
                 <img src={`https://minotar.net/avatar/${c.players.mc_username}/32`} style={{ width: 32, height: 32, borderRadius: 6, border: "1px solid #222" }} onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/32"; }} alt="" />
-                <div style={{ flex: 1 }}>
-                  <span style={{ color: "#aaa", fontSize: 13 }}>{c.players.mc_username}</span>
-                  <span style={{ color: "#444", fontSize: 11, marginLeft: 8 }}>Phase {c.phase}</span>
-                </div>
-                <span style={{ color: "#22d3ee", fontWeight: 700, fontSize: 14 }}>{fmt(c.amount)}</span>
+                <span style={{ color: "#aaa", flex: 1 }}>{c.players.mc_username}</span>
+                <span style={{ color: "#22d3ee", fontWeight: 700 }}>{fmt(c.amount)}</span>
                 {c.is_two_season && <span style={{ color: "#a855f7", fontSize: 11 }}>2yr</span>}
               </div>
             ))}
