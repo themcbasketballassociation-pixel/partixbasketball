@@ -414,9 +414,158 @@ function TradesView({ teamId, leagueSlug, contracts, allTeams, myPicks, onRefres
   );
 }
 
+// ── Signings ──────────────────────────────────────────────────────────────────
+function SigningsView({ teamId, leagueSlug, contracts, onRefresh }: {
+  teamId: string; leagueSlug: string; contracts: Contract[]; onRefresh: () => void;
+}) {
+  const TOTAL_CAP = 25000, MIN_SALARY = 1000, MAX_SALARY = 12000, SALARY_INCREMENT = 250, MAX_PER_PHASE = 2;
+  const [freeAgents, setFreeAgents] = useState<Player[]>([]);
+  const [pendingSignings, setPendingSignings] = useState<Contract[]>([]);
+  const [loadingFA, setLoadingFA] = useState(true);
+  const [phase, setPhase] = useState("1");
+  const [selectedPlayer, setSelectedPlayer] = useState("");
+  const [amount, setAmount] = useState("");
+  const [isTwoSeason, setIsTwoSeason] = useState(false);
+  const [err, setErr] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
+  const [signing, setSigning] = useState(false);
+
+  const loadData = useCallback(async () => {
+    setLoadingFA(true);
+    const [faRes, pendingRes] = await Promise.all([
+      fetch(`/api/contracts/sign?league=${leagueSlug}`),
+      fetch(`/api/contracts?league=${leagueSlug}&team_id=${teamId}&status=pending_approval`),
+    ]);
+    const fa = await faRes.json();
+    const pending = await pendingRes.json();
+    setFreeAgents(Array.isArray(fa) ? fa : []);
+    setPendingSignings(Array.isArray(pending) ? pending : []);
+    setLoadingFA(false);
+  }, [leagueSlug, teamId]);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  const capUsed = contracts.reduce((s, c) => s + c.amount, 0);
+  const capRemaining = TOTAL_CAP - capUsed;
+  const phaseCount = [...contracts, ...pendingSignings].filter(c => c.phase === parseInt(phase)).length;
+  const signingsLeft = MAX_PER_PHASE - phaseCount;
+  const amt = parseInt(amount) || 0;
+
+  const signPlayer = async () => {
+    if (!selectedPlayer) return setErr("Select a player");
+    if (!amt) return setErr("Enter a salary amount");
+    setErr(""); setSuccessMsg(""); setSigning(true);
+    const r = await fetch("/api/contracts/sign", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ league: leagueSlug, mc_uuid: selectedPlayer, amount: amt, is_two_season: isTwoSeason, phase: parseInt(phase) }),
+    });
+    const d = await r.json();
+    setSigning(false);
+    if (!r.ok) {
+      setErr(d.error);
+    } else {
+      setSuccessMsg(`Signing request submitted for ${freeAgents.find(p => p.mc_uuid === selectedPlayer)?.mc_username ?? "player"} — waiting for admin approval.`);
+      setSelectedPlayer(""); setAmount(""); setIsTwoSeason(false);
+      loadData(); onRefresh();
+    }
+  };
+
+  return (
+    <div>
+      <div style={{ ...st.innerCard, marginBottom: 14, display: "flex", gap: 20, flexWrap: "wrap" as const }}>
+        <span style={{ color: "#555", fontSize: 13 }}>Cap remaining: <strong style={{ color: "#22d3ee" }}>{fmt(capRemaining)}</strong></span>
+        <span style={{ color: "#555", fontSize: 13 }}>Phase {phase} slots: <strong style={{ color: signingsLeft <= 0 ? "#ef4444" : "#22c55e" }}>{phaseCount}/{MAX_PER_PHASE}</strong></span>
+      </div>
+      <div style={{ background: "#0d1117", border: "1px solid #1a2030", borderRadius: 8, padding: "8px 12px", marginBottom: 14, fontSize: 12, color: "#555" }}>
+        Signings require admin approval · {fmt(MIN_SALARY)}–{fmt(MAX_SALARY)} salary · multiples of {SALARY_INCREMENT} · max {MAX_PER_PHASE} per phase · total cap {fmt(TOTAL_CAP)}
+      </div>
+      {signingsLeft <= 0 && (
+        <div style={{ color: "#fca5a5", background: "#450a0a", border: "1px solid #7f1d1d", borderRadius: 8, padding: "8px 12px", marginBottom: 12, fontSize: 13 }}>
+          Phase {phase} is full ({MAX_PER_PHASE}/{MAX_PER_PHASE} slots used). Select a different phase.
+        </div>
+      )}
+
+      {/* Form */}
+      <div style={{ ...st.innerCard, marginBottom: 16 }}>
+        <div style={{ color: "#aaa", fontWeight: 700, marginBottom: 12 }}>Request a Signing</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+          <div>
+            <div style={{ color: "#555", fontSize: 12, marginBottom: 4 }}>Phase</div>
+            <select style={st.input} value={phase} onChange={e => setPhase(e.target.value)}>
+              {[1, 2, 3, 4].map(p => <option key={p} value={p}>Phase {p}</option>)}
+            </select>
+          </div>
+          <div>
+            <div style={{ color: "#555", fontSize: 12, marginBottom: 4 }}>Salary</div>
+            <input type="number" placeholder={`${MIN_SALARY}–${MAX_SALARY}`} value={amount} onChange={e => setAmount(e.target.value)} step={SALARY_INCREMENT} min={MIN_SALARY} max={Math.min(MAX_SALARY, capRemaining)} style={st.input} />
+          </div>
+        </div>
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ color: "#555", fontSize: 12, marginBottom: 4 }}>Player (free agents only)</div>
+          {loadingFA
+            ? <div style={{ color: "#444", fontSize: 13 }}>Loading…</div>
+            : <select style={st.input} value={selectedPlayer} onChange={e => setSelectedPlayer(e.target.value)}>
+                <option value="">— Select free agent —</option>
+                {freeAgents.map(p => <option key={p.mc_uuid} value={p.mc_uuid}>{p.mc_username}</option>)}
+              </select>
+          }
+        </div>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, color: "#a855f7", fontSize: 13, cursor: "pointer", marginBottom: 10 }}>
+          <input type="checkbox" checked={isTwoSeason} onChange={e => setIsTwoSeason(e.target.checked)} style={{ accentColor: "#a855f7" }} /> 2-season contract
+        </label>
+        {amt > 0 && (
+          <div style={{ fontSize: 12, color: "#555", marginBottom: 8 }}>
+            Cap after: <span style={{ color: capUsed + amt > TOTAL_CAP ? "#ef4444" : "#22d3ee", fontWeight: 600 }}>{fmt(capUsed + amt)}</span> / {fmt(TOTAL_CAP)}
+            {capUsed + amt > TOTAL_CAP && <span style={{ color: "#fca5a5", marginLeft: 6 }}>⚠ Exceeds cap</span>}
+          </div>
+        )}
+        {err && <div style={{ color: "#fca5a5", background: "#450a0a", border: "1px solid #7f1d1d", borderRadius: 8, padding: "7px 12px", marginBottom: 8, fontSize: 13 }}>{err}</div>}
+        {successMsg && <div style={{ color: "#86efac", background: "#052e16", border: "1px solid #166534", borderRadius: 8, padding: "7px 12px", marginBottom: 8, fontSize: 13 }}>{successMsg}</div>}
+        <button onClick={signPlayer} disabled={signing || signingsLeft <= 0} style={{ ...ownerBtn("primary"), opacity: (signing || signingsLeft <= 0) ? 0.5 : 1 }}>
+          {signing ? "Submitting…" : "Submit Signing Request"}
+        </button>
+      </div>
+
+      {/* Pending requests */}
+      {pendingSignings.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ color: "#555", fontSize: 12, fontWeight: 600, marginBottom: 8, textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>Pending Requests</div>
+          {pendingSignings.map(c => (
+            <div key={c.id} style={{ ...st.innerCard, display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+              <img src={`https://minotar.net/avatar/${c.players.mc_username}/32`} style={{ width: 32, height: 32, borderRadius: 6, border: "1px solid #222" }} onError={e => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/32"; }} alt="" />
+              <span style={{ color: "#fff", fontWeight: 600, flex: 1 }}>{c.players.mc_username}</span>
+              <span style={{ color: "#444", fontSize: 12 }}>Phase {c.phase}</span>
+              <span style={{ color: "#22d3ee", fontWeight: 700 }}>{fmt(c.amount)}</span>
+              {c.is_two_season && <span style={{ color: "#a855f7", fontSize: 11 }}>2yr</span>}
+              <span style={{ color: "#fbbf24", background: "#1c1200", border: "1px solid #78350f", borderRadius: 6, fontSize: 11, padding: "2px 7px", fontWeight: 600 }}>pending</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Active roster */}
+      {contracts.length > 0 && (
+        <div>
+          <div style={{ color: "#555", fontSize: 12, fontWeight: 600, marginBottom: 8, textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>Active Roster</div>
+          {contracts.map(c => (
+            <div key={c.id} style={{ ...st.innerCard, display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+              <img src={`https://minotar.net/avatar/${c.players.mc_username}/32`} style={{ width: 32, height: 32, borderRadius: 6, border: "1px solid #222" }} onError={e => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/32"; }} alt="" />
+              <span style={{ color: "#fff", fontWeight: 600, flex: 1 }}>{c.players.mc_username}</span>
+              <span style={{ color: "#555", fontSize: 12 }}>Phase {c.phase}</span>
+              <span style={{ color: "#22d3ee", fontWeight: 700 }}>{fmt(c.amount)}</span>
+              {c.is_two_season && <span style={{ color: "#a855f7", fontSize: 11 }}>2yr</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 export default function OwnerPortalView({ teamRecord, leagueSlug, onBack }: {
-  teamRecord: { teams: Team };
+  teamRecord: { teams: Team; season?: string | null };
   leagueSlug: string;
   onBack: () => void;
 }) {
@@ -426,7 +575,8 @@ export default function OwnerPortalView({ teamRecord, leagueSlug, onBack }: {
   const [auctions, setAuctions] = useState<Auction[]>([]);
   const [allTeams, setAllTeams] = useState<Team[]>([]);
   const [myPicks, setMyPicks] = useState<DraftPick[]>([]);
-  const [tab, setTab] = useState<"roster" | "bid" | "trades">("roster");
+  const [seasonTeamIds, setSeasonTeamIds] = useState<string[]>([]);
+  const [tab, setTab] = useState<"roster" | "bid" | "trades" | "signings">("roster");
 
   const load = useCallback(async () => {
     const [c, ret, a, teams, picks] = await Promise.all([
@@ -441,12 +591,19 @@ export default function OwnerPortalView({ teamRecord, leagueSlug, onBack }: {
     setAuctions(Array.isArray(a) ? a : []);
     setAllTeams(Array.isArray(teams) ? teams : []);
     setMyPicks(Array.isArray(picks) ? picks : []);
-  }, [leagueSlug, team.id]);
+
+    if (teamRecord.season) {
+      const ownersRes = await fetch(`/api/team-owners?league=${leagueSlug}&season=${encodeURIComponent(teamRecord.season)}`);
+      const ownersData = await ownersRes.json().catch(() => []);
+      setSeasonTeamIds(Array.isArray(ownersData) ? ownersData.map((o: any) => o.team_id).filter(Boolean) : []);
+    }
+  }, [leagueSlug, team.id, teamRecord.season]);
 
   useEffect(() => { load(); }, [load]);
 
   const totalUsed = contracts.reduce((s, c) => s + c.amount, 0);
   const activeAuctions = auctions.filter(a => a.status === "active");
+  const seasonFilteredTeams = seasonTeamIds.length > 0 ? allTeams.filter(t => seasonTeamIds.includes(t.id)) : allTeams;
 
   return (
     <div>
@@ -469,14 +626,15 @@ export default function OwnerPortalView({ teamRecord, leagueSlug, onBack }: {
 
       {/* Tabs */}
       <div style={{ display: "flex", borderBottom: "1px solid #1a1a1a", marginBottom: 20 }}>
-        {([["roster", "Roster & Cap"], ["bid", `Live Auctions (${activeAuctions.length})`], ["trades", "Trades"]] as const).map(([t, label]) => (
+        {([["roster", "Roster & Cap"], ["signings", "Signings"], ["bid", `Live Auctions (${activeAuctions.length})`], ["trades", "Trades"]] as const).map(([t, label]) => (
           <button key={t} onClick={() => setTab(t)} style={{ padding: "10px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer", border: "none", background: "none", borderBottom: `2px solid ${tab === t ? "#3b82f6" : "transparent"}`, color: tab === t ? "#fff" : "#555" }}>{label}</button>
         ))}
       </div>
 
       {tab === "roster" && <RosterView contracts={contracts} retentions={retentions} />}
+      {tab === "signings" && <SigningsView teamId={team.id} leagueSlug={leagueSlug} contracts={contracts} onRefresh={load} />}
       {tab === "bid" && <BidView auctions={auctions} teamId={team.id} contracts={contracts} onRefresh={load} />}
-      {tab === "trades" && <TradesView teamId={team.id} leagueSlug={leagueSlug} contracts={contracts} allTeams={allTeams} myPicks={myPicks} onRefresh={load} />}
+      {tab === "trades" && <TradesView teamId={team.id} leagueSlug={leagueSlug} contracts={contracts} allTeams={seasonFilteredTeams} myPicks={myPicks} onRefresh={load} />}
     </div>
   );
 }
