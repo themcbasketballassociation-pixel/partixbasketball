@@ -2730,8 +2730,8 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
         for (let mi=0; mi<curMs.length; mi++) {
           const nM=nextMs[Math.floor(mi/2)]; if(!nM) continue;
           // Connect to whichever slot in the next round is empty (TBD); fall back to even/odd
-          const winSlot = nM.team1_id !== null && nM.team2_id === null ? "2"
-                        : nM.team1_id === null && nM.team2_id !== null ? "1"
+          const winSlot = nM.team1_id != null && nM.team2_id == null ? "2"
+                        : nM.team1_id == null && nM.team2_id != null ? "1"
                         : mi%2===0 ? "1" : "2";
           drawBracket(`${curMs[mi].id}-1`,`${curMs[mi].id}-2`,`${nM.id}-${winSlot}`,`${curMs[mi].id}-${nM.id}`,"LR");
         }
@@ -2748,8 +2748,8 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
         const curMs=eastRounds[ri].matchups, nextMs=eastRounds[ri+1].matchups;
         for (let mi=0; mi<curMs.length; mi++) {
           const nM=nextMs[Math.floor(mi/2)]; if(!nM) continue;
-          const winSlot = nM.team1_id !== null && nM.team2_id === null ? "2"
-                        : nM.team1_id === null && nM.team2_id !== null ? "1"
+          const winSlot = nM.team1_id != null && nM.team2_id == null ? "2"
+                        : nM.team1_id == null && nM.team2_id != null ? "1"
                         : mi%2===0 ? "1" : "2";
           drawBracket(`${curMs[mi].id}-1`,`${curMs[mi].id}-2`,`${nM.id}-${winSlot}`,`${curMs[mi].id}-${nM.id}`,"RL");
         }
@@ -2918,38 +2918,49 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
     seedsInit.current = false;
   };
 
-  // Helper: compute the actual paddingTop applied to a first-round column (accounts for bye alignment)
-  const calcByePaddingTop = useCallback((col: {matchups: BracketMatchup[]}, ri: number, nextMatchups: BracketMatchup[]): number => {
-    const origIdx = col.matchups.findIndex(m => m.team1_id && m.team2_id);
-    const nM = origIdx >= 0 ? nextMatchups[Math.floor(origIdx/2)] : null;
-    if (nM && nM.team1_id !== null && nM.team2_id === null)
-      return Math.max(0, topOffsetForRound(ri+1) + SLOT_H + INNER_GAP + SLOT_H/2 - MATCHUP_H/2);
-    if (nM && nM.team1_id === null && nM.team2_id !== null)
-      return Math.max(0, topOffsetForRound(ri+1) + SLOT_H/2 - MATCHUP_H/2);
-    return topOffsetForRound(ri);
+  // Compute absolute top position for a first-round matchup aligned to its target slot in next round
+  const calcFirstRoundTop = useCallback((fullIdx: number, ri: number, nextMatchups: BracketMatchup[]): number => {
+    const nM = nextMatchups[Math.floor(fullIdx / 2)];
+    if (!nM) return topOffsetForRound(ri) + fullIdx * (MATCHUP_H + gapForRound(ri));
+    const nMBaseTop = topOffsetForRound(ri + 1) + Math.floor(fullIdx / 2) * (MATCHUP_H + gapForRound(ri + 1));
+    if (nM.team1_id != null && nM.team2_id == null) {
+      // Bye is team1 → winner goes to team2 (bottom) → center matchup at team2 center
+      return Math.max(0, nMBaseTop + SLOT_H + INNER_GAP + SLOT_H / 2 - MATCHUP_H / 2);
+    }
+    if (nM.team1_id == null && nM.team2_id != null) {
+      // Bye is team2 → winner goes to team1 (top) → center matchup at team1 center
+      return Math.max(0, nMBaseTop + SLOT_H / 2 - MATCHUP_H / 2);
+    }
+    // No bye: even matchup → team1 slot, odd → team2 slot
+    return topOffsetForRound(ri) + fullIdx * (MATCHUP_H + gapForRound(ri));
   }, []);
 
   const canvasH = useMemo(() => {
+    const colH = (col: {matchups: BracketMatchup[]}, ri: number, nextMs: BracketMatchup[] | null) => {
+      if (nextMs) {
+        // First round with bye alignment: absolute positioned
+        const visMs = col.matchups.filter(m => m.team1_id && m.team2_id);
+        return visMs.reduce((max, _, vi) => Math.max(max, calcFirstRoundTop(vi, ri, nextMs) + MATCHUP_H), MATCHUP_H);
+      }
+      const n = col.matchups.length;
+      return topOffsetForRound(ri) + n * MATCHUP_H + Math.max(0, n - 1) * gapForRound(ri);
+    };
     if (isConferenceBracket) {
       let maxH = MATCHUP_H;
-      // West: ri = index from left (R1=0)
       westRounds.forEach((col,ri)=>{
-        const n=col.matchups.length;
-        const pt = ri===0 && ri+1<westRounds.length ? calcByePaddingTop(col, ri, westRounds[ri+1].matchups) : topOffsetForRound(ri);
-        const h=pt+n*MATCHUP_H+Math.max(0,n-1)*gapForRound(ri); if(h>maxH) maxH=h;
+        const h = colH(col, ri, ri===0 && ri+1<westRounds.length ? westRounds[ri+1].matchups : null);
+        if(h>maxH) maxH=h;
       });
-      // East: eastRounds[i] uses riFromRight = i
       eastRounds.forEach((col,i)=>{
-        const n=col.matchups.length;
-        const pt = i===0 && i+1<eastRounds.length ? calcByePaddingTop(col, i, eastRounds[i+1].matchups) : topOffsetForRound(i);
-        const h=pt+n*MATCHUP_H+Math.max(0,n-1)*gapForRound(i); if(h>maxH) maxH=h;
+        const h = colH(col, i, i===0 && i+1<eastRounds.length ? eastRounds[i+1].matchups : null);
+        if(h>maxH) maxH=h;
       });
       return maxH + 80;
     }
     let max=200;
     for (let ri=0;ri<rounds.length;ri++) { const n=rounds[ri].matchups.length; const h=topOffsetForRound(ri)+n*MATCHUP_H+Math.max(0,n-1)*gapForRound(ri); if(h>max) max=h; }
     return max+80;
-  }, [rounds, westRounds, eastRounds, isConferenceBracket]);
+  }, [rounds, westRounds, eastRounds, isConferenceBracket, calcFirstRoundTop]);
 
   // Matchup group: two separate sport-pill boxes (one per team)
   const MatchupGroup = ({ m, conf }: { m: BracketMatchup; conf: "W"|"E"|"F" }) => (
@@ -3029,20 +3040,29 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
                   {/* ── WEST side: R1 leftmost, Conf Finals rightmost before center ── */}
                   {westRounds.map((col,ri)=>{
                     const isFirstRound = ri === 0;
+                    const nextMs = isFirstRound && ri+1 < westRounds.length ? westRounds[ri+1].matchups : null;
                     const visibleMatchups = isFirstRound
                       ? col.matchups.filter(m => m.team1_id && m.team2_id)
                       : col.matchups;
-                    const colPaddingTop = isFirstRound && ri + 1 < westRounds.length
-                      ? calcByePaddingTop(col, ri, westRounds[ri+1].matchups)
-                      : topOffsetForRound(ri);
                     return (
                       <div key={col.name} style={{ width:240, flexShrink:0 }}>
                         <div style={{ fontSize:"0.6rem", fontWeight:700, color:"#ef4444", textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:10, textAlign:"center" }}>
                           {col.name}
                         </div>
-                        <div style={{ display:"flex", flexDirection:"column", paddingTop:colPaddingTop, gap:gapForRound(ri) }}>
-                          {visibleMatchups.map(m=><MatchupGroup key={m.id} m={m} conf="W" />)}
-                        </div>
+                        {nextMs ? (
+                          /* First round with bye: absolutely position each matchup */
+                          <div style={{ position:"relative", height: visibleMatchups.reduce((mx,_,vi)=>Math.max(mx,calcFirstRoundTop(vi,ri,nextMs)+MATCHUP_H),MATCHUP_H) }}>
+                            {visibleMatchups.map((m,vi)=>(
+                              <div key={m.id} style={{ position:"absolute", top:calcFirstRoundTop(vi,ri,nextMs), left:0, right:0 }}>
+                                <MatchupGroup m={m} conf="W" />
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={{ display:"flex", flexDirection:"column", paddingTop:topOffsetForRound(ri), gap:gapForRound(ri) }}>
+                            {visibleMatchups.map(m=><MatchupGroup key={m.id} m={m} conf="W" />)}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -3060,20 +3080,29 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
                   {[...eastRounds].reverse().map((col,reverseIdx)=>{
                     const riFromRight = eastRounds.length - 1 - reverseIdx;
                     const isFirstRound = riFromRight === 0;
+                    const nextMs = isFirstRound && riFromRight+1 < eastRounds.length ? eastRounds[riFromRight+1].matchups : null;
                     const visibleMatchups = isFirstRound
                       ? col.matchups.filter(m => m.team1_id && m.team2_id)
                       : col.matchups;
-                    const colPaddingTop = isFirstRound && riFromRight + 1 < eastRounds.length
-                      ? calcByePaddingTop(col, riFromRight, eastRounds[riFromRight+1].matchups)
-                      : topOffsetForRound(riFromRight);
                     return (
                       <div key={col.name} style={{ width:240, flexShrink:0 }}>
                         <div style={{ fontSize:"0.6rem", fontWeight:700, color:"#3b82f6", textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:10, textAlign:"center" }}>
                           {col.name}
                         </div>
-                        <div style={{ display:"flex", flexDirection:"column", paddingTop:colPaddingTop, gap:gapForRound(riFromRight) }}>
-                          {visibleMatchups.map(m=><MatchupGroup key={m.id} m={m} conf="E" />)}
-                        </div>
+                        {nextMs ? (
+                          /* First round with bye: absolutely position each matchup */
+                          <div style={{ position:"relative", height: visibleMatchups.reduce((mx,_,vi)=>Math.max(mx,calcFirstRoundTop(vi,riFromRight,nextMs)+MATCHUP_H),MATCHUP_H) }}>
+                            {visibleMatchups.map((m,vi)=>(
+                              <div key={m.id} style={{ position:"absolute", top:calcFirstRoundTop(vi,riFromRight,nextMs), left:0, right:0 }}>
+                                <MatchupGroup m={m} conf="E" />
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={{ display:"flex", flexDirection:"column", paddingTop:topOffsetForRound(riFromRight), gap:gapForRound(riFromRight) }}>
+                            {visibleMatchups.map(m=><MatchupGroup key={m.id} m={m} conf="E" />)}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
