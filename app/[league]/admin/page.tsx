@@ -4253,10 +4253,126 @@ function BoardPortalView({ league, onBack }: { league: string; onBack?: () => vo
   );
 }
 
+// ─── Backup / Restore Tab (super-admin only) ──────────────────────────────────
+
+const SUPER_ADMIN_ID = "692814756695900191";
+
+function BackupTab() {
+  const [status, setStatus] = useState<string>("");
+  const [busy, setBusy] = useState(false);
+  const [restoreResults, setRestoreResults] = useState<Record<string, string> | null>(null);
+
+  const handleBackup = async () => {
+    setBusy(true);
+    setStatus("Fetching backup…");
+    setRestoreResults(null);
+    try {
+      const r = await fetch("/api/admin/backup");
+      if (!r.ok) { setStatus("Error: " + (await r.json()).error); return; }
+      const json = await r.json();
+      const blob = new Blob([JSON.stringify(json, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `partix-backup-${new Date().toISOString().slice(0,19).replace(/:/g,"-")}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      const total = Object.values(json.data as Record<string,unknown[]>).reduce((s,t)=>s+t.length,0);
+      setStatus(`Backup saved — ${total} total rows across ${Object.keys(json.data).length} tables.${json.errors?.length ? " ⚠️ Some tables had errors: " + json.errors.join("; ") : ""}`);
+    } catch (e: any) {
+      setStatus("Failed: " + e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRestore = async (file: File) => {
+    const text = await file.text();
+    let payload: any;
+    try { payload = JSON.parse(text); } catch { setStatus("Invalid JSON file."); return; }
+    if (!payload.data) { setStatus("Invalid backup format — missing 'data' field."); return; }
+
+    const confirmed = window.confirm(
+      `Restore backup from ${payload.created_at ?? "unknown date"}?\n\nThis will UPSERT all rows from the backup into the database. Existing rows with matching primary keys will be overwritten.\n\nAre you sure?`
+    );
+    if (!confirmed) return;
+
+    setBusy(true);
+    setStatus("Restoring…");
+    setRestoreResults(null);
+    try {
+      const r = await fetch("/api/admin/backup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data: payload.data, confirmRestore: true }),
+      });
+      const result = await r.json();
+      if (!r.ok) { setStatus("Error: " + result.error); return; }
+      setRestoreResults(result.results);
+      setStatus("Restore complete.");
+    } catch (e: any) {
+      setStatus("Failed: " + e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="max-w-xl space-y-6">
+      <div className="rounded-xl border border-slate-700 bg-slate-950 p-5 space-y-3">
+        <h3 className="text-white font-bold text-lg">Save Backup</h3>
+        <p className="text-slate-400 text-sm">Downloads a full JSON backup of all database tables.</p>
+        <button
+          onClick={handleBackup}
+          disabled={busy}
+          className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold disabled:opacity-50"
+        >
+          {busy ? "Working…" : "Download Backup"}
+        </button>
+      </div>
+
+      <div className="rounded-xl border border-red-900 bg-slate-950 p-5 space-y-3">
+        <h3 className="text-white font-bold text-lg">Restore from Backup</h3>
+        <p className="text-slate-400 text-sm">
+          Select a previously downloaded backup JSON file. Rows will be upserted — existing data with matching IDs will be overwritten.
+        </p>
+        <label className={`inline-block px-5 py-2 rounded-lg bg-red-800 hover:bg-red-700 text-white text-sm font-semibold cursor-pointer ${busy ? "opacity-50 pointer-events-none" : ""}`}>
+          {busy ? "Working…" : "Choose Backup File…"}
+          <input
+            type="file"
+            accept=".json"
+            className="hidden"
+            disabled={busy}
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleRestore(f); e.target.value = ""; }}
+          />
+        </label>
+      </div>
+
+      {status && (
+        <p className={`text-sm font-medium ${status.startsWith("Error") || status.startsWith("Failed") || status.startsWith("Invalid") ? "text-red-400" : "text-green-400"}`}>
+          {status}
+        </p>
+      )}
+
+      {restoreResults && (
+        <div className="rounded-xl border border-slate-700 bg-slate-950 p-4 space-y-1">
+          <p className="text-slate-400 text-xs font-bold uppercase mb-2">Restore Results</p>
+          {Object.entries(restoreResults).map(([table, res]) => (
+            <div key={table} className="flex justify-between text-xs">
+              <span className="text-slate-300 font-mono">{table}</span>
+              <span className={res.startsWith("error") ? "text-red-400" : res.startsWith("skipped") ? "text-slate-500" : "text-green-400"}>{res}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Admin Page ──────────────────────────────────────────────────────────
 
 const TABS = ["Players", "Teams", "Schedule", "Box Scores", "Accolades", "Champions", "Articles", "Stats", "Playoffs", "Owners", "Draft Picks", "Auction", "Trades", "Board"] as const;
-type Tab = typeof TABS[number];
+type Tab = typeof TABS[number] | "Backup";
 const SEASONS = ["Season 1","Season 1 Playoffs","Season 2","Season 2 Playoffs","Season 3","Season 3 Playoffs","Season 4","Season 4 Playoffs","Season 5","Season 5 Playoffs","Season 6","Season 6 Playoffs","Season 7","Season 7 Playoffs"];
 
 export default function AdminPage({ params }: { params?: Promise<{ league?: string }> }) {
@@ -4488,6 +4604,14 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
             {tab}
           </button>
         ))}
+        {(session as any)?.user?.id?.toString() === SUPER_ADMIN_ID && (
+          <button
+            onClick={() => setActiveTab("Backup")}
+            className={`px-5 py-3.5 text-sm font-medium transition whitespace-nowrap border-b-2 ${activeTab === "Backup" ? "border-yellow-400 text-yellow-400" : "border-transparent text-yellow-600 hover:text-yellow-400 hover:border-yellow-600"}`}
+          >
+            Backup
+          </button>
+        )}
       </div>
 
       <div className="p-6">
@@ -4505,6 +4629,7 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
         {activeTab === "Auction" && <AuctionAdminTab league={league} />}
         {activeTab === "Trades" && <TradesAdminTab league={league} />}
         {activeTab === "Board" && <BoardMembersTab league={league} />}
+        {activeTab === "Backup" && (session as any)?.user?.id?.toString() === SUPER_ADMIN_ID && <BackupTab />}
       </div>
     </div>
   );
