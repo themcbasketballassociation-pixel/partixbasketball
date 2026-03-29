@@ -3155,14 +3155,14 @@ function OwnersTab({ league }: { league: string }) {
   const refresh = useCallback(async () => {
     const [o, t] = await Promise.all([
       fetch(`/api/team-owners?league=${league}&season=${encodeURIComponent(filterSeason)}`).then((r) => r.json()),
-      fetch(`/api/teams?league=${league}`).then((r) => r.json()),
+      fetch(`/api/teams?league=${league}&season=${encodeURIComponent(season)}`).then((r) => r.json()),
     ]);
     const ownerData = Array.isArray(o) ? o : [];
     setOwners(ownerData);
     // If none have a season field, the column may not exist yet
     setNeedsMigration(ownerData.length > 0 && ownerData.every((x: OwnerRow) => x.season === undefined));
     setTeams(Array.isArray(t) ? t : []);
-  }, [league, filterSeason]);
+  }, [league, filterSeason, season]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
