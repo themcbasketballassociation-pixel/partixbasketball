@@ -3140,22 +3140,29 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
 // ─── Tab: Owners ──────────────────────────────────────────────────────────────
 
 function OwnersTab({ league }: { league: string }) {
-  type OwnerRow = { id: string; discord_id: string; league: string; teams: { id: string; name: string; abbreviation: string } };
+  type OwnerRow = { id: string; discord_id: string; owner_name?: string | null; league: string; season?: string | null; teams: { id: string; name: string; abbreviation: string } };
   type TeamRow = { id: string; name: string; abbreviation: string };
   const [owners, setOwners] = useState<OwnerRow[]>([]);
   const [teams, setTeams] = useState<TeamRow[]>([]);
   const [discordId, setDiscordId] = useState("");
+  const [ownerName, setOwnerName] = useState("");
   const [teamId, setTeamId] = useState("");
+  const [season, setSeason] = useState("Season 7");
+  const [filterSeason, setFilterSeason] = useState("Season 7");
   const [err, setErr] = useState("");
+  const [needsMigration, setNeedsMigration] = useState(false);
 
   const refresh = useCallback(async () => {
     const [o, t] = await Promise.all([
-      fetch(`/api/team-owners?league=${league}`).then((r) => r.json()),
+      fetch(`/api/team-owners?league=${league}&season=${encodeURIComponent(filterSeason)}`).then((r) => r.json()),
       fetch(`/api/teams?league=${league}`).then((r) => r.json()),
     ]);
-    setOwners(Array.isArray(o) ? o : []);
+    const ownerData = Array.isArray(o) ? o : [];
+    setOwners(ownerData);
+    // If none have a season field, the column may not exist yet
+    setNeedsMigration(ownerData.length > 0 && ownerData.every((x: OwnerRow) => x.season === undefined));
     setTeams(Array.isArray(t) ? t : []);
-  }, [league]);
+  }, [league, filterSeason]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -3165,11 +3172,11 @@ function OwnersTab({ league }: { league: string }) {
     const r = await fetch("/api/team-owners", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ discord_id: discordId.trim(), team_id: teamId, league }),
+      body: JSON.stringify({ discord_id: discordId.trim(), owner_name: ownerName.trim() || null, team_id: teamId, league, season }),
     });
     const d = await r.json();
     if (!r.ok) return setErr(d.error);
-    setDiscordId(""); setTeamId(""); refresh();
+    setDiscordId(""); setOwnerName(""); setTeamId(""); refresh();
   };
 
   const remove = async (id: string) => {
@@ -3181,31 +3188,57 @@ function OwnersTab({ league }: { league: string }) {
 
   return (
     <div>
+      {needsMigration && (
+        <div className="mb-4 rounded-xl border border-yellow-800 bg-yellow-950/40 px-4 py-3 text-yellow-300 text-xs">
+          <strong>Action required:</strong> Run this SQL in your{" "}
+          <a href="https://supabase.com/dashboard" target="_blank" rel="noreferrer" className="underline">Supabase SQL editor</a>{" "}
+          to enable season &amp; name tracking:<br />
+          <code className="block mt-1 font-mono bg-black/30 rounded px-2 py-1 text-yellow-200 select-all">
+            ALTER TABLE team_owners ADD COLUMN IF NOT EXISTS season TEXT DEFAULT &apos;Season 7&apos;;<br />
+            ALTER TABLE team_owners ADD COLUMN IF NOT EXISTS owner_name TEXT;
+          </code>
+        </div>
+      )}
       <div className={card} style={{ marginBottom: 16 }}>
         <div className="text-sm font-semibold text-slate-300 mb-4">Assign Team Owner</div>
         <div className="flex gap-3 flex-wrap mb-2">
-          <input className={input} placeholder="Discord User ID" value={discordId} onChange={(e) => setDiscordId(e.target.value)} style={{ flex: 2, minWidth: 160 }} />
+          <input className={input} placeholder="Owner name (display)" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} style={{ flex: 2, minWidth: 140 }} />
+          <input className={input} placeholder="Discord User ID" value={discordId} onChange={(e) => setDiscordId(e.target.value)} style={{ flex: 2, minWidth: 140 }} />
           <select className={input} value={teamId} onChange={(e) => setTeamId(e.target.value)} style={{ flex: 2, minWidth: 160 }}>
             <option value="">— Select team —</option>
             {[...teams].sort((a,b)=>a.name.localeCompare(b.name)).map((t) => <option key={t.id} value={t.id}>{t.name} ({t.abbreviation})</option>)}
+          </select>
+          <select className={input} value={season} onChange={(e) => setSeason(e.target.value)} style={{ flex: 1, minWidth: 120 }}>
+            {SEASONS.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
           <button className={btnPrimary} onClick={add}>Assign</button>
         </div>
         <ErrMsg msg={err} />
         <p className="text-xs text-slate-500 mt-2">Discord ID is the numeric user ID. Use Developer Mode in Discord to copy it.</p>
       </div>
+
+      <div className="flex items-center gap-3 mb-4">
+        <span className="text-xs text-slate-400 font-medium">Showing:</span>
+        <select className={input} value={filterSeason} onChange={(e) => setFilterSeason(e.target.value)} style={{ minWidth: 140 }}>
+          {SEASONS.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </div>
+
       <div className="flex flex-col gap-2">
         {sorted.map((o) => (
           <div key={o.id} className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-950 px-4 py-3">
             <div className="flex-1">
-              <div className="text-white font-medium text-sm">{o.teams?.name ?? "Unknown Team"} <span className="text-slate-500">({o.teams?.abbreviation})</span></div>
+              <div className="text-white font-medium text-sm">
+                {o.owner_name && <span className="text-blue-300 font-bold mr-2">{o.owner_name}</span>}
+                {o.teams?.name ?? "Unknown Team"} <span className="text-slate-500">({o.teams?.abbreviation})</span>
+              </div>
               <div className="text-slate-500 text-xs font-mono">{o.discord_id}</div>
             </div>
             <button className={btnDanger} onClick={() => remove(o.id)}>Remove</button>
           </div>
         ))}
       </div>
-      {owners.length === 0 && <div className="text-slate-600 text-sm text-center py-6">No team owners assigned yet.</div>}
+      {owners.length === 0 && <div className="text-slate-600 text-sm text-center py-6">No team owners for {filterSeason}.</div>}
     </div>
   );
 }
