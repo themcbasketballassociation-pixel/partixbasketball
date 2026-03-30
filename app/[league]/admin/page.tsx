@@ -3594,19 +3594,10 @@ function AuctionAdminTab({ league }: { league: string }) {
   // Sign any existing pending auctions where the player is a team owner
   const signPendingOwners = async () => {
     setBulkMsg("");
-    const [pendingAuctionsData, ownersData, allPlayersData] = await Promise.all([
+    const [pendingAuctionsData, ownersData] = await Promise.all([
       fetch(`/api/auction?league=${league}&status=pending`).then((r) => r.json()),
       fetch(`/api/team-owners?league=${league}`).then((r) => r.json()),
-      fetch(`/api/players`).then((r) => r.json()),
     ]);
-
-    // mc_uuid → discord_id
-    type PlayerRow = { mc_uuid: string; discord_id: string | null };
-    const discordByUuid = new Map<string, string>(
-      (Array.isArray(allPlayersData) ? allPlayersData : [])
-        .filter((p: PlayerRow) => p.discord_id)
-        .map((p: PlayerRow) => [p.mc_uuid, p.discord_id as string])
-    );
 
     // discord_id → team_id
     type OwnerRow = { discord_id: string; team_id: string };
@@ -3614,11 +3605,20 @@ function AuctionAdminTab({ league }: { league: string }) {
       (Array.isArray(ownersData) ? ownersData : []).map((o: OwnerRow) => [o.discord_id, o.team_id])
     );
 
-    type PendingRow = { id: string; mc_uuid: string; min_price: number };
+    // Build mc_uuid → discord_id from already-loaded players state
+    type PlayerRow = { mc_uuid: string; discord_id: string | null };
+    const discordByUuid = new Map<string, string>(
+      (players as PlayerRow[])
+        .filter((p) => p.discord_id)
+        .map((p) => [p.mc_uuid, p.discord_id as string])
+    );
+
+    type PendingRow = { id: string; mc_uuid: string; min_price: number; players: { discord_id?: string | null } };
     const pending = Array.isArray(pendingAuctionsData) ? pendingAuctionsData as PendingRow[] : [];
     let signed = 0;
     for (const a of pending) {
-      const discordId = discordByUuid.get(a.mc_uuid);
+      // Prefer discord_id from the auction's player join, fall back to players state
+      const discordId = a.players?.discord_id ?? discordByUuid.get(a.mc_uuid);
       const teamId = discordId ? ownerByDiscord.get(discordId) : undefined;
       if (!teamId) continue;
       const cr = await fetch("/api/contracts", {
@@ -3635,7 +3635,11 @@ function AuctionAdminTab({ league }: { league: string }) {
         signed++;
       }
     }
-    setBulkMsg(signed > 0 ? `Signed ${signed} owner(s) to their teams.` : "No pending owners found.");
+    if (pending.length === 0) {
+      setBulkMsg("No pending auctions found.");
+    } else {
+      setBulkMsg(signed > 0 ? `Signed ${signed} owner(s) to their teams.` : "No pending owners found (check that players have discord IDs linked).");
+    }
     refresh();
   };
 

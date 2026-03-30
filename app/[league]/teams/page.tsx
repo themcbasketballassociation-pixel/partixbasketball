@@ -7,11 +7,14 @@ const leagueNames: Record<string, string> = {
   mbgl: "G League",
 };
 
+const TOTAL_CAP = 25000;
+
 type Team = { id: string; name: string; abbreviation: string; division: string | null; logo_url: string | null; color2?: string | null };
 type Player = { mc_uuid: string; mc_username: string };
 type PlayerTeam = { mc_uuid: string; team_id: string; players: Player };
+type Contract = { team_id: string; amount: number };
 
-function TeamCard({ team, players }: { team: Team; players: PlayerTeam[] }) {
+function TeamCard({ team, players, capUsed }: { team: Team; players: PlayerTeam[]; capUsed: number }) {
   const accent = team.color2 ?? null;
   return (
     <div style={{
@@ -68,22 +71,46 @@ function TeamCard({ team, players }: { team: Team; players: PlayerTeam[] }) {
           </div>
         )}
       </div>
+
+      {/* Cap bar */}
+      <div style={{ padding: "10px 18px 14px", borderTop: "1px solid #1e1e1e" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
+          <span style={{ color: "#555", fontSize: "0.72rem" }}>Cap used</span>
+          <span style={{ fontSize: "0.72rem", fontWeight: 700 }}>
+            <span style={{ color: capUsed > TOTAL_CAP ? "#ef4444" : "#aaa" }}>{capUsed.toLocaleString()}</span>
+            <span style={{ color: "#333" }}> / </span>
+            <span style={{ color: "#444" }}>{TOTAL_CAP.toLocaleString()}</span>
+          </span>
+        </div>
+        <div style={{ background: "#111", borderRadius: 4, height: 4, overflow: "hidden" }}>
+          <div style={{
+            height: "100%",
+            width: `${Math.min(100, (capUsed / TOTAL_CAP) * 100)}%`,
+            background: capUsed > TOTAL_CAP ? "#ef4444" : capUsed / TOTAL_CAP > 0.8 ? "#f59e0b" : "#22c55e",
+            borderRadius: 4,
+            transition: "width 0.3s",
+          }} />
+        </div>
+        <div style={{ color: capUsed > TOTAL_CAP ? "#ef4444" : "#22c55e", fontSize: "0.72rem", marginTop: 4, textAlign: "right" }}>
+          {capUsed > TOTAL_CAP ? `-${(capUsed - TOTAL_CAP).toLocaleString()} over` : `${(TOTAL_CAP - capUsed).toLocaleString()} available`}
+        </div>
+      </div>
     </div>
   );
 }
 
-function EvenGrid({ teams, players }: { teams: Team[]; players: PlayerTeam[] }) {
+function EvenGrid({ teams, players, capByTeam }: { teams: Team[]; players: PlayerTeam[]; capByTeam: Map<string, number> }) {
   const cols = Math.max(2, Math.ceil(teams.length / 2));
   return (
     <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 14 }}>
       {teams.map((t) => (
-        <TeamCard key={t.id} team={t} players={players.filter((pt) => pt.team_id === t.id)} />
+        <TeamCard key={t.id} team={t} players={players.filter((pt) => pt.team_id === t.id)} capUsed={capByTeam.get(t.id) ?? 0} />
       ))}
     </div>
   );
 }
 
-function ConferenceSection({ title, teams, players, accent }: { title: string; teams: Team[]; players: PlayerTeam[]; accent: string }) {
+function ConferenceSection({ title, teams, players, capByTeam, accent }: { title: string; teams: Team[]; players: PlayerTeam[]; capByTeam: Map<string, number>; accent: string }) {
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
@@ -92,7 +119,7 @@ function ConferenceSection({ title, teams, players, accent }: { title: string; t
         <div style={{ flex: 1, height: 1, background: "#1e1e1e" }} />
         <span style={{ fontSize: "0.7rem", color: "#444" }}>{teams.length} team{teams.length !== 1 ? "s" : ""}</span>
       </div>
-      <EvenGrid teams={teams} players={players} />
+      <EvenGrid teams={teams} players={players} capByTeam={capByTeam} />
     </div>
   );
 }
@@ -104,6 +131,7 @@ export default function TeamsPage({ params }: { params?: Promise<{ league?: stri
 
   const [teams, setTeams] = React.useState<Team[]>([]);
   const [playerTeams, setPlayerTeams] = React.useState<PlayerTeam[]>([]);
+  const [contracts, setContracts] = React.useState<Contract[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [seasons, setSeasons] = React.useState<string[]>([]);
   const [season, setSeason] = React.useState<string>("");
@@ -129,9 +157,11 @@ export default function TeamsPage({ params }: { params?: Promise<{ league?: stri
     Promise.all([
       fetch(`/api/teams?league=${slug}&season=${encodeURIComponent(season)}`).then((r) => r.json()),
       fetch(`/api/teams/players?league=${slug}&season=${encodeURIComponent(season)}`).then((r) => r.json()),
-    ]).then(([t, pt]) => {
+      fetch(`/api/contracts?league=${slug}&season=${encodeURIComponent(season)}&status=active`).then((r) => r.json()),
+    ]).then(([t, pt, c]) => {
       setTeams(Array.isArray(t) ? t : []);
       setPlayerTeams(Array.isArray(pt) ? pt : []);
+      setContracts(Array.isArray(c) ? c : []);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [slug, season]);
@@ -140,6 +170,14 @@ export default function TeamsPage({ params }: { params?: Promise<{ league?: stri
   const eastTeams = teams.filter((t) => t.division === "East");
   const otherTeams = teams.filter((t) => !t.division);
   const hasConferences = westTeams.length > 0 || eastTeams.length > 0;
+
+  const capByTeam = React.useMemo(() => {
+    const m = new Map<string, number>();
+    for (const c of contracts) {
+      m.set(c.team_id, (m.get(c.team_id) ?? 0) + c.amount);
+    }
+    return m;
+  }, [contracts]);
 
   return (
     <div style={{ borderRadius: "1rem", border: "1px solid #1e1e1e", background: "#111", overflow: "hidden" }}>
@@ -164,18 +202,18 @@ export default function TeamsPage({ params }: { params?: Promise<{ league?: stri
       ) : hasConferences ? (
         <div style={{ padding: 28, display: "flex", flexDirection: "column", gap: 36 }}>
           {westTeams.length > 0 && (
-            <ConferenceSection title="Western Conference" teams={westTeams} players={playerTeams} accent="#ef4444" />
+            <ConferenceSection title="Western Conference" teams={westTeams} players={playerTeams} capByTeam={capByTeam} accent="#ef4444" />
           )}
           {eastTeams.length > 0 && (
-            <ConferenceSection title="Eastern Conference" teams={eastTeams} players={playerTeams} accent="#3b82f6" />
+            <ConferenceSection title="Eastern Conference" teams={eastTeams} players={playerTeams} capByTeam={capByTeam} accent="#3b82f6" />
           )}
           {otherTeams.length > 0 && (
-            <ConferenceSection title="Other" teams={otherTeams} players={playerTeams} accent="#888" />
+            <ConferenceSection title="Other" teams={otherTeams} players={playerTeams} capByTeam={capByTeam} accent="#888" />
           )}
         </div>
       ) : (
         <div style={{ padding: 28 }}>
-          <EvenGrid teams={teams} players={playerTeams} />
+          <EvenGrid teams={teams} players={playerTeams} capByTeam={capByTeam} />
         </div>
       )}
     </div>

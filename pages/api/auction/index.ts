@@ -11,7 +11,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .from("auctions")
       .select(`
         *,
-        players(mc_uuid, mc_username),
+        players(mc_uuid, mc_username, discord_id),
         winning_team:teams!auctions_winning_team_id_fkey(id, name, abbreviation, color2),
         auction_bids(
           id, team_id, amount, is_two_season, effective_value, placed_at, is_valid, invalidation_reason,
