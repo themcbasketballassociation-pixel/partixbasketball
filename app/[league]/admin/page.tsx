@@ -1991,7 +1991,7 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
     { key: "pass_total",  label: "PASS", hint: "Total Pass Attempts",      slash: false },
     { key: "poss_total",  label: "POSS", hint: "Total Possession Seconds", slash: false },
     ...(isS6Plus ? [
-      { key: "min_total", label: "MIN", hint: "Total Minutes",              slash: false },
+      { key: "min_total", label: "MIN", hint: "MM:SS e.g. 175:30",          slash: false },
     ] : []),
   ];
 
@@ -2066,7 +2066,13 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
       to_total:  gp && row.topg != null ? String(round(row.topg * gp)) : "",
       pass_total: gp && row.pass_attempts_pg != null ? String(round(row.pass_attempts_pg * gp)) : "",
       poss_total: gp && row.possession_time_pg != null ? String(Math.round(row.possession_time_pg * gp)) : "",
-      min_total: gp && row.mpg != null ? String(Math.round(row.mpg * gp * 10) / 10) : "",
+      min_total: (() => {
+        if (!gp || row.mpg == null) return "";
+        const totalMins = row.mpg * gp;
+        const m = Math.floor(totalMins);
+        const s = Math.round((totalMins - m) * 60);
+        return `${m}:${s.toString().padStart(2, "0")}`;
+      })(),
     });
   }, []);
 
@@ -2157,7 +2163,15 @@ function StatsViewTab({ league, season: initialSeason }: { league: string; seaso
     const to_total  = fields.to_total?.trim()   ? parseFloat(fields.to_total)  || null : null;
     const pass_tot  = fields.pass_total?.trim() ? parseFloat(fields.pass_total) || null : null;
     const poss_tot  = fields.poss_total?.trim() ? parseInt(fields.poss_total)   || null : null;
-    const min_tot   = fields.min_total?.trim()  ? parseFloat(fields.min_total)  || null : null;
+    const min_tot   = (() => {
+      const raw = fields.min_total?.trim();
+      if (!raw) return null;
+      if (raw.includes(":")) {
+        const [m, s] = raw.split(":").map(x => parseInt(x.trim()));
+        return (!isNaN(m) && !isNaN(s)) ? m + s / 60 : null;
+      }
+      return parseFloat(raw) || null;
+    })();
     const topg             = (gp && to_total != null) ? r1(to_total / gp) : loadedTopg;
     const pass_attempts_pg = (gp && pass_tot != null) ? r1(pass_tot / gp) : loadedPassPg;
     const possession_time_pg = (gp && poss_tot != null) ? Math.round(poss_tot / gp) : loadedPossPg;
