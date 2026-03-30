@@ -27,26 +27,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json(data);
   }
 
-  // POST: admin nominates a player for auction
+  // POST: admin nominates a player for auction (status: "active" or "pending")
   if (req.method === "POST") {
     const admin = await requireAdmin(req, res);
     if (!admin) return;
-    const { league: leagueRaw, mc_uuid, min_price, season, phase } = req.body;
+    const { league: leagueRaw, mc_uuid, min_price, season, phase, status: reqStatus } = req.body;
     const league = resolveLeague(leagueRaw);
     if (!league || !mc_uuid)
       return res.status(400).json({ error: "league and mc_uuid required" });
 
-    // Check not already in an active auction
+    const isPending = reqStatus === "pending";
+
+    // Check not already in an active or pending auction
     const { data: existing } = await supabase
       .from("auctions")
       .select("id")
       .eq("mc_uuid", mc_uuid)
       .eq("league", league)
-      .eq("status", "active")
+      .in("status", ["active", "pending"])
       .maybeSingle();
-    if (existing) return res.status(400).json({ error: "Player already in an active auction" });
+    if (existing) return res.status(400).json({ error: "Player already has an active or pending auction" });
 
-    const closesAt = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();
+    // For pending auctions use a far-future sentinel (year 9999) — no timer runs until launched
+    const closesAt = isPending ? "9999-01-01T00:00:00.000Z" : new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();
     const { data, error } = await supabase
       .from("auctions")
       .insert([{
@@ -55,7 +58,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         min_price: Number(min_price ?? 1000),
         season: season ?? null,
         phase: Number(phase ?? 1),
-        status: "active",
+        status: isPending ? "pending" : "active",
         closes_at: closesAt,
       }])
       .select("*, players(mc_uuid, mc_username)")

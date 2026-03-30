@@ -23,16 +23,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json(data);
   }
 
-  // PUT: admin updates auction (close it, set winner, set player_choice)
+  // PUT: admin updates auction (close it, set winner, set player_choice, launch pending, edit min_price)
   if (req.method === "PUT") {
     const admin = await requireAdmin(req, res);
     if (!admin) return;
-    const { status, winning_team_id, winning_bid, winning_is_two_season } = req.body;
+    const { status, winning_team_id, winning_bid, winning_is_two_season, action, min_price } = req.body;
     const updates: Record<string, unknown> = {};
-    if (status !== undefined) updates.status = status;
-    if (winning_team_id !== undefined) updates.winning_team_id = winning_team_id;
-    if (winning_bid !== undefined) updates.winning_bid = Number(winning_bid);
-    if (winning_is_two_season !== undefined) updates.winning_is_two_season = winning_is_two_season;
+
+    // Special action: launch a pending auction → active
+    if (action === "launch") {
+      updates.status = "active";
+      updates.closes_at = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();
+    } else {
+      if (status !== undefined) updates.status = status;
+      if (winning_team_id !== undefined) updates.winning_team_id = winning_team_id;
+      if (winning_bid !== undefined) updates.winning_bid = Number(winning_bid);
+      if (winning_is_two_season !== undefined) updates.winning_is_two_season = winning_is_two_season;
+      if (min_price !== undefined) updates.min_price = Number(min_price);
+    }
+
     const { data, error } = await supabase
       .from("auctions")
       .update(updates)

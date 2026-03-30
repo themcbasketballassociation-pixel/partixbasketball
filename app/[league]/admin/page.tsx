@@ -3452,14 +3452,18 @@ function AuctionAdminTab({ league }: { league: string }) {
   const [auctions, setAuctions] = useState<AuctionRow[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [teams, setTeams] = useState<TeamRow[]>([]);
-  const [filterStatus, setFilterStatus] = useState("active");
+  const [filterStatus, setFilterStatus] = useState("pending");
 
-  // Nominate form
+  // Add player form
   const [nomUuid, setNomUuid] = useState("");
   const [nomMinPrice, setNomMinPrice] = useState("1000");
   const [nomPhase, setNomPhase] = useState("1");
   const [nomSeason, setNomSeason] = useState("");
   const [nomErr, setNomErr] = useState("");
+
+  // Inline price editing for pending auctions
+  const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
+  const [editingPrice, setEditingPrice] = useState("");
 
   // Close/winner state
   const [closingId, setClosingId] = useState<string | null>(null);
@@ -3468,9 +3472,8 @@ function AuctionAdminTab({ league }: { league: string }) {
   const [winnerIs2s, setWinnerIs2s] = useState(false);
   const [closeErr, setCloseErr] = useState("");
 
-  // Finalize (create contract) state
-  const [finalizeId, setFinalizeId] = useState<string | null>(null);
-  const [finalizeErr, setFinalizeErr] = useState("");
+  // Bulk actions
+  const [bulkMsg, setBulkMsg] = useState("");
 
   const refresh = useCallback(async () => {
     const [a, p, t] = await Promise.all([
@@ -3485,29 +3488,109 @@ function AuctionAdminTab({ league }: { league: string }) {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const nominate = async () => {
+  // Add player as pending (price set, no timer yet)
+  const addPending = async () => {
     setNomErr("");
     if (!nomUuid) return setNomErr("Select a player");
     const r = await fetch("/api/auction", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ league, mc_uuid: nomUuid, min_price: parseInt(nomMinPrice) || 1000, phase: parseInt(nomPhase) || 1, season: nomSeason || null }),
+      body: JSON.stringify({ league, mc_uuid: nomUuid, min_price: parseInt(nomMinPrice) || 1000, phase: parseInt(nomPhase) || 1, season: nomSeason || null, status: "pending" }),
     });
     const d = await r.json();
     if (!r.ok) return setNomErr(d.error);
     setNomUuid(""); setNomMinPrice("1000"); refresh();
   };
 
-  const closeAuction = async (auctionId: string) => {
+  // Bulk: add all players in this league not already in pending/active at 1k
+  const bulkSetRemaining = async () => {
+    setBulkMsg("");
+    // Fetch all pending+active auction mc_uuids AND all league players
+    const [allAuctions, leaguePlayers] = await Promise.all([
+      fetch(`/api/auction?league=${league}`).then((r) => r.json()),
+      fetch(`/api/teams/players?league=${league}`).then((r) => r.json()),
+    ]);
+    const taken = new Set(
+      (Array.isArray(allAuctions) ? allAuctions : [])
+        .filter((a: AuctionRow) => ["pending", "active", "player_choice"].includes(a.status))
+        .map((a: AuctionRow) => a.mc_uuid)
+    );
+    type PlayerTeamRow = { mc_uuid: string; players: { mc_uuid: string; mc_username: string } };
+    const remaining = (Array.isArray(leaguePlayers) ? leaguePlayers : []).filter((pt: PlayerTeamRow) => !taken.has(pt.mc_uuid));
+    if (remaining.length === 0) { setBulkMsg("All players already have a pending/active auction."); return; }
+    let added = 0;
+    for (const pt of remaining as PlayerTeamRow[]) {
+      const r = await fetch("/api/auction", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ league, mc_uuid: pt.mc_uuid, min_price: 1000, phase: parseInt(nomPhase) || 1, season: nomSeason || null, status: "pending" }),
+      });
+      if (r.ok) added++;
+    }
+    setBulkMsg(`Added ${added} player(s) at 1,000 min price.`);
+    refresh();
+  };
+
+  // Save edited price for a pending auction
+  const savePendingPrice = async (auctionId: string) => {
+    await fetch(`/api/auction/${auctionId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ min_price: parseInt(editingPrice) || 1000 }),
+    });
+    setEditingPriceId(null);
+    refresh();
+  };
+
+  // Launch a single pending auction (start 12h timer)
+  const launchAuction = async (auctionId: string) => {
+    await fetch(`/api/auction/${auctionId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "launch" }),
+    });
+    refresh();
+  };
+
+  // Launch ALL pending auctions
+  const launchAll = async () => {
+    const pending = auctions.filter((a) => a.status === "pending");
+    for (const a of pending) {
+      await fetch(`/api/auction/${a.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "launch" }),
+      });
+    }
+    refresh();
+  };
+
+  // Close auction AND immediately create contract (merged step)
+  const closeAuction = async (auctionId: string, auction: AuctionRow) => {
     setCloseErr("");
     if (!winnerTeam) return setCloseErr("Select winning team");
     if (!winnerBid) return setCloseErr("Enter winning bid");
-    const r = await fetch(`/api/auction/${auctionId}`, {
+
+    // 1. Create contract
+    const cr = await fetch("/api/contracts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        league, mc_uuid: auction.mc_uuid, team_id: winnerTeam,
+        amount: parseInt(winnerBid), is_two_season: winnerIs2s,
+        phase: auction.phase, season: auction.season,
+      }),
+    });
+    if (!cr.ok) { const d = await cr.json(); return setCloseErr(d.error); }
+
+    // 2. Mark auction as signed with winner info
+    const ar = await fetch(`/api/auction/${auctionId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "closed", winning_team_id: winnerTeam, winning_bid: parseInt(winnerBid), winning_is_two_season: winnerIs2s }),
+      body: JSON.stringify({ status: "signed", winning_team_id: winnerTeam, winning_bid: parseInt(winnerBid), winning_is_two_season: winnerIs2s }),
     });
-    if (!r.ok) { const d = await r.json(); return setCloseErr(d.error); }
+    if (!ar.ok) { const d = await ar.json(); return setCloseErr(d.error); }
+
     setClosingId(null); setWinnerTeam(""); setWinnerBid(""); setWinnerIs2s(false); refresh();
   };
 
@@ -3520,35 +3603,15 @@ function AuctionAdminTab({ league }: { league: string }) {
     refresh();
   };
 
-  const finalizeContract = async (auction: AuctionRow) => {
-    setFinalizeErr("");
-    if (!auction.winning_team_id || !auction.winning_bid) return setFinalizeErr("Set a winning team and bid first");
-    const r = await fetch("/api/contracts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        league, mc_uuid: auction.mc_uuid, team_id: auction.winning_team_id,
-        amount: auction.winning_bid, is_two_season: auction.winning_is_two_season,
-        phase: auction.phase, season: auction.season,
-      }),
-    });
-    if (!r.ok) { const d = await r.json(); return setFinalizeErr(d.error); }
-    // Mark auction as signed
-    await fetch(`/api/auction/${auction.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "signed" }),
-    });
-    setFinalizeId(null); refresh();
-  };
-
   const PLAYER_CHOICE_WINDOW = 500;
+
+  const pendingAuctions = auctions.filter((a) => a.status === "pending");
 
   return (
     <div>
-      {/* Nominate player */}
+      {/* Add player / set price */}
       <div className={card} style={{ marginBottom: 16 }}>
-        <div className="text-sm font-semibold text-slate-300 mb-4">Nominate Player for Auction</div>
+        <div className="text-sm font-semibold text-slate-300 mb-4">Set Player Price</div>
         <div className="flex gap-3 flex-wrap mb-3">
           <div style={{ flex: 2, minWidth: 160 }}>
             <PlayerSearchSelect players={players} value={nomUuid} onChange={setNomUuid} placeholder="Search player…" />
@@ -3556,14 +3619,62 @@ function AuctionAdminTab({ league }: { league: string }) {
           <input className={input} type="number" placeholder="Min Price" value={nomMinPrice} onChange={(e) => setNomMinPrice(e.target.value)} style={{ flex: 1, minWidth: 100 }} />
           <input className={input} type="number" placeholder="Phase" value={nomPhase} onChange={(e) => setNomPhase(e.target.value)} style={{ flex: 1, minWidth: 80 }} />
           <input className={input} placeholder="Season (opt)" value={nomSeason} onChange={(e) => setNomSeason(e.target.value)} style={{ flex: 1, minWidth: 100 }} />
-          <button className={btnPrimary} onClick={nominate}>Start Auction</button>
+          <button className={btnPrimary} onClick={addPending}>Set Price</button>
         </div>
         <ErrMsg msg={nomErr} />
+
+        {/* Bulk: set remaining to 1k */}
+        <div className="mt-3 pt-3 border-t border-slate-800 flex gap-3 items-center flex-wrap">
+          <button className={btnSecondary} onClick={bulkSetRemaining}>
+            Set all remaining players to 1k
+          </button>
+          {bulkMsg && <span className="text-slate-400 text-xs">{bulkMsg}</span>}
+        </div>
       </div>
+
+      {/* Pending auctions — price review & launch */}
+      {filterStatus === "pending" && pendingAuctions.length > 0 && (
+        <div className={card} style={{ marginBottom: 16 }}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-sm font-semibold text-slate-300">Pending Prices ({pendingAuctions.length})</div>
+            <button
+              className="rounded-lg px-3 py-1.5 text-sm font-medium transition bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-800"
+              onClick={launchAll}
+            >
+              Launch All ({pendingAuctions.length})
+            </button>
+          </div>
+          <div className="flex flex-col gap-2">
+            {pendingAuctions.map((a) => (
+              <div key={a.id} className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2">
+                <img src={`https://minotar.net/avatar/${a.players.mc_username}/32`} className="w-8 h-8 rounded-lg border border-slate-700" onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/32"; }} alt="" />
+                <span className="text-white font-semibold flex-1">{a.players.mc_username}</span>
+                {editingPriceId === a.id ? (
+                  <div className="flex gap-1 items-center">
+                    <input className={input} type="number" value={editingPrice} onChange={(e) => setEditingPrice(e.target.value)} style={{ width: 90 }} />
+                    <button className={btnPrimary} style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => savePendingPrice(a.id)}>Save</button>
+                    <button className={btnSecondary} style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => setEditingPriceId(null)}>×</button>
+                  </div>
+                ) : (
+                  <button className="text-slate-400 text-sm hover:text-white border border-slate-700 rounded-lg px-2 py-0.5" onClick={() => { setEditingPriceId(a.id); setEditingPrice(String(a.min_price)); }}>
+                    {a.min_price.toLocaleString()}
+                  </button>
+                )}
+                <button
+                  className="rounded-lg px-3 py-1 text-xs font-medium transition bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-800"
+                  onClick={() => launchAuction(a.id)}
+                >
+                  Launch
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Filter */}
       <div className="flex gap-2 mb-4">
-        {["active", "player_choice", "closed", "signed", "all"].map((s) => (
+        {["pending", "active", "player_choice", "closed", "signed", "all"].map((s) => (
           <button key={s} className={`${btn} text-xs ${filterStatus === s ? "bg-zinc-600 text-white" : "bg-slate-800 text-slate-400"} border border-slate-700`} onClick={() => setFilterStatus(s)}>
             {s}
           </button>
@@ -3594,6 +3705,7 @@ function AuctionAdminTab({ league }: { league: string }) {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className={`text-xs px-2 py-0.5 rounded-full border font-semibold ${
+                      a.status === "pending" ? "border-yellow-800 bg-yellow-950 text-yellow-400" :
                       a.status === "active" ? "border-cyan-800 bg-cyan-950 text-cyan-400" :
                       a.status === "player_choice" ? "border-purple-800 bg-purple-950 text-purple-400" :
                       a.status === "signed" ? "border-green-800 bg-green-950 text-green-400" :
@@ -3602,6 +3714,29 @@ function AuctionAdminTab({ league }: { league: string }) {
                     {isExpired && <span className="text-xs px-2 py-0.5 rounded-full border border-orange-800 bg-orange-950 text-orange-400 font-semibold">EXPIRED</span>}
                   </div>
                 </div>
+
+                {/* Pending: show launch button */}
+                {a.status === "pending" && (
+                  <div className="mb-3 flex items-center gap-2">
+                    {editingPriceId === a.id ? (
+                      <div className="flex gap-1 items-center">
+                        <input className={input} type="number" value={editingPrice} onChange={(e) => setEditingPrice(e.target.value)} style={{ width: 100 }} />
+                        <button className={btnPrimary} style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => savePendingPrice(a.id)}>Save</button>
+                        <button className={btnSecondary} style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => setEditingPriceId(null)}>×</button>
+                      </div>
+                    ) : (
+                      <button className="text-slate-400 text-sm hover:text-white border border-slate-700 rounded-lg px-2 py-0.5" onClick={() => { setEditingPriceId(a.id); setEditingPrice(String(a.min_price)); }}>
+                        Edit price: {a.min_price.toLocaleString()}
+                      </button>
+                    )}
+                    <button
+                      className="rounded-lg px-3 py-1.5 text-sm font-medium transition bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-800"
+                      onClick={() => launchAuction(a.id)}
+                    >
+                      Launch Auction
+                    </button>
+                  </div>
+                )}
 
                 {/* Bid list */}
                 {sortedBids.length > 0 && (
@@ -3626,50 +3761,32 @@ function AuctionAdminTab({ league }: { league: string }) {
                   </div>
                 )}
 
-                {/* Actions */}
+                {/* Actions: close + auto-sign */}
                 {(a.status === "active" || a.status === "player_choice") && (
                   <div className="mt-3">
                     {closingId === a.id ? (
                       <div className="flex flex-col gap-2">
                         <div className="flex gap-2 flex-wrap">
                           <select className={input} value={winnerTeam} onChange={(e) => setWinnerTeam(e.target.value)} style={{ flex: 1, minWidth: 140 }}>
-                            <option value="">— Winner —</option>
+                            <option value="">— Pick Owner/Team —</option>
                             {teams.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.abbreviation})</option>)}
                           </select>
-                          <input className={input} type="number" placeholder="Winning bid" value={winnerBid} onChange={(e) => setWinnerBid(e.target.value)} style={{ flex: 1, minWidth: 120 }} />
+                          <input className={input} type="number" placeholder="Contract amount" value={winnerBid} onChange={(e) => setWinnerBid(e.target.value)} style={{ flex: 1, minWidth: 120 }} />
                           <label className="flex items-center gap-1 text-purple-400 text-sm cursor-pointer">
                             <input type="checkbox" checked={winnerIs2s} onChange={(e) => setWinnerIs2s(e.target.checked)} style={{ accentColor: "#a855f7" }} /> 2-season
                           </label>
-                          <button className={btnPrimary} onClick={() => closeAuction(a.id)}>Confirm Close</button>
+                          <button className={btnPrimary} onClick={() => closeAuction(a.id, a)}>Sign to Team</button>
                           <button className={btnSecondary} onClick={() => setClosingId(null)}>Cancel</button>
                         </div>
                         <ErrMsg msg={closeErr} />
                       </div>
                     ) : (
                       <div className="flex gap-2 flex-wrap">
-                        <button className={btnSecondary} onClick={() => { setClosingId(a.id); setCloseErr(""); if (topBid) { setWinnerTeam(topBid.team_id); setWinnerBid(String(topBid.amount)); setWinnerIs2s(topBid.is_two_season); } }}>Close Auction</button>
+                        <button className={btnSecondary} onClick={() => { setClosingId(a.id); setCloseErr(""); if (topBid) { setWinnerTeam(topBid.team_id); setWinnerBid(String(topBid.amount)); setWinnerIs2s(topBid.is_two_season); } }}>Pick Owner & Sign</button>
                         {needsChoice && a.status === "active" && (
                           <button className="rounded-lg px-3 py-1.5 text-sm font-medium transition bg-purple-950 hover:bg-purple-900 text-purple-300 border border-purple-800" onClick={() => setPlayerChoice(a.id)}>Set Player Choice</button>
                         )}
                       </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Finalize → create contract */}
-                {a.status === "closed" && a.winning_team_id && (
-                  <div className="mt-3">
-                    {finalizeId === a.id ? (
-                      <div>
-                        <p className="text-slate-400 text-sm mb-2">Create contract: {a.players.mc_username} → {a.winning_team?.name} for {(a.winning_bid ?? 0).toLocaleString()}{a.winning_is_two_season ? " (2-season)" : ""}?</p>
-                        <div className="flex gap-2">
-                          <button className={btnPrimary} onClick={() => finalizeContract(a)}>Confirm & Sign</button>
-                          <button className={btnSecondary} onClick={() => setFinalizeId(null)}>Cancel</button>
-                        </div>
-                        <ErrMsg msg={finalizeErr} />
-                      </div>
-                    ) : (
-                      <button className="rounded-lg px-3 py-1.5 text-sm font-medium transition bg-green-950 hover:bg-green-900 text-green-300 border border-green-800" onClick={() => { setFinalizeId(a.id); setFinalizeErr(""); }}>Finalize Signing</button>
                     )}
                   </div>
                 )}
