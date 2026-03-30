@@ -3488,46 +3488,106 @@ function AuctionAdminTab({ league }: { league: string }) {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  // Add player as pending (price set, no timer yet)
-  const addPending = async () => {
-    setNomErr("");
-    if (!nomUuid) return setNomErr("Select a player");
+  // Helper: if player is a team owner in this league, sign them directly; otherwise create pending auction
+  // Returns "signed" | "pending" | "error:msg"
+  const setPriceOrSign = async (mc_uuid: string, min_price: number, ownerByDiscord: Map<string, string>): Promise<string> => {
+    // Look up discord_id from already-loaded players state
+    const playerRecord = players.find((p) => p.mc_uuid === mc_uuid) as (Player & { discord_id?: string }) | undefined;
+    const discordId = playerRecord?.discord_id;
+    const teamId = discordId ? ownerByDiscord.get(discordId) : undefined;
+
+    if (teamId) {
+      // Auto-sign to their team at the set price
+      const cr = await fetch("/api/contracts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          league, mc_uuid, team_id: teamId,
+          amount: min_price, is_two_season: false,
+          phase: parseInt(nomPhase) || 1, season: nomSeason || null,
+        }),
+      });
+      if (!cr.ok) { const d = await cr.json(); return `error:${d.error}`; }
+      return "signed";
+    }
+
+    // Not an owner — create pending auction
     const r = await fetch("/api/auction", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ league, mc_uuid: nomUuid, min_price: parseInt(nomMinPrice) || 1000, phase: parseInt(nomPhase) || 1, season: nomSeason || null, status: "pending" }),
+      body: JSON.stringify({ league, mc_uuid, min_price, phase: parseInt(nomPhase) || 1, season: nomSeason || null, status: "pending" }),
     });
-    const d = await r.json();
-    if (!r.ok) return setNomErr(d.error);
+    if (!r.ok) { const d = await r.json(); return `error:${d.error}`; }
+    return "pending";
+  };
+
+  // Add player: auto-sign if owner, otherwise save as pending
+  const addPending = async () => {
+    setNomErr("");
+    if (!nomUuid) return setNomErr("Select a player");
+    const price = parseInt(nomMinPrice) || 1000;
+    // Fetch owners fresh so we have up-to-date data
+    const ownersData = await fetch(`/api/team-owners?league=${league}`).then((r) => r.json());
+    type OwnerRow = { discord_id: string; team_id: string };
+    const ownerByDiscord = new Map<string, string>(
+      (Array.isArray(ownersData) ? ownersData : []).map((o: OwnerRow) => [o.discord_id, o.team_id])
+    );
+    const result = await setPriceOrSign(nomUuid, price, ownerByDiscord);
+    if (result.startsWith("error:")) return setNomErr(result.slice(6));
+    if (result === "signed") setNomErr(""); // clear any old error
     setNomUuid(""); setNomMinPrice("1000"); refresh();
   };
 
-  // Bulk: add all players in this league not already in pending/active at 1k
+  // Bulk: auto-sign owners, add everyone else as pending at 1k
   const bulkSetRemaining = async () => {
     setBulkMsg("");
-    // Fetch all pending+active auction mc_uuids AND all league players
-    const [allAuctions, leaguePlayers] = await Promise.all([
+    const [allAuctions, leaguePlayers, ownersData, allContracts] = await Promise.all([
       fetch(`/api/auction?league=${league}`).then((r) => r.json()),
       fetch(`/api/teams/players?league=${league}`).then((r) => r.json()),
+      fetch(`/api/team-owners?league=${league}`).then((r) => r.json()),
+      fetch(`/api/contracts?league=${league}&status=active`).then((r) => r.json()),
     ]);
     const taken = new Set(
       (Array.isArray(allAuctions) ? allAuctions : [])
         .filter((a: AuctionRow) => ["pending", "active", "player_choice"].includes(a.status))
         .map((a: AuctionRow) => a.mc_uuid)
     );
-    type PlayerTeamRow = { mc_uuid: string; players: { mc_uuid: string; mc_username: string } };
-    const remaining = (Array.isArray(leaguePlayers) ? leaguePlayers : []).filter((pt: PlayerTeamRow) => !taken.has(pt.mc_uuid));
-    if (remaining.length === 0) { setBulkMsg("All players already have a pending/active auction."); return; }
-    let added = 0;
+    // Also skip players already signed this phase
+    const alreadySigned = new Set(
+      (Array.isArray(allContracts) ? allContracts : []).map((c: { mc_uuid: string }) => c.mc_uuid)
+    );
+    type OwnerRow = { discord_id: string; team_id: string };
+    const ownerByDiscord = new Map<string, string>(
+      (Array.isArray(ownersData) ? ownersData : []).map((o: OwnerRow) => [o.discord_id, o.team_id])
+    );
+    type PlayerTeamRow = { mc_uuid: string; players: { mc_uuid: string; mc_username: string; discord_id?: string } };
+    const remaining = (Array.isArray(leaguePlayers) ? leaguePlayers : [])
+      .filter((pt: PlayerTeamRow) => !taken.has(pt.mc_uuid) && !alreadySigned.has(pt.mc_uuid));
+    if (remaining.length === 0) { setBulkMsg("All players already handled."); return; }
+    let addedAuction = 0; let autoSigned = 0;
     for (const pt of remaining as PlayerTeamRow[]) {
-      const r = await fetch("/api/auction", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ league, mc_uuid: pt.mc_uuid, min_price: 1000, phase: parseInt(nomPhase) || 1, season: nomSeason || null, status: "pending" }),
-      });
-      if (r.ok) added++;
+      const discordId = pt.players?.discord_id;
+      const teamId = discordId ? ownerByDiscord.get(discordId) : undefined;
+      if (teamId) {
+        const cr = await fetch("/api/contracts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ league, mc_uuid: pt.mc_uuid, team_id: teamId, amount: 1000, is_two_season: false, phase: parseInt(nomPhase) || 1, season: nomSeason || null }),
+        });
+        if (cr.ok) autoSigned++;
+      } else {
+        const r = await fetch("/api/auction", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ league, mc_uuid: pt.mc_uuid, min_price: 1000, phase: parseInt(nomPhase) || 1, season: nomSeason || null, status: "pending" }),
+        });
+        if (r.ok) addedAuction++;
+      }
     }
-    setBulkMsg(`Added ${added} player(s) at 1,000 min price.`);
+    const parts = [];
+    if (autoSigned > 0) parts.push(`${autoSigned} owner(s) auto-signed to their team`);
+    if (addedAuction > 0) parts.push(`${addedAuction} player(s) added at 1,000`);
+    setBulkMsg(parts.join(" · ") || "Done.");
     refresh();
   };
 
@@ -3611,7 +3671,11 @@ function AuctionAdminTab({ league }: { league: string }) {
 
   const PLAYER_CHOICE_WINDOW = 500;
 
-  const pendingAuctions = auctions.filter((a) => a.status === "pending");
+  const pendingAuctions = auctions
+    .filter((a) => a.status === "pending")
+    .sort((a, b) => a.min_price - b.min_price);
+
+  const sortedAuctions = [...auctions].sort((a, b) => a.min_price - b.min_price);
 
   return (
     <div>
@@ -3700,7 +3764,7 @@ function AuctionAdminTab({ league }: { league: string }) {
         <div className="text-slate-600 text-sm text-center py-8">No auctions found.</div>
       ) : (
         <div className="flex flex-col gap-4">
-          {auctions.map((a) => {
+          {sortedAuctions.map((a) => {
             const validBids = (a.auction_bids ?? []).filter((b) => b.is_valid);
             const sortedBids = [...validBids].sort((x, y) => y.effective_value - x.effective_value);
             const topBid = sortedBids[0] ?? null;
