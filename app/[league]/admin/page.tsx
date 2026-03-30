@@ -3594,22 +3594,33 @@ function AuctionAdminTab({ league }: { league: string }) {
   // Sign any existing pending auctions where the player is a team owner
   const signPendingOwners = async () => {
     setBulkMsg("");
-    const [pendingAuctionsData, ownersData] = await Promise.all([
+    const [pendingAuctionsData, ownersData, allPlayersData] = await Promise.all([
       fetch(`/api/auction?league=${league}&status=pending`).then((r) => r.json()),
       fetch(`/api/team-owners?league=${league}`).then((r) => r.json()),
+      fetch(`/api/players`).then((r) => r.json()),
     ]);
+
+    // mc_uuid → discord_id
+    type PlayerRow = { mc_uuid: string; discord_id: string | null };
+    const discordByUuid = new Map<string, string>(
+      (Array.isArray(allPlayersData) ? allPlayersData : [])
+        .filter((p: PlayerRow) => p.discord_id)
+        .map((p: PlayerRow) => [p.mc_uuid, p.discord_id as string])
+    );
+
+    // discord_id → team_id
     type OwnerRow = { discord_id: string; team_id: string };
     const ownerByDiscord = new Map<string, string>(
       (Array.isArray(ownersData) ? ownersData : []).map((o: OwnerRow) => [o.discord_id, o.team_id])
     );
-    type PendingRow = { id: string; mc_uuid: string; min_price: number; players: { mc_uuid: string; mc_username: string; discord_id?: string } };
+
+    type PendingRow = { id: string; mc_uuid: string; min_price: number };
     const pending = Array.isArray(pendingAuctionsData) ? pendingAuctionsData as PendingRow[] : [];
     let signed = 0;
     for (const a of pending) {
-      const discordId = (a.players as { discord_id?: string })?.discord_id;
+      const discordId = discordByUuid.get(a.mc_uuid);
       const teamId = discordId ? ownerByDiscord.get(discordId) : undefined;
       if (!teamId) continue;
-      // Create contract at their min_price
       const cr = await fetch("/api/contracts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -3620,7 +3631,6 @@ function AuctionAdminTab({ league }: { league: string }) {
         }),
       });
       if (cr.ok) {
-        // Remove the pending auction entry
         await fetch(`/api/auction/${a.id}`, { method: "DELETE" });
         signed++;
       }
