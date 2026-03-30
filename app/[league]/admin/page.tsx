@@ -3531,6 +3531,12 @@ function AuctionAdminTab({ league }: { league: string }) {
     refresh();
   };
 
+  // Remove a pending auction
+  const removePending = async (auctionId: string) => {
+    await fetch(`/api/auction/${auctionId}`, { method: "DELETE" });
+    refresh();
+  };
+
   // Save edited price for a pending auction
   const savePendingPrice = async (auctionId: string) => {
     await fetch(`/api/auction/${auctionId}`, {
@@ -3666,6 +3672,13 @@ function AuctionAdminTab({ league }: { league: string }) {
                 >
                   Launch
                 </button>
+                <button
+                  className="rounded-lg px-3 py-1 text-xs font-medium transition bg-red-950 hover:bg-red-900 text-red-400 border border-red-900"
+                  onClick={() => removePending(a.id)}
+                  title="Remove from auction"
+                >
+                  ✕
+                </button>
               </div>
             ))}
           </div>
@@ -3734,6 +3747,12 @@ function AuctionAdminTab({ league }: { league: string }) {
                       onClick={() => launchAuction(a.id)}
                     >
                       Launch Auction
+                    </button>
+                    <button
+                      className="rounded-lg px-3 py-1.5 text-sm font-medium transition bg-red-950 hover:bg-red-900 text-red-400 border border-red-900"
+                      onClick={() => removePending(a.id)}
+                    >
+                      Remove
                     </button>
                   </div>
                 )}

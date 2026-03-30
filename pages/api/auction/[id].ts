@@ -52,5 +52,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json(data);
   }
 
+  // DELETE: admin removes a pending auction
+  if (req.method === "DELETE") {
+    const admin = await requireAdmin(req, res);
+    if (!admin) return;
+    // Only allow deleting pending auctions
+    const { data: auction } = await supabase.from("auctions").select("status").eq("id", id).single();
+    if (!auction) return res.status(404).json({ error: "Not found" });
+    if (auction.status !== "pending") return res.status(400).json({ error: "Can only delete pending auctions" });
+    const { error } = await supabase.from("auctions").delete().eq("id", id);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json({ success: true });
+  }
+
   return res.status(405).json({ error: "Method not allowed" });
 }
