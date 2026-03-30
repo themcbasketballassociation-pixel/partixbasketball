@@ -4748,8 +4748,15 @@ function SigningsAdminTab({ league }: { league: string }) {
 
 // ─── Main Admin Page ──────────────────────────────────────────────────────────
 
-const TABS = ["Players", "Teams", "Schedule", "Box Scores", "Accolades", "Champions", "Articles", "Stats", "Playoffs", "Owners", "Draft Picks", "Auction", "Trades", "Signings", "Board"] as const;
-type Tab = typeof TABS[number] | "Backup";
+const TAB_GROUPS = {
+  Players:      ["Players"],
+  Teams:        ["Teams", "Owners", "Draft Picks"],
+  Games:        ["Schedule", "Box Scores", "Stats", "Playoffs"],
+  Transactions: ["Auction", "Trades", "Signings"],
+  Content:      ["Accolades", "Champions", "Articles", "Board"],
+} as const;
+type MainTab = keyof typeof TAB_GROUPS | "Backup";
+type Tab = "Players" | "Teams" | "Owners" | "Draft Picks" | "Schedule" | "Box Scores" | "Stats" | "Playoffs" | "Auction" | "Trades" | "Signings" | "Accolades" | "Champions" | "Articles" | "Board" | "Backup";
 const SEASONS = ["Season 1","Season 1 Playoffs","Season 2","Season 2 Playoffs","Season 3","Season 3 Playoffs","Season 4","Season 4 Playoffs","Season 5","Season 5 Playoffs","Season 6","Season 6 Playoffs","Season 7","Season 7 Playoffs"];
 
 export default function AdminPage({ params }: { params?: Promise<{ league?: string }> }) {
@@ -4761,6 +4768,7 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
   const [ownerRecord, setOwnerRecord] = useState<{ teams: { id: string; name: string; abbreviation: string; color2: string | null; division: string | null; logo_url: string | null } } | null | "loading">("loading");
   const [isBoardMember, setIsBoardMember] = useState<boolean | "loading">("loading");
   const [portal, setPortal] = useState<"admin" | "owner" | "board" | null>(null);
+  const [mainTab, setMainTab] = useState<MainTab>("Players");
   const [activeTab, setActiveTab] = useState<Tab>("Players");
   const [dbError, setDbError] = useState("");
   const [season, setSeason] = useState("Season 7");
@@ -4971,25 +4979,56 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
         </div>
       </div>
 
+      {/* Main tab groups */}
       <div className="flex border-b border-slate-800 bg-slate-950 overflow-x-auto">
-        {TABS.map((tab) => (
+        {(Object.keys(TAB_GROUPS) as Array<keyof typeof TAB_GROUPS>).map((group) => (
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-5 py-3.5 text-sm font-medium transition whitespace-nowrap border-b-2 ${activeTab === tab ? "border-white text-white" : "border-transparent text-slate-400 hover:text-white hover:border-slate-600"}`}
+            key={group}
+            onClick={() => {
+              setMainTab(group);
+              setActiveTab(TAB_GROUPS[group][0] as Tab);
+            }}
+            className={`px-5 py-3.5 text-sm font-medium transition whitespace-nowrap border-b-2 ${
+              mainTab === group
+                ? "border-white text-white"
+                : "border-transparent text-slate-400 hover:text-white hover:border-slate-600"
+            }`}
           >
-            {tab}
+            {group}
           </button>
         ))}
         {(session as any)?.user?.id?.toString() === SUPER_ADMIN_ID && (
           <button
-            onClick={() => setActiveTab("Backup")}
-            className={`px-5 py-3.5 text-sm font-medium transition whitespace-nowrap border-b-2 ${activeTab === "Backup" ? "border-yellow-400 text-yellow-400" : "border-transparent text-yellow-600 hover:text-yellow-400 hover:border-yellow-600"}`}
+            onClick={() => { setMainTab("Backup"); setActiveTab("Backup"); }}
+            className={`px-5 py-3.5 text-sm font-medium transition whitespace-nowrap border-b-2 ${
+              mainTab === "Backup"
+                ? "border-yellow-400 text-yellow-400"
+                : "border-transparent text-yellow-600 hover:text-yellow-400 hover:border-yellow-600"
+            }`}
           >
             Backup
           </button>
         )}
       </div>
+
+      {/* Sub-tabs (only shown when group has multiple items) */}
+      {mainTab !== "Backup" && TAB_GROUPS[mainTab as keyof typeof TAB_GROUPS]?.length > 1 && (
+        <div className="flex gap-1 px-5 py-2 bg-slate-900/60 border-b border-slate-800/50 overflow-x-auto">
+          {TAB_GROUPS[mainTab as keyof typeof TAB_GROUPS].map((sub) => (
+            <button
+              key={sub}
+              onClick={() => setActiveTab(sub as Tab)}
+              className={`px-3 py-1 rounded-md text-xs font-medium transition whitespace-nowrap ${
+                activeTab === sub
+                  ? "bg-slate-700 text-white"
+                  : "text-slate-500 hover:text-slate-200 hover:bg-slate-800"
+              }`}
+            >
+              {sub}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="p-6">
         {activeTab === "Players" && <PlayersTab league={league} />}

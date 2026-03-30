@@ -7,8 +7,6 @@ const leagueNames: Record<string, string> = {
   mbgl: "G League",
 };
 
-const SEASONS = ["Season 1","Season 2","Season 3","Season 4","Season 5","Season 6","Season 7"];
-
 type Accolade = {
   id: string; type: string; season: string; description: string | null;
   mc_uuid: string; players: { mc_uuid: string; mc_username: string };
@@ -37,6 +35,11 @@ export default function AccoladesPage({ params }: { params?: Promise<{ league?: 
       });
   }, [slug]);
 
+  // Derive unique base seasons from loaded data (e.g. "Season 1", "Season 2")
+  const availableSeasons = [...new Set(
+    accolades.map((a) => a.season.replace(/ Playoffs$/, ""))
+  )].sort();
+
   // When a season is selected, show both regular and playoff accolades for it
   const filtered =
     season === "All"
@@ -62,7 +65,7 @@ export default function AccoladesPage({ params }: { params?: Promise<{ league?: 
           >
             All
           </button>
-          {SEASONS.map((s) => (
+          {availableSeasons.map((s) => (
             <button
               key={s}
               onClick={() => setSeason(s)}

@@ -12,18 +12,18 @@ const leagues = [
 ];
 
 const tabs = [
-  { label: "Home",       path: "",           global: false, only: null },
-  { label: "Teams",      path: "/teams",     global: false, only: null },
-  { label: "Standings",  path: "/standings", global: false, only: null },
-  { label: "Schedule",   path: "/schedule",  global: false, only: null },
-  { label: "Box Scores", path: "/boxscores", global: false, only: null },
-  { label: "Stats",      path: "/stats",     global: false, only: null },
-  { label: "Players",    path: "/players",   global: false, only: null },
-  { label: "Accolades",  path: "/accolades", global: false, only: null },
-  { label: "Auction",    path: "/auction",   global: false, only: ["mba"] },
-  { label: "Games",      path: "/games",     global: false, only: null },
-  { label: "Links",      path: "/links",     global: true,  only: null },
-  { label: "Admin",      path: "/admin",     global: false, only: null },
+  { label: "Home",        path: "",           global: false, only: null },
+  { label: "Teams",       path: "/teams",     global: false, only: null },
+  { label: "Standings",   path: "/standings", global: false, only: null },
+  { label: "Schedule",    path: "/schedule",  global: false, only: null },
+  { label: "Box Scores",  path: "/boxscores", global: false, only: null },
+  { label: "Stats",       path: "/stats",     global: false, only: null },
+  { label: "Players",     path: "/players",   global: false, only: null },
+  { label: "Accolades",   path: "/accolades", global: false, only: null },
+  { label: "Auction",     path: "/auction",   global: false, only: ["mba"] },
+  { label: "Mini Games",  path: "/games",     global: false, only: null },
+  { label: "Links",       path: "/links",     global: true,  only: null },
+  { label: "Admin",       path: "/admin",     global: false, only: null },
 ];
 
 export default function Header() {

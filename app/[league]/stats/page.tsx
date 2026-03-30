@@ -7,8 +7,6 @@ const leagueNames: Record<string, string> = {
   mbgl: "G League",
 };
 
-const SEASONS = ["Season 1","Season 1 Playoffs","Season 2","Season 2 Playoffs","Season 3","Season 3 Playoffs","Season 4","Season 4 Playoffs","Season 5","Season 5 Playoffs","Season 6","Season 6 Playoffs","Season 7","Season 7 Playoffs"];
-
 type StatRow = {
   mc_uuid: string; mc_username: string; rank: number; gp: number;
   ppg: string; rpg: string; apg: string; spg: string; bpg: string; fg_pct: string;
@@ -22,13 +20,27 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
 
   const [stats, setStats] = React.useState<StatRow[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const [season, setSeason] = React.useState("Season 7");
+  const [seasons, setSeasons] = React.useState<string[]>([]);
+  const [season, setSeason] = React.useState("");
+
+  React.useEffect(() => {
+    if (!slug) return;
+    fetch(`/api/stats/seasons?league=${slug}`)
+      .then((r) => r.json())
+      .then((data: { season: string }[]) => {
+        if (Array.isArray(data) && data.length > 0) {
+          const all = data.map((d) => d.season).filter(Boolean).sort((a, b) => b.localeCompare(a));
+          setSeasons(all);
+          setSeason(all[0]);
+        }
+      }).catch(() => {});
+  }, [slug]);
 
   const seasonNum = parseInt(season.replace(/\D/g, "")) || 0;
   const showMpg = seasonNum >= 6;
 
   React.useEffect(() => {
-    if (!slug) return;
+    if (!slug || !season) return;
     setLoading(true);
     fetch(`/api/stats?league=${slug}&season=${encodeURIComponent(season)}`)
       .then((r) => r.json())
@@ -47,7 +59,7 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
           value={season}
           onChange={(e) => setSeason(e.target.value)}
         >
-          {SEASONS.map((s) => <option key={s} value={s}>{s}</option>)}
+          {seasons.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
       </div>
 
