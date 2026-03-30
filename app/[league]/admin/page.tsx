@@ -3591,6 +3591,44 @@ function AuctionAdminTab({ league }: { league: string }) {
     refresh();
   };
 
+  // Sign any existing pending auctions where the player is a team owner
+  const signPendingOwners = async () => {
+    setBulkMsg("");
+    const [pendingAuctionsData, ownersData] = await Promise.all([
+      fetch(`/api/auction?league=${league}&status=pending`).then((r) => r.json()),
+      fetch(`/api/team-owners?league=${league}`).then((r) => r.json()),
+    ]);
+    type OwnerRow = { discord_id: string; team_id: string };
+    const ownerByDiscord = new Map<string, string>(
+      (Array.isArray(ownersData) ? ownersData : []).map((o: OwnerRow) => [o.discord_id, o.team_id])
+    );
+    type PendingRow = { id: string; mc_uuid: string; min_price: number; players: { mc_uuid: string; mc_username: string; discord_id?: string } };
+    const pending = Array.isArray(pendingAuctionsData) ? pendingAuctionsData as PendingRow[] : [];
+    let signed = 0;
+    for (const a of pending) {
+      const discordId = (a.players as { discord_id?: string })?.discord_id;
+      const teamId = discordId ? ownerByDiscord.get(discordId) : undefined;
+      if (!teamId) continue;
+      // Create contract at their min_price
+      const cr = await fetch("/api/contracts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          league, mc_uuid: a.mc_uuid, team_id: teamId,
+          amount: a.min_price, is_two_season: false,
+          phase: parseInt(nomPhase) || 1, season: nomSeason || null,
+        }),
+      });
+      if (cr.ok) {
+        // Remove the pending auction entry
+        await fetch(`/api/auction/${a.id}`, { method: "DELETE" });
+        signed++;
+      }
+    }
+    setBulkMsg(signed > 0 ? `Signed ${signed} owner(s) to their teams.` : "No pending owners found.");
+    refresh();
+  };
+
   // Remove a pending auction
   const removePending = async (auctionId: string) => {
     await fetch(`/api/auction/${auctionId}`, { method: "DELETE" });
@@ -3693,10 +3731,16 @@ function AuctionAdminTab({ league }: { league: string }) {
         </div>
         <ErrMsg msg={nomErr} />
 
-        {/* Bulk: set remaining to 1k */}
+        {/* Bulk actions */}
         <div className="mt-3 pt-3 border-t border-slate-800 flex gap-3 items-center flex-wrap">
           <button className={btnSecondary} onClick={bulkSetRemaining}>
-            Set all remaining players to 1k
+            Set all remaining to 1k
+          </button>
+          <button
+            className="rounded-lg px-3 py-1.5 text-sm font-medium transition bg-green-950 hover:bg-green-900 text-green-300 border border-green-800"
+            onClick={signPendingOwners}
+          >
+            Sign pending owners to their teams
           </button>
           {bulkMsg && <span className="text-slate-400 text-xs">{bulkMsg}</span>}
         </div>
