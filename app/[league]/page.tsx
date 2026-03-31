@@ -21,23 +21,23 @@ type Game = {
   home_team: Team; away_team: Team;
 };
 type StatRow = {
-  mc_uuid: string; mc_username: string; rank: number;
+  mc_uuid: string; mc_username: string; rank: number; gp: number;
   ppg: number | null; rpg: number | null; apg: number | null;
   spg: number | null; fg_pct: number | null; three_pt_pct: number | null;
 };
 
-const LEADER_CATS: { key: keyof StatRow; label: string; fmt: (v: number) => string; color: string }[] = [
+const LEADER_CATS: { key: keyof StatRow; label: string; fmt: (v: number) => string; color: string; minGames?: number }[] = [
   { key: "ppg",        label: "PPG",  fmt: (v) => v.toFixed(1), color: "#f97316" },
   { key: "rpg",        label: "RPG",  fmt: (v) => v.toFixed(1), color: "#22d3ee" },
   { key: "apg",        label: "APG",  fmt: (v) => v.toFixed(1), color: "#a78bfa" },
   { key: "spg",        label: "SPG",  fmt: (v) => v.toFixed(1), color: "#4ade80" },
   { key: "fg_pct",     label: "FG%",  fmt: (v) => `${v.toFixed(1)}%`, color: "#facc15" },
-  { key: "three_pt_pct", label: "3FG%", fmt: (v) => `${v.toFixed(1)}%`, color: "#fb7185" },
+  { key: "three_pt_pct", label: "3FG%", fmt: (v) => `${v.toFixed(1)}%`, color: "#fb7185", minGames: 4 },
 ];
 
 function LeaderCard({ cat, stats }: { cat: typeof LEADER_CATS[number]; stats: StatRow[] }) {
   const top5 = [...stats]
-    .filter((s) => (s[cat.key] as number | null) != null)
+    .filter((s) => (s[cat.key] as number | null) != null && s.gp >= (cat.minGames ?? 1))
     .sort((a, b) => ((b[cat.key] as number) ?? 0) - ((a[cat.key] as number) ?? 0))
     .slice(0, 5);
 
@@ -48,7 +48,9 @@ function LeaderCard({ cat, stats }: { cat: typeof LEADER_CATS[number]; stats: St
     <div style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: 14, overflow: "hidden" }}>
       {/* Category header */}
       <div style={{ background: "#0d0d0d", borderBottom: "1px solid #1e1e1e", padding: "8px 12px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span style={{ color: cat.color, fontSize: 11, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" }}>{cat.label} Leaders</span>
+        <span style={{ color: cat.color, fontSize: 11, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+          {cat.label} Leaders{cat.minGames ? <span style={{ color: "#444", fontSize: 10, fontWeight: 600, textTransform: "none", letterSpacing: 0, marginLeft: 5 }}>min. {cat.minGames} GP</span> : null}
+        </span>
         <span style={{ color: cat.color, fontSize: 13, fontWeight: 800 }}>{cat.fmt((leader[cat.key] as number))}</span>
       </div>
       {/* Leader spotlight */}
