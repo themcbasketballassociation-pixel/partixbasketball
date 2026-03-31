@@ -76,11 +76,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "POST") {
     const { mc_uuid, season, gp, ppg, rpg, orpg, drpg, apg, spg, bpg, fg_pct, three_pt_made, three_pt_pct, topg, pass_attempts_pg, possession_time_pg, mpg } = req.body;
     if (!mc_uuid || !season) return res.status(400).json({ error: "mc_uuid, season required" });
-    const { data, error } = await supabase
-      .from("stats")
-      .upsert([{ mc_uuid, league, season, gp: gp ?? null, ppg: ppg ?? null, rpg: rpg ?? null, orpg: orpg ?? null, drpg: drpg ?? null, apg: apg ?? null, spg: spg ?? null, bpg: bpg ?? null, fg_pct: fg_pct ?? null, three_pt_made: three_pt_made ?? null, three_pt_pct: three_pt_pct ?? null, topg: topg ?? null, pass_attempts_pg: pass_attempts_pg ?? null, possession_time_pg: possession_time_pg ?? null, mpg: mpg ?? null }], { onConflict: "mc_uuid,league,season" })
-      .select()
-      .single();
+    const payload: Record<string, unknown> = { mc_uuid, league, season, gp: gp ?? null, ppg: ppg ?? null, rpg: rpg ?? null, orpg: orpg ?? null, drpg: drpg ?? null, apg: apg ?? null, spg: spg ?? null, bpg: bpg ?? null, fg_pct: fg_pct ?? null, three_pt_made: three_pt_made ?? null, three_pt_pct: three_pt_pct ?? null, topg: topg ?? null, pass_attempts_pg: pass_attempts_pg ?? null, possession_time_pg: possession_time_pg ?? null, mpg: mpg ?? null };
+    let result = await supabase.from("stats").upsert([payload], { onConflict: "mc_uuid,league,season" }).select().single();
+    // If mpg column doesn't exist in the schema yet, retry without it
+    if (result.error?.message?.includes("mpg")) {
+      const { mpg: _omit, ...payloadNoMpg } = payload;
+      result = await supabase.from("stats").upsert([payloadNoMpg], { onConflict: "mc_uuid,league,season" }).select().single();
+    }
+    const { data, error } = result;
     if (error) return res.status(500).json({ error: error.message });
     return res.status(200).json(data);
   }
