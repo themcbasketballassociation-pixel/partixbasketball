@@ -29,7 +29,7 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
       .then((r) => r.json())
       .then((data: { season: string }[]) => {
         if (Array.isArray(data) && data.length > 0) {
-          const all = data.map((d) => d.season).filter(Boolean).sort((a, b) => b.localeCompare(a));
+          const all = [...new Set(data.map((d) => d.season).filter(Boolean))].sort((a, b) => b.localeCompare(a));
           setSeasons(all);
           setSeason(all[0]);
         }
