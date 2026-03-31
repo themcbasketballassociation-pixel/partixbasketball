@@ -15,7 +15,7 @@ type StatRow = {
 };
 
 type SortKey = "gp" | "ppg" | "rpg" | "apg" | "spg" | "bpg" | "fg_pct" | "mpg" | "topg";
-type StatType = "regular" | "playoffs" | "combined";
+type StatType = "regular" | "playoffs" | "total";
 
 const PAGE_SIZE = 10;
 
@@ -71,9 +71,16 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
     if (!slug || !season) return;
     setLoading(true);
     setPage(0);
-    const fetchSeason = statType === "playoffs" ? `${season} Playoffs` : season;
-    const typeParam = statType === "combined" ? "&type=combined" : "";
-    fetch(`/api/stats?league=${slug}&season=${encodeURIComponent(fetchSeason)}${typeParam}`)
+    let url: string;
+    if (statType === "total") {
+      // All regular seasons merged into career totals
+      url = `/api/stats?league=${slug}&season=all`;
+    } else if (statType === "playoffs") {
+      url = `/api/stats?league=${slug}&season=${encodeURIComponent(`${season} Playoffs`)}`;
+    } else {
+      url = `/api/stats?league=${slug}&season=${encodeURIComponent(season)}`;
+    }
+    fetch(url)
       .then((r) => r.json())
       .then((data) => { setStats(Array.isArray(data) ? data : []); setLoading(false); });
   }, [slug, season, statType]);
@@ -131,7 +138,7 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
         <div className="flex items-center gap-2 flex-wrap">
           {/* Stat type toggle */}
           <div className="flex rounded-lg border border-slate-700 overflow-hidden text-xs">
-            {(["regular", "playoffs", "combined"] as StatType[]).map((t) => (
+            {(["regular", "playoffs", "total"] as StatType[]).map((t) => (
               <button
                 key={t}
                 onClick={() => setStatType(t)}
@@ -139,25 +146,27 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
                   statType === t ? "bg-slate-700 text-white" : "bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700"
                 }`}
               >
-                {t === "combined" ? "Total" : t.charAt(0).toUpperCase() + t.slice(1)}
+                {t.charAt(0).toUpperCase() + t.slice(1)}
               </button>
             ))}
           </div>
-          {/* Season dropdown — regular seasons only */}
-          <select
-            className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-white focus:border-zinc-500 focus:outline-none"
-            value={season}
-            onChange={(e) => setSeason(e.target.value)}
-          >
-            {regularSeasons.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
+          {/* Season dropdown — hidden on Total since it spans all seasons */}
+          {statType !== "total" && (
+            <select
+              className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-white focus:border-zinc-500 focus:outline-none"
+              value={season}
+              onChange={(e) => setSeason(e.target.value)}
+            >
+              {regularSeasons.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          )}
         </div>
       </div>
 
       {loading ? (
         <div className="p-10 text-center text-slate-500">Loading stats...</div>
       ) : stats.length === 0 ? (
-        <div className="p-10 text-center text-slate-500">No {statType} stats for {season} yet.</div>
+        <div className="p-10 text-center text-slate-500">No {statType === "total" ? "career" : statType} stats {statType !== "total" ? `for ${season}` : ""} yet.</div>
       ) : (
         <>
           <div className="overflow-x-auto">
