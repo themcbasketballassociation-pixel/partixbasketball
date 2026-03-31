@@ -5,8 +5,15 @@ import { resolveLeague } from "../../../lib/leagueMapping";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === "GET") {
-    const { league: leagueRaw } = req.query;
+    const { league: leagueRaw, check } = req.query;
     const league = resolveLeague(leagueRaw);
+
+    // ?check=discord — returns whether a webhook is configured for this league
+    if (check === "discord") {
+      const configured = !!process.env[`DISCORD_WEBHOOK_${(league as string).toUpperCase()}`];
+      return res.status(200).json({ configured });
+    }
+
     let query = supabase.from("articles").select("*").order("created_at", { ascending: false });
     if (league) query = query.eq("league", league as string);
     const { data, error } = await query;
@@ -17,7 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "POST") {
     const admin = await requireAdmin(req, res);
     if (!admin) return;
-    const { league: leagueRaw, title, body, image_url, discord_webhook } = req.body;
+    const { league: leagueRaw, title, body, image_url, post_to_discord } = req.body;
     const league = resolveLeague(leagueRaw);
     if (!league || !title || !body) return res.status(400).json({ error: "league, title, and body are required" });
     const { data, error } = await supabase
@@ -27,24 +34,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .single();
     if (error) return res.status(500).json({ error: error.message });
 
-    // Post to Discord webhook if provided
-    if (discord_webhook) {
-      try {
-        const embed: Record<string, unknown> = {
-          title,
-          description: body.length > 4096 ? body.slice(0, 4093) + "..." : body,
-          color: 0x1d4ed8,
-          footer: { text: league.toUpperCase() },
-          timestamp: new Date().toISOString(),
-        };
-        if (image_url) embed.image = { url: image_url };
-        await fetch(discord_webhook, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ embeds: [embed] }),
-        });
-      } catch {
-        // Discord failure shouldn't block the article being saved
+    // Post to Discord using server-side webhook env var
+    if (post_to_discord) {
+      const webhookUrl = process.env[`DISCORD_WEBHOOK_${league.toUpperCase()}`];
+      if (webhookUrl) {
+        try {
+          const leagueLabels: Record<string, string> = { pba: "MBA", pcaa: "MCAA", pbgl: "MBGL" };
+          const embed: Record<string, unknown> = {
+            title,
+            description: body.length > 4096 ? body.slice(0, 4093) + "..." : body,
+            color: league === "pba" ? 0xC8102E : league === "pcaa" ? 0x003087 : 0xBB3430,
+            footer: { text: leagueLabels[league] ?? league.toUpperCase() },
+            timestamp: new Date().toISOString(),
+          };
+          if (image_url) embed.image = { url: image_url };
+          await fetch(webhookUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ embeds: [embed] }),
+          });
+        } catch {
+          // Discord failure shouldn't block the article being saved
+        }
       }
     }
 

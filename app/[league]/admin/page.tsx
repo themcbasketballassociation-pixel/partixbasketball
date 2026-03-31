@@ -1824,19 +1824,29 @@ function ArticlesTab({ league }: { league: string }) {
   const [newBody, setNewBody] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [discordWebhook, setDiscordWebhook] = useState(() => {
-    if (typeof window !== "undefined") return localStorage.getItem(`discord_webhook_${league}`) ?? "";
-    return "";
-  });
+  const [postToDiscord, setPostToDiscord] = useState(true);
+  const [discordConfigured, setDiscordConfigured] = useState<boolean | null>(null);
   const [err, setErr] = useState("");
   const [posting, setPosting] = useState(false);
+
+  const discordChannelLabel: Record<string, string> = {
+    pba: "#mba-media", pcaa: "#mcaa-media", pbgl: "#mbgl-media",
+  };
+  const channelName = discordChannelLabel[league] ?? "#media";
 
   const refresh = useCallback(async () => {
     const data = await fetch(`/api/articles?league=${league}`).then((r) => r.json());
     setArticles(Array.isArray(data) ? data : []);
   }, [league]);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    refresh();
+    // Check if Discord webhook is configured server-side
+    fetch(`/api/articles?league=${league}&check=discord`)
+      .then((r) => r.json())
+      .then((d) => setDiscordConfigured(!!d.configured))
+      .catch(() => setDiscordConfigured(false));
+  }, [refresh, league]);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null;
@@ -1848,11 +1858,6 @@ function ArticlesTab({ league }: { league: string }) {
     } else {
       setImagePreview(null);
     }
-  };
-
-  const saveWebhook = (val: string) => {
-    setDiscordWebhook(val);
-    if (typeof window !== "undefined") localStorage.setItem(`discord_webhook_${league}`, val);
   };
 
   const addArticle = async () => {
@@ -1885,7 +1890,7 @@ function ArticlesTab({ league }: { league: string }) {
         title: newTitle.trim(),
         body: newBody.trim(),
         image_url,
-        discord_webhook: discordWebhook.trim() || null,
+        post_to_discord: postToDiscord && discordConfigured,
       }),
     });
     const data = await r.json();
@@ -1903,13 +1908,14 @@ function ArticlesTab({ league }: { league: string }) {
   return (
     <div className="space-y-5">
       <div className={card}>
-        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Post Announcement</h3>
-        <div className="space-y-2">
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-4">Post Article</h3>
+        <div className="space-y-3">
           <input className={input} placeholder="Title" value={newTitle} onChange={(e) => { setNewTitle(e.target.value); setErr(""); }} />
-          <textarea className={`${input} h-28 resize-y`} placeholder="Write your announcement here..." value={newBody} onChange={(e) => { setNewBody(e.target.value); setErr(""); }} />
+          <textarea className={`${input} h-36 resize-y`} placeholder="Write your article here..." value={newBody} onChange={(e) => { setNewBody(e.target.value); setErr(""); }} />
+
           {/* Image upload */}
-          <div>
-            <label className="block text-xs text-slate-400 mb-1">Image / Logo (optional)</label>
+          <div className="rounded-xl border border-slate-700 bg-slate-950 p-3">
+            <label className="block text-xs font-semibold text-slate-400 mb-2">📷 Image (optional)</label>
             <input
               type="file"
               accept="image/*"
@@ -1917,27 +1923,45 @@ function ArticlesTab({ league }: { league: string }) {
               className="block text-sm text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-700 file:text-slate-200 hover:file:bg-slate-600 cursor-pointer"
             />
             {imagePreview && (
-              <div className="mt-2 relative inline-block">
-                <img src={imagePreview} alt="preview" className="max-h-40 rounded-lg border border-slate-700 object-contain" />
+              <div className="mt-3 relative inline-block">
+                <img src={imagePreview} alt="preview" className="max-h-48 rounded-lg border border-slate-700 object-contain" />
                 <button
                   onClick={() => { setImageFile(null); setImagePreview(null); }}
-                  className="absolute top-1 right-1 rounded-full bg-slate-900/80 text-slate-400 hover:text-red-400 text-xs px-1.5 py-0.5"
+                  className="absolute top-1 right-1 rounded-full bg-slate-900/90 text-slate-400 hover:text-red-400 text-xs px-1.5 py-0.5 border border-slate-700"
                 >✕</button>
               </div>
             )}
           </div>
-          {/* Discord webhook */}
-          <div>
-            <label className="block text-xs text-slate-400 mb-1">Discord Webhook URL (optional — posts to channel on submit)</label>
-            <input
-              className={input}
-              placeholder="https://discord.com/api/webhooks/..."
-              value={discordWebhook}
-              onChange={(e) => saveWebhook(e.target.value)}
-            />
+
+          {/* Discord toggle */}
+          <div className="rounded-xl border border-slate-700 bg-slate-950 p-3 flex items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                <span>🔔</span>
+                Post to Discord <span className="text-slate-500 font-normal">{channelName}</span>
+              </div>
+              {discordConfigured === false && (
+                <div className="text-xs text-amber-500 mt-0.5">
+                  Not configured — add <code className="bg-slate-800 px-1 rounded">DISCORD_WEBHOOK_{league.toUpperCase()}</code> to your .env
+                </div>
+              )}
+              {discordConfigured === true && (
+                <div className="text-xs text-green-500 mt-0.5">Webhook configured ✓</div>
+              )}
+            </div>
+            <button
+              onClick={() => setPostToDiscord((v) => !v)}
+              disabled={!discordConfigured}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none flex-shrink-0 ${
+                postToDiscord && discordConfigured ? "bg-blue-600" : "bg-slate-700"
+              } ${!discordConfigured ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${postToDiscord && discordConfigured ? "translate-x-6" : "translate-x-1"}`} />
+            </button>
           </div>
         </div>
-        <button className={`${btnPrimary} mt-3`} onClick={addArticle} disabled={posting}>{posting ? "Posting..." : "Post"}</button>
+
+        <button className={`${btnPrimary} mt-4`} onClick={addArticle} disabled={posting}>{posting ? "Posting..." : "Post Article"}</button>
         <ErrMsg msg={err} />
       </div>
 
