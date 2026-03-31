@@ -559,6 +559,8 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [playerTeams, setPlayerTeams] = useState<{ mc_uuid: string; team_id: string; players: Player }[]>([]);
   const [addingToTeam, setAddingToTeam] = useState<Record<string, string>>({});
+  const [addingAmount, setAddingAmount] = useState<Record<string, string>>({});
+  const [contracts, setContracts] = useState<{ mc_uuid: string; team_id: string; amount: number; status: string }[]>([]);
 
   // Keep internal season in sync when parent season prop changes
   useEffect(() => {
@@ -566,11 +568,12 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
   }, [initialSeason]);
 
   const refresh = useCallback(async () => {
-    const [teamsData, recData, playersData, ptData] = await Promise.all([
+    const [teamsData, recData, playersData, ptData, contractsData] = await Promise.all([
       fetch(`/api/teams?league=${league}&season=${encodeURIComponent(season)}`).then((r) => r.json()).catch(() => []),
       fetch(`/api/teams/records?league=${league}&season=${encodeURIComponent(season)}`).then((r) => r.json()).catch(() => []),
       fetch(`/api/players`).then((r) => r.json()).catch(() => []),
       fetch(`/api/teams/players?league=${league}&season=${encodeURIComponent(season)}`).then((r) => r.json()).catch(() => []),
+      fetch(`/api/contracts?league=${league}&season=${encodeURIComponent(season)}&status=active`).then((r) => r.json()).catch(() => []),
     ]);
     setTeams(Array.isArray(teamsData) ? teamsData : []);
     if (Array.isArray(recData)) {
@@ -580,6 +583,7 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
     }
     setAllPlayers(Array.isArray(playersData) ? playersData : []);
     setPlayerTeams(Array.isArray(ptData) ? ptData : []);
+    setContracts(Array.isArray(contractsData) ? contractsData : []);
   }, [league, season]);
 
   useEffect(() => { refresh(); }, [refresh]);
@@ -633,13 +637,17 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
   const addToTeam = async (teamId: string) => {
     const uuid = addingToTeam[teamId];
     if (!uuid) return;
+    const amtRaw = addingAmount[teamId]?.trim();
+    const amount = amtRaw ? Number(amtRaw.replace(/,/g, "")) : null;
+    if (amtRaw && (isNaN(amount!) || amount! <= 0)) { setErr("Salary must be a positive number"); return; }
     const r = await fetch("/api/teams/players", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mc_uuid: uuid, team_id: teamId, league, season }),
+      body: JSON.stringify({ mc_uuid: uuid, team_id: teamId, league, season, amount: amount ?? undefined }),
     });
     if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Failed to add player to team"); return; }
     setAddingToTeam((prev) => { const n = { ...prev }; delete n[teamId]; return n; });
+    setAddingAmount((prev) => { const n = { ...prev }; delete n[teamId]; return n; });
     refresh();
   };
 
@@ -903,45 +911,71 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
                       const roster = playerTeams.filter((pt) => pt.team_id === t.id);
                       const assigned = new Set(playerTeams.map((pt) => pt.mc_uuid));
                       const unassigned = allPlayers.filter((p) => !assigned.has(p.mc_uuid));
+                      const contractMap = Object.fromEntries(contracts.filter((c) => c.team_id === t.id).map((c) => [c.mc_uuid, c.amount]));
+                      const TOTAL_CAP = 25000;
+                      const capUsed = contracts.filter((c) => c.team_id === t.id).reduce((s, c) => s + c.amount, 0);
                       return (
                         <div className="mt-3 pt-3 border-t border-slate-800">
                           <div className="flex items-center justify-between mb-2">
                             <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Roster ({roster.length})</span>
+                            {capUsed > 0 && (
+                              <span className={`text-xs font-bold ${capUsed > TOTAL_CAP ? "text-red-400" : "text-green-400"}`}>
+                                ${capUsed.toLocaleString()} / ${TOTAL_CAP.toLocaleString()} cap
+                              </span>
+                            )}
                           </div>
                           {roster.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5 mb-2">
-                              {roster.map((pt) => (
-                                <div key={pt.mc_uuid} className="flex items-center gap-1.5 rounded-full bg-slate-800 border border-slate-700 pl-1 pr-2 py-0.5">
-                                  <img
-                                    src={`https://minotar.net/avatar/${pt.players?.mc_username ?? "MHF_Steve"}/20`}
-                                    alt={pt.players?.mc_username}
-                                    className="w-5 h-5 rounded-full flex-shrink-0"
-                                    onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/20"; }}
-                                  />
-                                  <span className="text-xs text-white">{pt.players?.mc_username}</span>
-                                  <button
-                                    className="text-slate-500 hover:text-red-400 transition text-xs leading-none ml-0.5"
-                                    onClick={() => removeFromTeam(pt.mc_uuid)}
-                                    title="Remove from team"
-                                  >✕</button>
-                                </div>
-                              ))}
+                            <div className="flex flex-wrap gap-1.5 mb-3">
+                              {roster.map((pt) => {
+                                const salary = contractMap[pt.mc_uuid];
+                                return (
+                                  <div key={pt.mc_uuid} className="flex items-center gap-1.5 rounded-lg bg-slate-800 border border-slate-700 pl-1 pr-2 py-1">
+                                    <img
+                                      src={`https://minotar.net/avatar/${pt.players?.mc_username ?? "MHF_Steve"}/20`}
+                                      alt={pt.players?.mc_username}
+                                      className="w-5 h-5 rounded-full flex-shrink-0"
+                                      onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/20"; }}
+                                    />
+                                    <span className="text-xs text-white font-semibold">{pt.players?.mc_username}</span>
+                                    {salary != null && (
+                                      <span className="text-[10px] font-bold text-green-400 bg-green-950/60 border border-green-800/50 rounded px-1">
+                                        ${salary.toLocaleString()}
+                                      </span>
+                                    )}
+                                    <button
+                                      className="text-slate-500 hover:text-red-400 transition text-xs leading-none ml-0.5"
+                                      onClick={() => removeFromTeam(pt.mc_uuid)}
+                                      title="Remove from team"
+                                    >✕</button>
+                                  </div>
+                                );
+                              })}
                             </div>
                           )}
-                          <div className="flex items-center gap-2">
+                          {/* Add player row */}
+                          <div className="flex items-center gap-2 flex-wrap">
                             <PlayerSearchSelect
                               players={unassigned}
                               value={addingToTeam[t.id] ?? ""}
                               onChange={(uuid) => { setAddingToTeam((prev) => ({ ...prev, [t.id]: uuid })); setErr(""); }}
                               placeholder="Add player..."
                             />
+                            <input
+                              type="number"
+                              min={0}
+                              placeholder="Salary (e.g. 3500)"
+                              value={addingAmount[t.id] ?? ""}
+                              onChange={(e) => { setAddingAmount((prev) => ({ ...prev, [t.id]: e.target.value })); setErr(""); }}
+                              className={`${input} w-40 text-sm`}
+                            />
                             <button
                               className={btnPrimary}
                               onClick={() => addToTeam(t.id)}
                               disabled={!addingToTeam[t.id]}
                               style={{ whiteSpace: "nowrap" }}
-                            >Add</button>
+                            >Add to Team</button>
                           </div>
+                          <p className="text-[11px] text-slate-600 mt-1">Enter a salary to auto-create a contract and cancel their open auction.</p>
                           {err && <p className="text-xs text-red-400 mt-1">{err}</p>}
                         </div>
                       );

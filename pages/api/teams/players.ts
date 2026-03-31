@@ -20,15 +20,51 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "POST") {
     const admin = await requireAdmin(req, res);
     if (!admin) return;
-    const { mc_uuid, team_id, league: leagueRaw, season } = req.body;
+    const { mc_uuid, team_id, league: leagueRaw, season, amount, is_two_season } = req.body;
     const league = resolveLeague(leagueRaw);
     if (!mc_uuid || !team_id || !league) return res.status(400).json({ error: "mc_uuid, team_id, league required" });
+
     // Delete any existing assignment for this player in this league, then insert fresh
     await supabase.from("player_teams").delete().eq("mc_uuid", mc_uuid).eq("league", league);
     const { error } = await supabase
       .from("player_teams")
       .insert([{ mc_uuid, team_id, league, season: season ?? null }]);
     if (error) return res.status(500).json({ error: error.message });
+
+    // If a salary amount is provided, create a contract and cancel any open auction
+    if (amount != null && Number(amount) > 0) {
+      // Cancel any active or pending auction for this player
+      await supabase
+        .from("auctions")
+        .update({ status: "cancelled" })
+        .eq("mc_uuid", mc_uuid)
+        .eq("league", league)
+        .in("status", ["active", "pending"]);
+
+      // Expire any existing active contracts so there's no duplicate
+      await supabase
+        .from("contracts")
+        .update({ status: "expired" })
+        .eq("mc_uuid", mc_uuid)
+        .eq("league", league)
+        .in("status", ["active", "pending_approval"]);
+
+      // Create the new contract
+      const { error: contractErr } = await supabase
+        .from("contracts")
+        .insert([{
+          league,
+          mc_uuid,
+          team_id,
+          amount: Number(amount),
+          is_two_season: is_two_season ?? false,
+          season: season ?? null,
+          phase: 1,
+          status: "active",
+        }]);
+      if (contractErr) return res.status(500).json({ error: contractErr.message });
+    }
+
     return res.status(200).json({ success: true });
   }
 
@@ -38,6 +74,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { mc_uuid, league: leagueRaw2, season } = req.query;
     const league = resolveLeague(leagueRaw2);
     if (!mc_uuid || !league) return res.status(400).json({ error: "mc_uuid, league required" });
+
+    // Deactivate the player's contract for this league when removed from a team
+    await supabase
+      .from("contracts")
+      .update({ status: "expired" })
+      .eq("mc_uuid", mc_uuid as string)
+      .eq("league", league as string)
+      .in("status", ["active", "pending_approval"]);
+
     let query = supabase.from("player_teams").delete().eq("mc_uuid", mc_uuid as string).eq("league", league as string);
     if (season) query = query.eq("season", season as string);
     const { error } = await query;
