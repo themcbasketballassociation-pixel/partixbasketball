@@ -31,8 +31,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .insert([{ mc_uuid, team_id, league, season: season ?? null }]);
     if (error) return res.status(500).json({ error: error.message });
 
-    // If a salary amount is provided, create a contract and cancel any open auction
-    if (amount != null && Number(amount) > 0) {
+    // Determine the contract amount: use provided amount, or auto-fetch from the player's auction min_price
+    let contractAmount: number | null = (amount != null && Number(amount) > 0) ? Number(amount) : null;
+
+    if (contractAmount == null && season) {
+      // Extract season number from "Season N" to match the auctions.season column (stored as integer)
+      const seasonNum = parseInt(String(season).replace(/\D/g, ""), 10);
+      if (!isNaN(seasonNum)) {
+        const { data: auctionRow } = await supabase
+          .from("auctions")
+          .select("min_price")
+          .eq("mc_uuid", mc_uuid)
+          .eq("league", league)
+          .eq("season", seasonNum)
+          .maybeSingle();
+        if (auctionRow?.min_price != null) contractAmount = Number(auctionRow.min_price);
+      }
+    }
+
+    if (contractAmount != null && contractAmount > 0) {
       // Cancel any active or pending auction for this player
       await supabase
         .from("auctions")
@@ -56,7 +73,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           league,
           mc_uuid,
           team_id,
-          amount: Number(amount),
+          amount: contractAmount,
           is_two_season: is_two_season ?? false,
           season: season ?? null,
           phase: 1,

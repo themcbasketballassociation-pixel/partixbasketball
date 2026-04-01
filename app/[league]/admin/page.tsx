@@ -559,7 +559,6 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [playerTeams, setPlayerTeams] = useState<{ mc_uuid: string; team_id: string; players: Player }[]>([]);
   const [addingToTeam, setAddingToTeam] = useState<Record<string, string>>({});
-  const [addingAmount, setAddingAmount] = useState<Record<string, string>>({});
   const [contracts, setContracts] = useState<{ mc_uuid: string; team_id: string; amount: number; status: string }[]>([]);
 
   // Keep internal season in sync when parent season prop changes
@@ -637,17 +636,13 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
   const addToTeam = async (teamId: string) => {
     const uuid = addingToTeam[teamId];
     if (!uuid) return;
-    const amtRaw = addingAmount[teamId]?.trim();
-    const amount = amtRaw ? Number(amtRaw.replace(/,/g, "")) : null;
-    if (amtRaw && (isNaN(amount!) || amount! <= 0)) { setErr("Salary must be a positive number"); return; }
     const r = await fetch("/api/teams/players", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mc_uuid: uuid, team_id: teamId, league, season, amount: amount ?? undefined }),
+      body: JSON.stringify({ mc_uuid: uuid, team_id: teamId, league, season }),
     });
     if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Failed to add player to team"); return; }
     setAddingToTeam((prev) => { const n = { ...prev }; delete n[teamId]; return n; });
-    setAddingAmount((prev) => { const n = { ...prev }; delete n[teamId]; return n; });
     refresh();
   };
 
@@ -960,14 +955,6 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
                               onChange={(uuid) => { setAddingToTeam((prev) => ({ ...prev, [t.id]: uuid })); setErr(""); }}
                               placeholder="Add player..."
                             />
-                            <input
-                              type="number"
-                              min={0}
-                              placeholder="Salary (e.g. 3500)"
-                              value={addingAmount[t.id] ?? ""}
-                              onChange={(e) => { setAddingAmount((prev) => ({ ...prev, [t.id]: e.target.value })); setErr(""); }}
-                              className={`${input} w-40 text-sm`}
-                            />
                             <button
                               className={btnPrimary}
                               onClick={() => addToTeam(t.id)}
@@ -975,7 +962,7 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
                               style={{ whiteSpace: "nowrap" }}
                             >Add to Team</button>
                           </div>
-                          <p className="text-[11px] text-slate-600 mt-1">Enter a salary to auto-create a contract and cancel their open auction.</p>
+                          <p className="text-[11px] text-slate-600 mt-1">Salary is auto-set from the player&apos;s auction minimum price for this season.</p>
                           {err && <p className="text-xs text-red-400 mt-1">{err}</p>}
                         </div>
                       );
