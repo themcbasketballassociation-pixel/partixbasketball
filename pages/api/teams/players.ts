@@ -34,16 +34,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Determine the contract amount: use provided amount, or auto-fetch from the player's auction min_price
     let contractAmount: number | null = (amount != null && Number(amount) > 0) ? Number(amount) : null;
 
-    if (contractAmount == null && season) {
-      // Extract season number from "Season N" to match the auctions.season column (stored as integer)
-      const seasonNum = parseInt(String(season).replace(/\D/g, ""), 10);
-      if (!isNaN(seasonNum)) {
+    if (contractAmount == null) {
+      // Try season-specific auction first (auctions.season is an int like 7)
+      if (season) {
+        const seasonNum = parseInt(String(season).replace(/\D/g, ""), 10);
+        if (!isNaN(seasonNum)) {
+          const { data: auctionRow } = await supabase
+            .from("auctions")
+            .select("min_price")
+            .eq("mc_uuid", mc_uuid)
+            .eq("league", league)
+            .eq("season", seasonNum)
+            .maybeSingle();
+          if (auctionRow?.min_price != null) contractAmount = Number(auctionRow.min_price);
+        }
+      }
+      // Fall back to any active/pending auction for this player (season may be null on older auctions)
+      if (contractAmount == null) {
         const { data: auctionRow } = await supabase
           .from("auctions")
           .select("min_price")
           .eq("mc_uuid", mc_uuid)
           .eq("league", league)
-          .eq("season", seasonNum)
+          .in("status", ["active", "pending"])
+          .order("nominated_at", { ascending: false })
+          .limit(1)
           .maybeSingle();
         if (auctionRow?.min_price != null) contractAmount = Number(auctionRow.min_price);
       }
