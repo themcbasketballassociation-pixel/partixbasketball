@@ -34,6 +34,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (action === "launch") {
       updates.status = "active";
       updates.closes_at = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();
+    } else if (action === "cancel") {
+      updates.status = "cancelled";
     } else {
       if (status !== undefined) updates.status = status;
       if (winning_team_id !== undefined) updates.winning_team_id = winning_team_id;

@@ -3729,15 +3729,28 @@ function AuctionAdminTab({ league }: { league: string }) {
     refresh();
   };
 
-  // Launch ALL pending auctions
+  // Launch ALL pending auctions (skips/cancels players already on a team)
   const launchAll = async () => {
     const pending = auctions.filter((a) => a.status === "pending");
+    // Fetch current roster assignments so we can skip already-teamed players
+    const ptData = await fetch(`/api/teams/players?league=${league}`).then((r) => r.json()).catch(() => []);
+    const teamedUuids = new Set<string>(Array.isArray(ptData) ? ptData.map((pt: { mc_uuid: string }) => pt.mc_uuid) : []);
+
     for (const a of pending) {
-      await fetch(`/api/auction/${a.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "launch" }),
-      });
+      if (teamedUuids.has(a.mc_uuid)) {
+        // Player already on a team — cancel their auction instead of launching
+        await fetch(`/api/auction/${a.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "cancel" }),
+        });
+      } else {
+        await fetch(`/api/auction/${a.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "launch" }),
+        });
+      }
     }
     refresh();
   };
