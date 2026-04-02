@@ -617,10 +617,15 @@ export default function GridPage({ params }: { params?: Promise<{ league?: strin
   const [showAnswers, setShowAnswers] = useState(false);
   const [showShare,   setShowShare]   = useState(false);
   const [stateReady,  setStateReady]  = useState(false);
+  const loadedForDayRef = useRef<number | null>(null);
 
   // Load data + grid
   useEffect(() => {
     if (!slug) return;
+    // Mark as not-ready so the save effect won't write stale state to the new day's key
+    loadedForDayRef.current = null;
+    setLoading(true);
+    setNoGrid(false);
     Promise.all([
       fetch(`/api/stats?league=${slug}&season=all&type=combined`).then(r => r.json()),
       fetch(`/api/accolades?league=${slug}`).then(r => r.json()),
@@ -673,14 +678,19 @@ export default function GridPage({ params }: { params?: Promise<{ league?: strin
         setRows(grid.rows);
         setCols(grid.cols);
 
-        // Restore persisted state for today
+        // Restore persisted state for this day (or reset to fresh state)
         const saved = loadState(slug, dayNum);
         if (saved) {
           setCells(saved.cells);
           setGuessesLeft(saved.guessesLeft);
           setUsedUuids(new Set(saved.usedUuids));
+        } else {
+          setCells(Array(9).fill({ status: "empty" }));
+          setGuessesLeft(TOTAL_GUESSES);
+          setUsedUuids(new Set());
         }
       }
+      loadedForDayRef.current = dayNum;
       setLoading(false);
       setStateReady(true);
     });
@@ -688,7 +698,7 @@ export default function GridPage({ params }: { params?: Promise<{ league?: strin
 
   // Persist state whenever it changes (after initial load)
   useEffect(() => {
-    if (!stateReady || loading) return;
+    if (!stateReady || loading || loadedForDayRef.current !== dayNum) return;
     saveState(slug, dayNum, { cells, guessesLeft, usedUuids: [...usedUuids] });
   }, [cells, guessesLeft, usedUuids, stateReady, loading, slug, dayNum]);
 
