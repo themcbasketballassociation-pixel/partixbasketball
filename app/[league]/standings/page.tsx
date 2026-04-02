@@ -48,11 +48,11 @@ function applyTiebreakers(group: StandingRow[], games: Game[]): StandingRow[] {
 }
 
 function sortStandings(rows: StandingRow[], games: Game[]): StandingRow[] {
-  const sorted = [...rows].sort((a, b) => b.pct - a.pct);
+  const sorted = [...rows].sort((a, b) => b.w !== a.w ? b.w - a.w : b.pct - a.pct);
   const groups: StandingRow[][] = [];
   for (const row of sorted) {
     const last = groups[groups.length - 1];
-    if (last && Math.abs(last[0].pct - row.pct) < 0.0001) last.push(row);
+    if (last && last[0].w === row.w && Math.abs(last[0].pct - row.pct) < 0.0001) last.push(row);
     else groups.push([row]);
   }
   return groups.flatMap((g) => applyTiebreakers(g, games));
@@ -181,6 +181,7 @@ export default function StandingsPage({ params }: { params?: Promise<{ league?: 
   const hasDivisions = allRows.some((r) => r.team.division === "East" || r.team.division === "West");
   const eastRows = allRows.filter((r) => r.team.division === "East");
   const westRows = allRows.filter((r) => r.team.division === "West");
+  const [viewAll, setViewAll] = React.useState(false);
 
   return (
     <div style={{ borderRadius: "1rem", border: "1px solid #1e1e1e", background: "#111", overflow: "hidden" }}>
@@ -190,17 +191,32 @@ export default function StandingsPage({ params }: { params?: Promise<{ league?: 
           <h2 style={{ fontSize: "1.5rem", fontWeight: 700, color: "#fff", margin: 0 }}>Standings</h2>
           <p style={{ color: "#888", fontSize: "0.875rem", margin: "2px 0 0" }}>{leagueDisplay} · {season}</p>
         </div>
-        <select value={season} onChange={(e) => { setSeason(e.target.value); setLoading(true); }}
-          style={{ background: "#0d0d0d", border: "1px solid #2a2a2a", color: "#fff", borderRadius: "0.75rem", padding: "6px 14px", fontSize: "0.875rem", outline: "none", cursor: "pointer" }}>
-          {seasons.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {hasDivisions && (
+            <div style={{ display: "flex", background: "#0d0d0d", border: "1px solid #2a2a2a", borderRadius: "0.6rem", overflow: "hidden" }}>
+              {(["Conferences", "All"] as const).map((label) => {
+                const active = label === "All" ? viewAll : !viewAll;
+                return (
+                  <button key={label} onClick={() => setViewAll(label === "All")}
+                    style={{ padding: "5px 14px", fontSize: "0.8rem", fontWeight: 600, border: "none", cursor: "pointer", transition: "background 0.15s, color 0.15s", background: active ? "#2563eb" : "transparent", color: active ? "#fff" : "#555" }}>
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <select value={season} onChange={(e) => { setSeason(e.target.value); setLoading(true); }}
+            style={{ background: "#0d0d0d", border: "1px solid #2a2a2a", color: "#fff", borderRadius: "0.75rem", padding: "6px 14px", fontSize: "0.875rem", outline: "none", cursor: "pointer" }}>
+            {seasons.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
       </div>
 
       {loading ? (
         <div style={{ padding: 48, textAlign: "center", color: "#555" }}>Loading standings...</div>
       ) : allRows.length === 0 ? (
         <div style={{ padding: 48, textAlign: "center", color: "#555" }}>No teams or games yet.</div>
-      ) : hasDivisions ? (
+      ) : hasDivisions && !viewAll ? (
         /* Conference standings — two panels side by side */
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0 }}>
           {/* West */}
@@ -221,13 +237,13 @@ export default function StandingsPage({ params }: { params?: Promise<{ league?: 
           </div>
         </div>
       ) : (
-        /* No conferences — single table */
+        /* All teams — single table */
         <StandingsTable rows={allRows} games={games} />
       )}
 
       {!loading && allRows.length > 0 && (
         <div style={{ padding: "10px 20px", borderTop: "1px solid #1e1e1e", fontSize: "0.7rem", color: "#383838" }}>
-          Tiebreakers: Win % → Conf Record → H2H → Point Diff
+          Tiebreakers: Wins → Win % → Conf Record → H2H → Point Diff
         </div>
       )}
     </div>
