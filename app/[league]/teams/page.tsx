@@ -317,7 +317,7 @@ function TeamDetailModal({ team, league, seasons, defaultSeason, onClose }: {
                           <div style={{ fontSize: "0.68rem", fontWeight: 700, color: "#444", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>{weekLabel}</div>
                           <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                             {games.map(g => {
-                              const isHome = g.home_team_id === team.id;
+                              const isHome = g.home_team_id === team.id || g.home_team?.abbreviation === team.abbreviation;
                               const opponent = isHome ? g.away_team : g.home_team;
                               const myScore = isHome ? g.home_score : g.away_score;
                               const oppScore = isHome ? g.away_score : g.home_score;
