@@ -292,7 +292,7 @@ function generateGrid(
 
   // Search for a valid 3×3 grid where 9 distinct players can fill all cells
   for (let attempt = 0; attempt < 500; attempt++) {
-    const rng    = seededRng((SEASON_SEED + dayNum) * 137 + attempt);
+    const rng    = seededRng(Math.imul(dayNum, 1664525) ^ Math.imul(attempt, 1013904223) ^ SEASON_SEED);
     const picked = shuffled(usable, rng);
     const rows   = picked.slice(0, 3);
     const cols   = picked.slice(3, 6);
@@ -574,7 +574,7 @@ function PlayerModal({
 type SavedState = { cells: CellState[]; guessesLeft: number; usedUuids: string[] };
 
 function storageKey(league: string, day: number) {
-  return `partix:grid:${league}:${SEASON_SEED}:${day}`;
+  return `partix:grid:v2:${league}:${SEASON_SEED}:${day}`;
 }
 function loadState(league: string, day: number): SavedState | null {
   try {
