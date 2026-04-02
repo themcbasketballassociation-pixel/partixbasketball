@@ -282,42 +282,71 @@ function TeamDetailModal({ team, league, seasons, defaultSeason, onClose }: {
               <SectionHeader title={`Schedule · ${modalSeason}`} />
               {teamGames.length === 0 ? (
                 <Empty text="No games found for this season." />
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                  {teamGames
-                    .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime())
-                    .map(g => {
-                      const isHome = g.home_team_id === team.id;
-                      const opponent = isHome ? g.away_team : g.home_team;
-                      const myScore = isHome ? g.home_score : g.away_score;
-                      const oppScore = isHome ? g.away_score : g.home_score;
-                      const date = new Date(g.scheduled_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-                      let result = "";
-                      let resultColor = "#aaa";
-                      if (g.status === "final" && myScore != null && oppScore != null) {
-                        if (myScore > oppScore) { result = "W"; resultColor = "#22c55e"; }
-                        else if (myScore < oppScore) { result = "L"; resultColor = "#ef4444"; }
-                        else { result = "T"; }
-                      }
-                      return (
-                        <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "#0d0d0d", border: "1px solid #1a1a1a", borderRadius: "0.6rem", flexWrap: "wrap" }}>
-                          <span style={{ color: "#555", fontSize: "0.75rem", minWidth: 88 }}>{date}</span>
-                          <span style={{ color: "#444", fontSize: "0.72rem", minWidth: 14, textAlign: "center" }}>{isHome ? "vs" : "@"}</span>
-                          <span style={{ color: "#ccc", fontWeight: 600, fontSize: "0.875rem", flex: 1 }}>{opponent?.name ?? "TBD"}</span>
-                          {result ? (
-                            <span style={{ fontWeight: 700, color: resultColor, fontSize: "0.875rem", fontFamily: "monospace", minWidth: 60, textAlign: "right" }}>
-                              {result}  {myScore}–{oppScore}
-                            </span>
-                          ) : (
-                            <span style={{ color: "#555", fontSize: "0.75rem" }}>
-                              {g.status === "scheduled" ? "Upcoming" : g.status}
-                            </span>
-                          )}
+              ) : (() => {
+                  const sorted = [...teamGames].sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime());
+                  // Group by ISO calendar week (Mon–Sun)
+                  const epochMonday = (d: Date) => {
+                    const day = d.getDay(); // 0=Sun
+                    const diff = (day === 0 ? -6 : 1 - day);
+                    const mon = new Date(d);
+                    mon.setHours(0, 0, 0, 0);
+                    mon.setDate(d.getDate() + diff);
+                    return mon.getTime();
+                  };
+                  const weekGroups: { weekLabel: string; games: typeof sorted }[] = [];
+                  let weekNum = 0;
+                  let lastEpoch = -1;
+                  for (const g of sorted) {
+                    const epoch = epochMonday(new Date(g.scheduled_at));
+                    if (epoch !== lastEpoch) {
+                      weekNum++;
+                      lastEpoch = epoch;
+                      weekGroups.push({ weekLabel: `Week ${weekNum}`, games: [] });
+                    }
+                    weekGroups[weekGroups.length - 1].games.push(g);
+                  }
+                  return (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                      {weekGroups.map(({ weekLabel, games }) => (
+                        <div key={weekLabel}>
+                          <div style={{ fontSize: "0.68rem", fontWeight: 700, color: "#444", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>{weekLabel}</div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                            {games.map(g => {
+                              const isHome = g.home_team_id === team.id;
+                              const opponent = isHome ? g.away_team : g.home_team;
+                              const myScore = isHome ? g.home_score : g.away_score;
+                              const oppScore = isHome ? g.away_score : g.home_score;
+                              const date = new Date(g.scheduled_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                              let result = "";
+                              let resultColor = "#aaa";
+                              if (g.status === "final" && myScore != null && oppScore != null) {
+                                if (myScore > oppScore) { result = "W"; resultColor = "#22c55e"; }
+                                else if (myScore < oppScore) { result = "L"; resultColor = "#ef4444"; }
+                                else { result = "T"; }
+                              }
+                              return (
+                                <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "#0d0d0d", border: "1px solid #1a1a1a", borderRadius: "0.6rem", flexWrap: "wrap" }}>
+                                  <span style={{ color: "#555", fontSize: "0.75rem", minWidth: 88 }}>{date}</span>
+                                  <span style={{ color: "#444", fontSize: "0.72rem", minWidth: 14, textAlign: "center" }}>{isHome ? "vs" : "@"}</span>
+                                  <span style={{ color: "#ccc", fontWeight: 600, fontSize: "0.875rem", flex: 1 }}>{opponent?.name ?? "TBD"}</span>
+                                  {result ? (
+                                    <span style={{ fontWeight: 700, color: resultColor, fontSize: "0.875rem", fontFamily: "monospace", minWidth: 60, textAlign: "right" }}>
+                                      {result}  {myScore}–{oppScore}
+                                    </span>
+                                  ) : (
+                                    <span style={{ color: "#555", fontSize: "0.75rem" }}>
+                                      {g.status === "scheduled" ? "Upcoming" : g.status}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
-                      );
-                    })}
-                </div>
-              )}
+                      ))}
+                    </div>
+                  );
+                })()}
             </section>
 
           </div>
