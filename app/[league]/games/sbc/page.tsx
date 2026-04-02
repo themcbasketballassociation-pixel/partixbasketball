@@ -157,7 +157,9 @@ function PlayerCard({
 export default function SbcPage({ params }: { params?: Promise<{ league?: string }> }) {
   const resolved = React.use(params ?? Promise.resolve({})) as { league?: string };
   const slug = resolved.league ?? "";
-  const dayNum = getDayNum();
+  const today = getDayNum();
+  const [viewDay, setViewDay] = useState(today);
+  const dayNum = viewDay;
   const { data: session, status } = useSession();
 
   const [players, setPlayers]     = useState<Player[]>([]);
@@ -170,6 +172,14 @@ export default function SbcPage({ params }: { params?: Promise<{ league?: string
   const [loading, setLoading]     = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr]             = useState("");
+
+  // Reset choices when day changes
+  useEffect(() => {
+    setChoices([null, null, null]);
+    setSubmitted(false);
+    setResults(null);
+    setErr("");
+  }, [viewDay]);
 
   // Load data
   useEffect(() => {
@@ -303,9 +313,18 @@ export default function SbcPage({ params }: { params?: Promise<{ league?: string
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
       {/* Header */}
-      <div className="px-6 py-5 border-b border-slate-800">
-        <h2 className="text-2xl font-bold text-white">Start · Bench · Cut</h2>
-        <p className="text-slate-400 text-sm mt-0.5">Day #{dayNum} · resets at 10 AM EST · {slug.toUpperCase()}</p>
+      <div className="px-6 py-5 border-b border-slate-800 flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <h2 className="text-2xl font-bold text-white">Start · Bench · Cut</h2>
+          <p className="text-slate-400 text-sm mt-0.5">Day #{dayNum} · resets at 10 AM EST · {slug.toUpperCase()}</p>
+        </div>
+        <div className="flex items-center gap-1">
+          <button onClick={() => setViewDay(d => Math.max(1, d - 1))} disabled={viewDay <= 1}
+            className="rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed text-white px-3 py-1.5 text-sm font-medium transition">←</button>
+          <span className="text-slate-400 text-xs px-2 min-w-[56px] text-center font-medium">{viewDay === today ? "Today" : `Day ${viewDay}`}</span>
+          <button onClick={() => setViewDay(d => Math.min(today, d + 1))} disabled={viewDay >= today}
+            className="rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed text-white px-3 py-1.5 text-sm font-medium transition">→</button>
+        </div>
       </div>
 
       {/* Rules */}

@@ -315,7 +315,9 @@ function ShareModal({ groups, guessHistory, foundOrder, dayNum, onClose }: {
 export default function ConnectionsPage({ params }: { params?: Promise<{ league?: string }> }) {
   const resolved = React.use(params ?? Promise.resolve({})) as { league?: string };
   const slug = resolved.league ?? "";
-  const dayNum = getDayNum();
+  const today = getDayNum();
+  const [viewDay, setViewDay] = useState(today);
+  const dayNum = viewDay;
   const { status: authStatus } = useSession();
 
   const [groups,      setGroups]      = useState<Group[] | null>(null);
@@ -483,6 +485,13 @@ export default function ConnectionsPage({ params }: { params?: Promise<{ league?
             <p className="text-slate-400 text-sm mt-0.5">Day #{dayNum} · Group the 16 players into 4 categories of 4</p>
           </div>
           <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1">
+              <button onClick={() => setViewDay(d => Math.max(1, d - 1))} disabled={viewDay <= 1}
+                className="rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed text-white px-3 py-1.5 text-sm font-medium transition">←</button>
+              <span className="text-slate-400 text-xs px-2 min-w-[56px] text-center font-medium">{viewDay === today ? "Today" : `Day ${viewDay}`}</span>
+              <button onClick={() => setViewDay(d => Math.min(today, d + 1))} disabled={viewDay >= today}
+                className="rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed text-white px-3 py-1.5 text-sm font-medium transition">→</button>
+            </div>
             <span className="text-slate-300 text-sm font-semibold">{foundGroups.length}/4 found</span>
             <div className="flex gap-1">
               {Array.from({ length: 4 }).map((_, i) => (
