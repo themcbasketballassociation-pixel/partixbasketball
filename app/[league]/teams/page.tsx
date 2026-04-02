@@ -321,7 +321,9 @@ function TeamDetailModal({ team, league, seasons, defaultSeason, onClose }: {
                               const opponent = isHome ? g.away_team : g.home_team;
                               const myScore = isHome ? g.home_score : g.away_score;
                               const oppScore = isHome ? g.away_score : g.home_score;
-                              const date = new Date(g.scheduled_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                              const d = new Date(g.scheduled_at);
+                              const date = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                              const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
                               let result = "";
                               let resultColor = "#aaa";
                               if (g.status === "final" && myScore != null && oppScore != null) {
@@ -331,7 +333,7 @@ function TeamDetailModal({ team, league, seasons, defaultSeason, onClose }: {
                               }
                               return (
                                 <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "#0d0d0d", border: "1px solid #1a1a1a", borderRadius: "0.6rem", flexWrap: "wrap" }}>
-                                  <span style={{ color: "#555", fontSize: "0.75rem", minWidth: 88 }}>{date}</span>
+                                  <span style={{ color: "#555", fontSize: "0.75rem", minWidth: 120 }}>{date} · {time}</span>
                                   <span style={{ color: "#444", fontSize: "0.72rem", minWidth: 14, textAlign: "center" }}>{isHome ? "vs" : "@"}</span>
                                   <span style={{ color: "#ccc", fontWeight: 600, fontSize: "0.875rem", flex: 1 }}>{opponent?.name ?? "TBD"}</span>
                                   {result ? (
