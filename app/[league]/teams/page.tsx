@@ -128,12 +128,16 @@ function TeamDetailModal({ team, league, seasons, defaultSeason, onClose }: {
     return { ppg: pts / gp, rpg: reb / gp, apg: ast / gp, spg: stl / gp, bpg: blk / gp, topg: to / gp, gp };
   }, [teamStats]);
 
-  // Games for this team (all-time, filtered to selected season if applicable)
+  // Games for this team — match by ID OR by abbreviation (teams can get new UUIDs each season)
   const teamGames = React.useMemo(() => {
-    const all = allGames.filter(g => g.home_team_id === team.id || g.away_team_id === team.id);
+    const abbr = team.abbreviation;
+    const all = allGames.filter(g =>
+      g.home_team_id === team.id || g.away_team_id === team.id ||
+      g.home_team?.abbreviation === abbr || g.away_team?.abbreviation === abbr
+    );
     if (!modalSeason) return all;
     return all.filter(g => g.season === modalSeason);
-  }, [allGames, team.id, modalSeason]);
+  }, [allGames, team.id, team.abbreviation, modalSeason]);
 
   const accent = team.color2 ?? "#3b82f6";
 
