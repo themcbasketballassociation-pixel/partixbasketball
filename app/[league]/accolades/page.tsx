@@ -12,108 +12,199 @@ type Accolade = {
   mc_uuid: string; players: { mc_uuid: string; mc_username: string };
 };
 
+type RecordEntry = {
+  mc_uuid: string;
+  mc_username: string;
+  value: number;
+  season: string;
+};
+
+type Records = {
+  season: Record<string, RecordEntry>;
+  career: Record<string, RecordEntry>;
+  game: Record<string, RecordEntry>;
+};
+
+function PlayerFace({ uuid, username }: { uuid: string; username: string }) {
+  return (
+    <img
+      src={`https://crafatar.com/avatars/${uuid}?size=32&default=MHF_Steve&overlay`}
+      alt={username}
+      className="w-8 h-8 rounded flex-shrink-0"
+      onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/32"; }}
+    />
+  );
+}
+
+function RecordCard({ label, entry }: { label: string; entry: RecordEntry | undefined }) {
+  if (!entry || !entry.mc_uuid) {
+    return (
+      <div className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-3">
+        <div className="text-xs text-slate-500 mb-1">{label}</div>
+        <div className="text-slate-600 text-sm">No data</div>
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 hover:border-slate-600 transition">
+      <div className="text-xs text-slate-500 mb-2">{label}</div>
+      <div className="flex items-center gap-2.5">
+        <PlayerFace uuid={entry.mc_uuid} username={entry.mc_username} />
+        <div className="min-w-0">
+          <div className="font-bold text-white text-sm truncate">{entry.mc_username || entry.mc_uuid}</div>
+          <div className="text-xs text-slate-500 truncate">{entry.season}</div>
+        </div>
+        <div className="ml-auto text-xl font-bold text-blue-400 flex-shrink-0">{entry.value.toLocaleString()}</div>
+      </div>
+    </div>
+  );
+}
+
 export default function AccoladesPage({ params }: { params?: Promise<{ league?: string }> }) {
   const resolved = React.use(params ?? Promise.resolve({})) as { league?: string };
   const slug = resolved.league ?? "";
   const leagueDisplay = leagueNames[slug] ?? slug.toUpperCase();
 
   const [accolades, setAccolades] = React.useState<Accolade[]>([]);
+  const [records, setRecords] = React.useState<Records | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [season, setSeason] = React.useState("All");
 
   React.useEffect(() => {
     if (!slug) return;
-    fetch(`/api/accolades?league=${slug}`)
-      .then((r) => r.json())
-      .then((data) => {
-        // Exclude rings — those show on player cards only
-        const filtered = Array.isArray(data)
-          ? data.filter((a: Accolade) => a.type !== "Finals Champion")
-          : [];
-        setAccolades(filtered);
-        setLoading(false);
-      });
+    Promise.all([
+      fetch(`/api/accolades?league=${slug}`).then((r) => r.json()),
+      fetch(`/api/stats/records?league=${slug}`).then((r) => r.json()),
+    ]).then(([accoladesData, recordsData]) => {
+      const filtered = Array.isArray(accoladesData)
+        ? accoladesData.filter((a: Accolade) => a.type !== "Finals Champion")
+        : [];
+      setAccolades(filtered);
+      if (recordsData && !recordsData.error) setRecords(recordsData);
+      setLoading(false);
+    });
   }, [slug]);
 
-  // Derive unique base seasons from loaded data (e.g. "Season 1", "Season 2")
   const availableSeasons = [...new Set(
     accolades.map((a) => a.season.replace(/ Playoffs$/, ""))
   )].sort();
 
-  // When a season is selected, show both regular and playoff accolades for it
   const filtered =
     season === "All"
       ? accolades
       : accolades.filter((a) => a.season === season || a.season === `${season} Playoffs`);
 
-  // Group by actual season value for display
   const groupedSeasons = [...new Set(filtered.map((a) => a.season))].sort();
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
-      <div className="px-6 py-5 border-b border-slate-800 flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h2 className="text-2xl font-bold text-white">Accolades</h2>
-          <p className="text-slate-400 text-sm mt-0.5">{leagueDisplay}</p>
-        </div>
-        <div className="flex rounded-lg border border-slate-700 overflow-hidden text-sm overflow-x-auto">
-          <button
-            onClick={() => setSeason("All")}
-            className={`px-3 py-1.5 font-medium transition whitespace-nowrap ${
-              season === "All" ? "bg-zinc-700 text-white" : "bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700"
-            }`}
-          >
-            All
-          </button>
-          {availableSeasons.map((s) => (
-            <button
-              key={s}
-              onClick={() => setSeason(s)}
-              className={`px-3 py-1.5 font-medium transition whitespace-nowrap ${
-                season === s ? "bg-zinc-700 text-white" : "bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700"
-              }`}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {loading ? (
-        <div className="p-10 text-center text-slate-500">Loading...</div>
-      ) : filtered.length === 0 ? (
-        <div className="p-10 text-center text-slate-500">No accolades for {season === "All" ? "this league" : season} yet.</div>
-      ) : (
-        <div className="p-6 space-y-6">
-          {groupedSeasons.map((s) => (
-            <div key={s}>
-              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">{s}</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {filtered.filter((a) => a.season === s).map((a) => (
-                  <div key={a.id} className="rounded-xl border border-slate-700 bg-slate-950 px-5 py-4 hover:border-slate-600 transition">
-                    <div className="flex items-center gap-3 mb-3">
-                      <img
-                        src={`https://minotar.net/avatar/${a.players?.mc_username ?? "MHF_Steve"}/40`}
-                        alt={a.players?.mc_username}
-                        className="w-10 h-10 rounded-lg ring-1 ring-slate-700 flex-shrink-0"
-                        onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/40"; }}
-                      />
-                      <div>
-                        <div className="font-semibold text-white">{a.players?.mc_username ?? a.mc_uuid}</div>
-                        <div className="text-xs text-slate-500">{a.season}</div>
-                      </div>
-                    </div>
-                    <div className="rounded-lg bg-zinc-800/60 border border-zinc-700 px-3 py-2">
-                      <div className="font-bold text-white text-sm">{a.type}</div>
-                      {a.description && <div className="text-zinc-400 text-xs mt-0.5">{a.description}</div>}
-                    </div>
-                  </div>
-                ))}
+    <div className="space-y-5">
+      {/* Records */}
+      {records && (
+        <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
+          <div className="px-6 py-5 border-b border-slate-800">
+            <h2 className="text-xl font-bold text-white">Records</h2>
+            <p className="text-slate-400 text-sm mt-0.5">{leagueDisplay} — all-time bests computed from box scores</p>
+          </div>
+          <div className="p-6 space-y-6">
+            {/* Game Records */}
+            <div>
+              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Single Game</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <RecordCard label="Most Points in a Game" entry={records.game?.points} />
               </div>
             </div>
-          ))}
+
+            {/* Season Records */}
+            <div>
+              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Season</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <RecordCard label="Most Points in a Season" entry={records.season?.points} />
+                <RecordCard label="Most Assists in a Season" entry={records.season?.assists} />
+                <RecordCard label="Most Rebounds in a Season" entry={records.season?.rebounds} />
+                <RecordCard label="Most Steals in a Season" entry={records.season?.steals} />
+              </div>
+            </div>
+
+            {/* Career Records */}
+            <div>
+              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Career</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <RecordCard label="Most Career Points" entry={records.career?.points} />
+                <RecordCard label="Most Career Assists" entry={records.career?.assists} />
+                <RecordCard label="Most Career Rebounds" entry={records.career?.rebounds} />
+                <RecordCard label="Most Career Steals" entry={records.career?.steals} />
+              </div>
+            </div>
+          </div>
         </div>
       )}
+
+      {/* Accolades */}
+      <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
+        <div className="px-6 py-5 border-b border-slate-800 flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h2 className="text-2xl font-bold text-white">Accolades</h2>
+            <p className="text-slate-400 text-sm mt-0.5">{leagueDisplay}</p>
+          </div>
+          <div className="flex rounded-lg border border-slate-700 overflow-hidden text-sm overflow-x-auto">
+            <button
+              onClick={() => setSeason("All")}
+              className={`px-3 py-1.5 font-medium transition whitespace-nowrap ${
+                season === "All" ? "bg-zinc-700 text-white" : "bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700"
+              }`}
+            >
+              All
+            </button>
+            {availableSeasons.map((s) => (
+              <button
+                key={s}
+                onClick={() => setSeason(s)}
+                className={`px-3 py-1.5 font-medium transition whitespace-nowrap ${
+                  season === s ? "bg-zinc-700 text-white" : "bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700"
+                }`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="p-10 text-center text-slate-500">Loading...</div>
+        ) : filtered.length === 0 ? (
+          <div className="p-10 text-center text-slate-500">No accolades for {season === "All" ? "this league" : season} yet.</div>
+        ) : (
+          <div className="p-6 space-y-6">
+            {groupedSeasons.map((s) => (
+              <div key={s}>
+                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">{s}</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {filtered.filter((a) => a.season === s).map((a) => (
+                    <div key={a.id} className="rounded-xl border border-slate-700 bg-slate-950 px-5 py-4 hover:border-slate-600 transition">
+                      <div className="flex items-center gap-3 mb-3">
+                        <img
+                          src={`https://minotar.net/avatar/${a.players?.mc_username ?? "MHF_Steve"}/40`}
+                          alt={a.players?.mc_username}
+                          className="w-10 h-10 rounded-lg ring-1 ring-slate-700 flex-shrink-0"
+                          onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/40"; }}
+                        />
+                        <div>
+                          <div className="font-semibold text-white">{a.players?.mc_username ?? a.mc_uuid}</div>
+                          <div className="text-xs text-slate-500">{a.season}</div>
+                        </div>
+                      </div>
+                      <div className="rounded-lg bg-zinc-800/60 border border-zinc-700 px-3 py-2">
+                        <div className="font-bold text-white text-sm">{a.type}</div>
+                        {a.description && <div className="text-zinc-400 text-xs mt-0.5">{a.description}</div>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
