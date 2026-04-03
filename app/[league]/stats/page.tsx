@@ -197,9 +197,9 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
                         <div>
                           <div className="font-bold text-white text-base">{s.mc_username}</div>
                           {s.team && (
-                            <div className="flex items-center gap-1 mt-0.5">
-                              {s.team.logo_url && <img src={s.team.logo_url} alt={s.team.name} className="w-3.5 h-3.5 object-contain" />}
+                            <div className="flex items-center gap-1.5 mt-0.5">
                               <span className="text-xs text-slate-400">{s.team.name}</span>
+                              {s.team.logo_url && <img src={s.team.logo_url} alt={s.team.name} className="w-4 h-4 object-contain flex-shrink-0" />}
                             </div>
                           )}
                         </div>
