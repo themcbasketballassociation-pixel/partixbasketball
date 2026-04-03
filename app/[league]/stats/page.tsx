@@ -12,6 +12,7 @@ type StatRow = {
   ppg: number | null; rpg: number | null; apg: number | null;
   spg: number | null; bpg: number | null; fg_pct: number | null;
   mpg: number | null; topg: number | null;
+  team?: { id: string; name: string; abbreviation: string; logo_url?: string | null } | null;
 };
 
 type SortKey = "gp" | "ppg" | "rpg" | "apg" | "spg" | "bpg" | "fg_pct" | "mpg" | "topg";
@@ -193,7 +194,15 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-3">
                         <img src={`https://minotar.net/avatar/${s.mc_username}/36`} alt={s.mc_username} className="w-9 h-9 rounded-lg ring-1 ring-slate-700 flex-shrink-0" onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/36"; }} />
-                        <span className="font-bold text-white text-base">{s.mc_username}</span>
+                        <div>
+                          <div className="font-bold text-white text-base">{s.mc_username}</div>
+                          {s.team && (
+                            <div className="flex items-center gap-1 mt-0.5">
+                              {s.team.logo_url && <img src={s.team.logo_url} alt={s.team.name} className="w-3.5 h-3.5 object-contain" />}
+                              <span className="text-xs text-slate-400">{s.team.name}</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td className={`px-4 py-4 text-center text-slate-400 text-base ${tdHighlight("gp")}`}>{s.gp}</td>

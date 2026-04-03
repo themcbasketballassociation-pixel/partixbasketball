@@ -17,7 +17,6 @@ type RecordEntry = {
   mc_username: string;
   value: number;
   season: string;
-  team?: { id: string; name: string; abbreviation: string; logo_url: string | null } | null;
 };
 
 type Records = {
@@ -52,17 +51,7 @@ function RecordCard({ label, entry }: { label: string; entry: RecordEntry | unde
       <div className="flex items-center gap-2.5">
         <PlayerFace username={entry.mc_username} />
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span className="font-bold text-white text-sm truncate">{entry.mc_username || entry.mc_uuid}</span>
-            {entry.team && (
-              <>
-                {entry.team.logo_url ? (
-                  <img src={entry.team.logo_url} alt={entry.team.name} className="w-4 h-4 object-contain flex-shrink-0" />
-                ) : null}
-                <span className="text-xs text-slate-400 flex-shrink-0">{entry.team.abbreviation}</span>
-              </>
-            )}
-          </div>
+          <div className="font-bold text-white text-sm truncate">{entry.mc_username || entry.mc_uuid}</div>
           <div className="text-xs text-slate-500 truncate">{entry.season}</div>
         </div>
         <div className="ml-auto text-xl font-bold text-blue-400 flex-shrink-0">{entry.value.toLocaleString()}</div>
@@ -124,7 +113,7 @@ export default function AccoladesPage({ params }: { params?: Promise<{ league?: 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                   <RecordCard
                     label="Most Points in a Game"
-                    entry={{ mc_uuid: "73b2620d-970a-444f-9459-e45789d36584", mc_username: "yeatgf", value: 81, season: "Season 6", team: { id: "6a42be2b-63f5-496c-ac8a-bd7e33ccb688", name: "Cleveland Cavaliers", abbreviation: "CLE", logo_url: "https://wdvuupeutixnpxkoznco.supabase.co/storage/v1/object/public/team-logos/6a42be2b-63f5-496c-ac8a-bd7e33ccb688.webp" } }}
+                    entry={{ mc_uuid: "73b2620d-970a-444f-9459-e45789d36584", mc_username: "yeatgf", value: 81, season: "Season 6" }}
                   />
                 </div>
               </div>

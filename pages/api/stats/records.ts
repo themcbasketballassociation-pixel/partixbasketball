@@ -2,14 +2,11 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { supabase } from "../../../lib/supabase";
 import { resolveLeague } from "../../../lib/leagueMapping";
 
-type Team = { id: string; name: string; abbreviation: string; logo_url: string | null };
-
 type RecordEntry = {
   mc_uuid: string;
   mc_username: string;
   value: number;
   season: string;
-  team?: Team | null;
 };
 
 type Records = {
@@ -114,27 +111,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   }
 
-  // ── Team map ───────────────────────────────────────────────────────────────
-  const allUuids = [...new Set([...Object.keys(seasonTotals), ...Object.keys(careerTotals)])];
-  const teamMap: Record<string, Team | null> = {};
-  if (allUuids.length) {
-    const { data: teamRows } = await supabase
-      .from("player_teams")
-      .select("mc_uuid, teams(id, name, abbreviation, logo_url)")
-      .eq("league", league)
-      .in("mc_uuid", allUuids);
-    for (const row of teamRows ?? []) {
-      if (row.mc_uuid && row.teams) teamMap[row.mc_uuid] = row.teams as unknown as Team;
-    }
-  }
-
   // ── Helpers ────────────────────────────────────────────────────────────────
   function bestSeason(stat: "points" | "rebounds" | "assists" | "steals"): RecordEntry {
     let best: RecordEntry = { mc_uuid: "", mc_username: "", value: 0, season: "" };
     for (const [uuid, seasons] of Object.entries(seasonTotals)) {
       for (const [season, totals] of Object.entries(seasons)) {
         if (totals[stat] > best.value) {
-          best = { mc_uuid: uuid, mc_username: playerMap[uuid] ?? uuid, value: totals[stat], season, team: teamMap[uuid] ?? null };
+          best = { mc_uuid: uuid, mc_username: playerMap[uuid] ?? uuid, value: totals[stat], season };
         }
       }
     }
@@ -145,7 +128,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     let best: RecordEntry = { mc_uuid: "", mc_username: "", value: 0, season: "Career" };
     for (const [uuid, totals] of Object.entries(careerTotals)) {
       if (totals[stat] > best.value) {
-        best = { mc_uuid: uuid, mc_username: playerMap[uuid] ?? uuid, value: totals[stat], season: "Career", team: teamMap[uuid] ?? null };
+        best = { mc_uuid: uuid, mc_username: playerMap[uuid] ?? uuid, value: totals[stat], season: "Career" };
       }
     }
     return best;
