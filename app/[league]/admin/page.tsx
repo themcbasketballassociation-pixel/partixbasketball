@@ -1105,6 +1105,23 @@ function ScheduleTab({ league, season }: { league: string; season: string }) {
     refresh();
   };
 
+  const [randomizing, setRandomizing] = useState(false);
+  const randomizeHomeAway = async () => {
+    if (!confirm("Randomly swap home/away for all scheduled games?")) return;
+    setRandomizing(true); setErr("");
+    for (const g of games) {
+      if (Math.random() < 0.5) {
+        const r = await fetch(`/api/games/${g.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ home_team_id: g.away_team_id, away_team_id: g.home_team_id }),
+        });
+        if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Randomize failed"); setRandomizing(false); return; }
+      }
+    }
+    setRandomizing(false); refresh();
+  };
+
   const parseImport = () => {
     if (!importText.trim() || !importStart) return;
     const raw = parseScheduleText(importText);
@@ -1237,7 +1254,14 @@ function ScheduleTab({ league, season }: { league: string; season: string }) {
 
       {/* Games list */}
       <div className={card}>
-        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">All Games ({games.length})</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest">All Games ({games.length})</h3>
+          {games.length > 0 && (
+            <button className={btnSecondary} onClick={randomizeHomeAway} disabled={randomizing}>
+              {randomizing ? "Randomizing..." : "Randomize Home/Away"}
+            </button>
+          )}
+        </div>
         {games.length === 0 ? (
           <p className="text-slate-600 text-sm">No games yet.</p>
         ) : (
