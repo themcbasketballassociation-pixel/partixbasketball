@@ -25,10 +25,10 @@ type Records = {
   game: Record<string, RecordEntry>;
 };
 
-function PlayerFace({ uuid, username }: { uuid: string; username: string }) {
+function PlayerFace({ username }: { username: string }) {
   return (
     <img
-      src={`https://crafatar.com/avatars/${uuid}?size=32&default=MHF_Steve&overlay`}
+      src={`https://minotar.net/avatar/${username || "MHF_Steve"}/32`}
       alt={username}
       className="w-8 h-8 rounded flex-shrink-0"
       onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/32"; }}
@@ -49,7 +49,7 @@ function RecordCard({ label, entry }: { label: string; entry: RecordEntry | unde
     <div className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 hover:border-slate-600 transition">
       <div className="text-xs text-slate-500 mb-2">{label}</div>
       <div className="flex items-center gap-2.5">
-        <PlayerFace uuid={entry.mc_uuid} username={entry.mc_username} />
+        <PlayerFace username={entry.mc_username} />
         <div className="min-w-0">
           <div className="font-bold text-white text-sm truncate">{entry.mc_username || entry.mc_uuid}</div>
           <div className="text-xs text-slate-500 truncate">{entry.season}</div>
