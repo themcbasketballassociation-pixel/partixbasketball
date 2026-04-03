@@ -22,65 +22,96 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const league = resolveLeague(leagueRaw);
   if (!league) return res.status(400).json({ error: "league required" });
 
-  // Fetch all completed games for this league to get game IDs and seasons
-  const { data: games, error: gErr } = await supabase
+  // Aggregates from game_stats (individual game rows — used by PCAA/PBGL)
+  const seasonTotals: Record<string, Record<string, { points: number; rebounds: number; assists: number; steals: number }>> = {};
+  const careerTotals: Record<string, { points: number; rebounds: number; assists: number; steals: number }> = {};
+  const playerMap: Record<string, string> = {};
+
+  // ── Source 1: game_stats table ─────────────────────────────────────────────
+  const { data: games } = await supabase
     .from("games")
     .select("id, season")
     .eq("league", league)
     .in("status", ["completed", "final"]);
-  if (gErr) return res.status(500).json({ error: gErr.message });
 
   const gameMap: Record<string, string> = {};
   for (const g of games ?? []) gameMap[g.id] = g.season ?? "Unknown";
   const gameIds = Object.keys(gameMap);
 
-  const empty: Records = { season: {}, career: {}, game: {} };
-  if (!gameIds.length) return res.status(200).json(empty);
+  if (gameIds.length) {
+    const { data: gsRows } = await supabase
+      .from("game_stats")
+      .select("game_id, mc_uuid, points, rebounds_off, rebounds_def, assists, steals")
+      .in("game_id", gameIds);
 
-  // Fetch all stats for those games
-  const { data: rows, error: sErr } = await supabase
-    .from("game_stats")
-    .select("game_id, mc_uuid, points, rebounds_off, rebounds_def, assists, steals")
-    .in("game_id", gameIds);
-  if (sErr) return res.status(500).json({ error: sErr.message });
+    const gsUuids = [...new Set((gsRows ?? []).map((r) => r.mc_uuid as string))];
+    const { data: gsPlayers } = gsUuids.length
+      ? await supabase.from("players").select("mc_uuid, mc_username").in("mc_uuid", gsUuids)
+      : { data: [] };
+    for (const p of gsPlayers ?? []) playerMap[p.mc_uuid] = p.mc_username;
 
-  // Fetch player usernames
-  const uuids = [...new Set((rows ?? []).map((r) => r.mc_uuid as string))];
-  const { data: playerRows } = uuids.length
-    ? await supabase.from("players").select("mc_uuid, mc_username").in("mc_uuid", uuids)
-    : { data: [] };
-  const playerMap: Record<string, string> = {};
-  for (const p of playerRows ?? []) playerMap[p.mc_uuid] = p.mc_username;
+    for (const row of gsRows ?? []) {
+      const uuid = row.mc_uuid as string;
+      const season = gameMap[row.game_id as string] ?? "Unknown";
+      const pts = (row.points as number) ?? 0;
+      const reb = ((row.rebounds_off as number) ?? 0) + ((row.rebounds_def as number) ?? 0);
+      const ast = (row.assists as number) ?? 0;
+      const stl = (row.steals as number) ?? 0;
 
-  // Aggregate
-  const seasonTotals: Record<string, Record<string, { points: number; rebounds: number; assists: number; steals: number }>> = {};
-  const careerTotals: Record<string, { points: number; rebounds: number; assists: number; steals: number }> = {};
-  let gamePts = { value: 0, mc_uuid: "", season: "" };
+      if (!seasonTotals[uuid]) seasonTotals[uuid] = {};
+      if (!seasonTotals[uuid][season]) seasonTotals[uuid][season] = { points: 0, rebounds: 0, assists: 0, steals: 0 };
+      seasonTotals[uuid][season].points += pts;
+      seasonTotals[uuid][season].rebounds += reb;
+      seasonTotals[uuid][season].assists += ast;
+      seasonTotals[uuid][season].steals += stl;
 
-  for (const row of rows ?? []) {
-    const uuid = row.mc_uuid as string;
-    const season = gameMap[row.game_id as string] ?? "Unknown";
-    const pts = (row.points as number) ?? 0;
-    const reb = ((row.rebounds_off as number) ?? 0) + ((row.rebounds_def as number) ?? 0);
-    const ast = (row.assists as number) ?? 0;
-    const stl = (row.steals as number) ?? 0;
-
-    if (!seasonTotals[uuid]) seasonTotals[uuid] = {};
-    if (!seasonTotals[uuid][season]) seasonTotals[uuid][season] = { points: 0, rebounds: 0, assists: 0, steals: 0 };
-    seasonTotals[uuid][season].points += pts;
-    seasonTotals[uuid][season].rebounds += reb;
-    seasonTotals[uuid][season].assists += ast;
-    seasonTotals[uuid][season].steals += stl;
-
-    if (!careerTotals[uuid]) careerTotals[uuid] = { points: 0, rebounds: 0, assists: 0, steals: 0 };
-    careerTotals[uuid].points += pts;
-    careerTotals[uuid].rebounds += reb;
-    careerTotals[uuid].assists += ast;
-    careerTotals[uuid].steals += stl;
-
-    if (pts > gamePts.value) gamePts = { value: pts, mc_uuid: uuid, season };
+      if (!careerTotals[uuid]) careerTotals[uuid] = { points: 0, rebounds: 0, assists: 0, steals: 0 };
+      careerTotals[uuid].points += pts;
+      careerTotals[uuid].rebounds += reb;
+      careerTotals[uuid].assists += ast;
+      careerTotals[uuid].steals += stl;
+    }
   }
 
+  // ── Source 2: stats table (pre-aggregated — used by PBA) ──────────────────
+  const { data: statsRows } = await supabase
+    .from("stats")
+    .select("mc_uuid, season, gp, ppg, rpg, apg, spg")
+    .eq("league", league);
+
+  if (statsRows?.length) {
+    const statsUuids = [...new Set(statsRows.map((r) => r.mc_uuid as string))];
+    const { data: statsPlayers } = statsUuids.length
+      ? await supabase.from("players").select("mc_uuid, mc_username").in("mc_uuid", statsUuids)
+      : { data: [] };
+    for (const p of statsPlayers ?? []) playerMap[p.mc_uuid] = p.mc_username;
+
+    for (const row of statsRows) {
+      const uuid = row.mc_uuid as string;
+      const season = row.season as string;
+      const gp = (row.gp as number) ?? 0;
+      if (!gp) continue;
+      const pts = Math.round(((row.ppg as number) ?? 0) * gp);
+      const reb = Math.round(((row.rpg as number) ?? 0) * gp);
+      const ast = Math.round(((row.apg as number) ?? 0) * gp);
+      const stl = Math.round(((row.spg as number) ?? 0) * gp);
+
+      if (!seasonTotals[uuid]) seasonTotals[uuid] = {};
+      if (!seasonTotals[uuid][season]) seasonTotals[uuid][season] = { points: 0, rebounds: 0, assists: 0, steals: 0 };
+      seasonTotals[uuid][season].points += pts;
+      seasonTotals[uuid][season].rebounds += reb;
+      seasonTotals[uuid][season].assists += ast;
+      seasonTotals[uuid][season].steals += stl;
+
+      if (!careerTotals[uuid]) careerTotals[uuid] = { points: 0, rebounds: 0, assists: 0, steals: 0 };
+      careerTotals[uuid].points += pts;
+      careerTotals[uuid].rebounds += reb;
+      careerTotals[uuid].assists += ast;
+      careerTotals[uuid].steals += stl;
+    }
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
   function bestSeason(stat: "points" | "rebounds" | "assists" | "steals"): RecordEntry {
     let best: RecordEntry = { mc_uuid: "", mc_username: "", value: 0, season: "" };
     for (const [uuid, seasons] of Object.entries(seasonTotals)) {
@@ -116,14 +147,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       assists: bestCareer("assists"),
       steals: bestCareer("steals"),
     },
-    game: {
-      points: {
-        mc_uuid: gamePts.mc_uuid,
-        mc_username: playerMap[gamePts.mc_uuid] ?? gamePts.mc_uuid,
-        value: gamePts.value,
-        season: gamePts.season,
-      },
-    },
+    game: {},
   };
 
   return res.status(200).json(result);
