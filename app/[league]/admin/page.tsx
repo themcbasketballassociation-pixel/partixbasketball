@@ -566,11 +566,10 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
   const [connectMsg, setConnectMsg] = useState("");
   const [copyingLogos, setCopyingLogos] = useState(false);
   const [copyLogosMsg, setCopyLogosMsg] = useState("");
-  const [renameFrom, setRenameFrom] = useState("");
-  const [renameTo, setRenameTo] = useState("");
-  const [renameAbbr, setRenameAbbr] = useState("");
-  const [renaming, setRenaming] = useState(false);
-  const [renameMsg, setRenameMsg] = useState("");
+  const [swapFrom, setSwapFrom] = useState("");
+  const [swapTo, setSwapTo] = useState("");
+  const [swapping, setSwapping] = useState(false);
+  const [swapMsg, setSwapMsg] = useState("");
 
   // Keep internal season in sync when parent season prop changes
   useEffect(() => {
@@ -695,20 +694,20 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
     refresh();
   };
 
-  const renameTeam = async () => {
-    if (!renameFrom.trim() || !renameTo.trim() || !renameAbbr.trim()) { setRenameMsg("All fields required"); return; }
-    setRenaming(true);
-    setRenameMsg("");
-    const r = await fetch("/api/teams/rename", {
+  const swapTeamInGames = async () => {
+    if (!swapFrom.trim() || !swapTo.trim()) { setSwapMsg("Both team names required"); return; }
+    setSwapping(true);
+    setSwapMsg("");
+    const r = await fetch("/api/games/swap-team", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ league, fromName: renameFrom.trim(), toName: renameTo.trim(), toAbbreviation: renameAbbr.trim() }),
+      body: JSON.stringify({ league, fromTeamName: swapFrom.trim(), toTeamName: swapTo.trim() }),
     });
     const d = await r.json();
-    setRenaming(false);
-    if (!r.ok) { setRenameMsg(d.error ?? "Failed"); return; }
-    setRenameMsg(d.message ?? `Done`);
-    setRenameFrom(""); setRenameTo(""); setRenameAbbr("");
+    setSwapping(false);
+    if (!r.ok) { setSwapMsg(d.error ?? "Failed"); return; }
+    setSwapMsg(d.message ?? "Done");
+    setSwapFrom(""); setSwapTo("");
     refresh();
   };
 
@@ -878,17 +877,16 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
           </button>
           {copyLogosMsg && <span className="text-xs text-green-400">{copyLogosMsg}</span>}
         </div>
-        {/* Rename team across all seasons */}
+        {/* Swap team in all games */}
         <div className="mb-3 pb-3 border-b border-slate-800 flex items-center gap-2 flex-wrap">
-          <span className="text-xs text-slate-500 font-semibold">Rename team (all seasons):</span>
-          <input className="rounded border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-white focus:outline-none w-40" placeholder="Old name (e.g. Brooklyn Nets)" value={renameFrom} onChange={(e) => setRenameFrom(e.target.value)} />
+          <span className="text-xs text-slate-500 font-semibold">Swap team in schedule:</span>
+          <input className="rounded border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-white focus:outline-none w-40" placeholder="Remove (e.g. Brooklyn Nets)" value={swapFrom} onChange={(e) => setSwapFrom(e.target.value)} />
           <span className="text-xs text-slate-500">→</span>
-          <input className="rounded border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-white focus:outline-none w-40" placeholder="New name (e.g. New York Knicks)" value={renameTo} onChange={(e) => setRenameTo(e.target.value)} />
-          <input className="rounded border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-white focus:outline-none w-16" placeholder="Abbr" value={renameAbbr} onChange={(e) => setRenameAbbr(e.target.value)} maxLength={5} />
-          <button className={btnSecondary} onClick={renameTeam} disabled={renaming} style={{ fontSize: "12px", padding: "4px 10px" }}>
-            {renaming ? "Renaming..." : "Rename"}
+          <input className="rounded border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-white focus:outline-none w-40" placeholder="Replace with (e.g. Detroit Pistons)" value={swapTo} onChange={(e) => setSwapTo(e.target.value)} />
+          <button className={btnSecondary} onClick={swapTeamInGames} disabled={swapping} style={{ fontSize: "12px", padding: "4px 10px" }}>
+            {swapping ? "Swapping..." : "Swap"}
           </button>
-          {renameMsg && <span className="text-xs text-green-400">{renameMsg}</span>}
+          {swapMsg && <span className="text-xs text-green-400">{swapMsg}</span>}
         </div>
         {teams.length === 0 ? (
           <p className="text-slate-600 text-sm">No teams yet.</p>
