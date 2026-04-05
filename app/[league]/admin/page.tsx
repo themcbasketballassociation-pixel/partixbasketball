@@ -564,6 +564,13 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
   const [connectTo, setConnectTo] = useState(SEASONS[SEASONS.length - 2] ?? SEASONS[0]);
   const [connecting, setConnecting] = useState(false);
   const [connectMsg, setConnectMsg] = useState("");
+  const [copyingLogos, setCopyingLogos] = useState(false);
+  const [copyLogosMsg, setCopyLogosMsg] = useState("");
+  const [renameFrom, setRenameFrom] = useState("");
+  const [renameTo, setRenameTo] = useState("");
+  const [renameAbbr, setRenameAbbr] = useState("");
+  const [renaming, setRenaming] = useState(false);
+  const [renameMsg, setRenameMsg] = useState("");
 
   // Keep internal season in sync when parent season prop changes
   useEffect(() => {
@@ -670,6 +677,38 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
     setConnecting(false);
     if (!r.ok) { setConnectMsg(d.error ?? "Failed"); return; }
     setConnectMsg(`Done: ${d.created} created, ${d.skipped} skipped`);
+    refresh();
+  };
+
+  const copyLogos = async () => {
+    setCopyingLogos(true);
+    setCopyLogosMsg("");
+    const r = await fetch("/api/teams/copy-logos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ league }),
+    });
+    const d = await r.json();
+    setCopyingLogos(false);
+    if (!r.ok) { setCopyLogosMsg(d.error ?? "Failed"); return; }
+    setCopyLogosMsg(d.message ?? `Updated ${d.updated} teams`);
+    refresh();
+  };
+
+  const renameTeam = async () => {
+    if (!renameFrom.trim() || !renameTo.trim() || !renameAbbr.trim()) { setRenameMsg("All fields required"); return; }
+    setRenaming(true);
+    setRenameMsg("");
+    const r = await fetch("/api/teams/rename", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ league, fromName: renameFrom.trim(), toName: renameTo.trim(), toAbbreviation: renameAbbr.trim() }),
+    });
+    const d = await r.json();
+    setRenaming(false);
+    if (!r.ok) { setRenameMsg(d.error ?? "Failed"); return; }
+    setRenameMsg(d.message ?? `Done`);
+    setRenameFrom(""); setRenameTo(""); setRenameAbbr("");
     refresh();
   };
 
@@ -830,6 +869,26 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
             {connecting ? "Connecting..." : "Connect"}
           </button>
           {connectMsg && <span className="text-xs text-green-400">{connectMsg}</span>}
+        </div>
+        {/* Copy logos from other seasons */}
+        <div className="mb-3 pb-3 border-b border-slate-800 flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-slate-500 font-semibold">Copy logos from other seasons:</span>
+          <button className={btnSecondary} onClick={copyLogos} disabled={copyingLogos} style={{ fontSize: "12px", padding: "4px 10px" }}>
+            {copyingLogos ? "Copying..." : "Copy Logos"}
+          </button>
+          {copyLogosMsg && <span className="text-xs text-green-400">{copyLogosMsg}</span>}
+        </div>
+        {/* Rename team across all seasons */}
+        <div className="mb-3 pb-3 border-b border-slate-800 flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-slate-500 font-semibold">Rename team (all seasons):</span>
+          <input className="rounded border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-white focus:outline-none w-40" placeholder="Old name (e.g. Brooklyn Nets)" value={renameFrom} onChange={(e) => setRenameFrom(e.target.value)} />
+          <span className="text-xs text-slate-500">→</span>
+          <input className="rounded border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-white focus:outline-none w-40" placeholder="New name (e.g. New York Knicks)" value={renameTo} onChange={(e) => setRenameTo(e.target.value)} />
+          <input className="rounded border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-white focus:outline-none w-16" placeholder="Abbr" value={renameAbbr} onChange={(e) => setRenameAbbr(e.target.value)} maxLength={5} />
+          <button className={btnSecondary} onClick={renameTeam} disabled={renaming} style={{ fontSize: "12px", padding: "4px 10px" }}>
+            {renaming ? "Renaming..." : "Rename"}
+          </button>
+          {renameMsg && <span className="text-xs text-green-400">{renameMsg}</span>}
         </div>
         {teams.length === 0 ? (
           <p className="text-slate-600 text-sm">No teams yet.</p>
