@@ -15,7 +15,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const league = resolveLeague(leagueRaw);
   if (!league) return res.status(400).json({ error: "league required" });
 
-  const [statsResult, gamesResult] = await Promise.all([
+  const [statsResult, gamesResult, teamsResult] = await Promise.all([
     supabase
       .from("stats")
       .select("mc_uuid, season, gp, ppg, rpg, apg, spg, bpg")
@@ -25,19 +25,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .select("season")
       .eq("league", league as string)
       .not("season", "is", null),
+    supabase
+      .from("teams")
+      .select("season")
+      .eq("league", league as string)
+      .not("season", "is", null),
   ]);
 
   if (statsResult.error) return res.status(500).json({ error: statsResult.error.message });
 
   const statsData = statsResult.data ?? [];
 
-  // Collect seasons from games that aren't already in stats rows
+  // Collect seasons from games and teams that aren't already in stats rows
   const existingSeasons = new Set(statsData.map((r) => r.season));
   const gameSeasons = [...new Set((gamesResult.data ?? []).map((g) => g.season).filter(Boolean))];
-  const extraSeasons = gameSeasons.filter((s) => !existingSeasons.has(s));
+  const teamSeasons = [...new Set((teamsResult.data ?? []).map((t) => t.season).filter(Boolean))];
+  const allExtra = [...new Set([...gameSeasons, ...teamSeasons])].filter((s) => !existingSeasons.has(s));
 
-  // Append placeholder rows for seasons that only exist in games so far
-  const extra = extraSeasons.map((s) => ({ mc_uuid: null, season: s, gp: 0, ppg: null, rpg: null, apg: null, spg: null, bpg: null }));
+  // Append placeholder rows for seasons that only exist in games/teams so far
+  const extra = allExtra.map((s) => ({ mc_uuid: null, season: s, gp: 0, ppg: null, rpg: null, apg: null, spg: null, bpg: null }));
 
   return res.status(200).json([...statsData, ...extra]);
 }
