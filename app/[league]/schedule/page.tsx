@@ -323,9 +323,15 @@ export default function SchedulePage({ params }: { params?: Promise<{ league?: s
                             {new Date(g.scheduled_at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })} EST
                           </span>
                           <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1 }}>
-                            <div style={{ textAlign: "right", minWidth: 100 }}>
-                              <div style={{ fontWeight: 600, color: "#fff" }}>{g.home_team?.name ?? "?"}</div>
-                              <div style={{ fontSize: "0.75rem", color: "#555" }}>{g.home_team?.abbreviation}</div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end", minWidth: 130 }}>
+                              <div style={{ textAlign: "right" }}>
+                                <div style={{ fontWeight: 600, color: "#fff" }}>{g.home_team?.name ?? "?"}</div>
+                                <div style={{ fontSize: "0.75rem", color: "#555" }}>{g.home_team?.abbreviation}</div>
+                              </div>
+                              {g.home_team?.logo_url
+                                ? <img src={g.home_team.logo_url} alt="" style={{ width: 32, height: 32, objectFit: "contain", flexShrink: 0 }} />
+                                : <div style={{ width: 32, height: 32, borderRadius: 6, background: "#1a1a1a", border: "1px solid #333", display: "flex", alignItems: "center", justifyContent: "center", color: "#555", fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{g.home_team?.abbreviation ?? "?"}</div>
+                              }
                             </div>
                             {g.status === "completed" ? (
                               <div style={{ textAlign: "center", padding: "0 12px" }}>
@@ -335,9 +341,15 @@ export default function SchedulePage({ params }: { params?: Promise<{ league?: s
                             ) : (
                               <div style={{ color: "#333", fontWeight: 500, padding: "0 12px" }}>vs</div>
                             )}
-                            <div style={{ textAlign: "left", minWidth: 100 }}>
-                              <div style={{ fontWeight: 600, color: "#fff" }}>{g.away_team?.name ?? "?"}</div>
-                              <div style={{ fontSize: "0.75rem", color: "#555" }}>{g.away_team?.abbreviation}</div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 130 }}>
+                              {g.away_team?.logo_url
+                                ? <img src={g.away_team.logo_url} alt="" style={{ width: 32, height: 32, objectFit: "contain", flexShrink: 0 }} />
+                                : <div style={{ width: 32, height: 32, borderRadius: 6, background: "#1a1a1a", border: "1px solid #333", display: "flex", alignItems: "center", justifyContent: "center", color: "#555", fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{g.away_team?.abbreviation ?? "?"}</div>
+                              }
+                              <div style={{ textAlign: "left" }}>
+                                <div style={{ fontWeight: 600, color: "#fff" }}>{g.away_team?.name ?? "?"}</div>
+                                <div style={{ fontSize: "0.75rem", color: "#555" }}>{g.away_team?.abbreviation}</div>
+                              </div>
                             </div>
                           </div>
                           <span style={{

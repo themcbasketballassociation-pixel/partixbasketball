@@ -591,33 +591,61 @@ export default function OwnerPortalView({ teamRecord, leagueSlug, onBack }: {
   return (
     <div>
       {/* Team header */}
-      <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 20, padding: "16px 0", borderBottom: "1px solid #1a1a1a" }}>
-        <button onClick={onBack} style={{ ...ownerBtn(), padding: "6px 12px", fontSize: 12 }}>← Back</button>
-        {team.logo_url
-          ? <img src={team.logo_url} style={{ width: 48, height: 48, objectFit: "contain", borderRadius: 8, border: "1px solid #222" }} alt="" />
-          : <div style={{ width: 48, height: 48, borderRadius: 8, background: team.color2 ? `${team.color2}22` : "#1a1a1a", border: `2px solid ${team.color2 ?? "#333"}`, display: "flex", alignItems: "center", justifyContent: "center", color: team.color2 ?? "#444", fontWeight: 800, fontSize: 14 }}>{team.abbreviation}</div>
-        }
-        <div style={{ flex: 1 }}>
-          <div style={{ color: "#fff", fontWeight: 800, fontSize: 20 }}>{team.name}</div>
-          <div style={{ color: "#555", fontSize: 13 }}>{team.division ?? leagueSlug.toUpperCase()}</div>
-        </div>
-        <div style={{ textAlign: "right" }}>
-          <div style={{ color: "#22d3ee", fontWeight: 700, fontSize: 20 }}>{(totalUsed).toLocaleString()} <span style={{ color: "#333", fontSize: 15 }}>/ 25,000</span></div>
-          <div style={{ color: "#555", fontSize: 12 }}>cap used</div>
+      <div style={{ marginBottom: 20, padding: "20px 0", borderBottom: "1px solid #1a1a1a" }}>
+        <button onClick={onBack} style={{ ...ownerBtn(), padding: "6px 12px", fontSize: 12, marginBottom: 16 }}>← Back to Portal</button>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          {team.logo_url
+            ? <img src={team.logo_url} style={{ width: 72, height: 72, objectFit: "contain", borderRadius: 12, border: "1px solid #222", flexShrink: 0 }} alt={team.name} />
+            : <div style={{ width: 72, height: 72, borderRadius: 12, background: team.color2 ? `${team.color2}22` : "#1a1a1a", border: `2px solid ${team.color2 ?? "#333"}`, display: "flex", alignItems: "center", justifyContent: "center", color: team.color2 ?? "#444", fontWeight: 800, fontSize: 18, flexShrink: 0 }}>{team.abbreviation}</div>
+          }
+          <div style={{ flex: 1 }}>
+            <div style={{ color: "#fff", fontWeight: 800, fontSize: 24 }}>{team.name}</div>
+            <div style={{ color: "#555", fontSize: 13, marginTop: 2 }}>{team.division ? `${team.division} Division · ` : ""}{leagueSlug.toUpperCase()} Owner Portal</div>
+          </div>
+          <div style={{ textAlign: "right", background: "#0d0d0d", border: "1px solid #1a1a1a", borderRadius: 10, padding: "10px 16px" }}>
+            <div style={{ color: "#888", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Salary Cap</div>
+            <div style={{ color: totalUsed > 22500 ? "#ef4444" : "#22d3ee", fontWeight: 700, fontSize: 22 }}>{(totalUsed).toLocaleString()}</div>
+            <div style={{ color: "#333", fontSize: 13 }}>/ 25,000</div>
+          </div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div style={{ display: "flex", borderBottom: "1px solid #1a1a1a", marginBottom: 20 }}>
-        {([["roster", "Roster & Cap"], ["signings", "Signings"], ["bid", `Live Auctions (${activeAuctions.length})`], ["trades", "Trades"]] as const).map(([t, label]) => (
-          <button key={t} onClick={() => setTab(t)} style={{ padding: "10px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer", border: "none", background: "none", borderBottom: `2px solid ${tab === t ? "#3b82f6" : "transparent"}`, color: tab === t ? "#fff" : "#555" }}>{label}</button>
+      <div style={{ display: "flex", borderBottom: "1px solid #1a1a1a", marginBottom: 20, gap: 4 }}>
+        {([
+          ["roster",   "Roster & Cap",                    "Your players and salary breakdown"],
+          ["signings", "Sign Players",                     "Sign free agents"],
+          ["bid",      `Auctions${activeAuctions.length > 0 ? ` (${activeAuctions.length})` : ""}`, "Bid on players in live auctions"],
+          ["trades",   "Trades",                           "Propose or manage trades"],
+        ] as const).map(([t, label]) => (
+          <button key={t} onClick={() => setTab(t)} style={{ padding: "10px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer", border: "none", background: "none", borderBottom: `2px solid ${tab === t ? "#3b82f6" : "transparent"}`, color: tab === t ? "#fff" : "#555", transition: "color 0.15s" }}>{label}</button>
         ))}
       </div>
 
-      {tab === "roster" && <RosterView contracts={contracts} retentions={retentions} />}
-      {tab === "signings" && <SigningsView teamId={team.id} leagueSlug={leagueSlug} contracts={contracts} onRefresh={load} />}
-      {tab === "bid" && <BidView auctions={auctions} teamId={team.id} contracts={contracts} onRefresh={load} />}
-      {tab === "trades" && <TradesView teamId={team.id} leagueSlug={leagueSlug} contracts={contracts} allTeams={seasonFilteredTeams} myPicks={myPicks} onRefresh={load} />}
+      {tab === "roster" && (
+        <div>
+          <p style={{ color: "#444", fontSize: 13, marginBottom: 14 }}>Your active roster and salary cap breakdown for this season.</p>
+          <RosterView contracts={contracts} retentions={retentions} />
+        </div>
+      )}
+      {tab === "signings" && (
+        <div>
+          <p style={{ color: "#444", fontSize: 13, marginBottom: 14 }}>Sign free agents by submitting a contract offer. Offers go to the commissioner for approval.</p>
+          <SigningsView teamId={team.id} leagueSlug={leagueSlug} contracts={contracts} onRefresh={load} />
+        </div>
+      )}
+      {tab === "bid" && (
+        <div>
+          <p style={{ color: "#444", fontSize: 13, marginBottom: 14 }}>Place bids on players in active auctions. The highest valid bid when the auction closes wins.</p>
+          <BidView auctions={auctions} teamId={team.id} contracts={contracts} onRefresh={load} />
+        </div>
+      )}
+      {tab === "trades" && (
+        <div>
+          <p style={{ color: "#444", fontSize: 13, marginBottom: 14 }}>Propose trades with other teams. Send players or draft picks in exchange for assets from another team.</p>
+          <TradesView teamId={team.id} leagueSlug={leagueSlug} contracts={contracts} allTeams={seasonFilteredTeams} myPicks={myPicks} onRefresh={load} />
+        </div>
+      )}
     </div>
   );
 }
