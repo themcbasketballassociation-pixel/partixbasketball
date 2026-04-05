@@ -151,10 +151,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const playerMap: Record<string, string> = {};
     for (const p of playerRows ?? []) playerMap[p.mc_uuid] = p.mc_username;
 
-    const { data: teamRows } = await supabase
+    // Look up team for the specific season (strip Playoffs suffix; skip for career "all")
+    const lookupSeason = seasonStr === "all" ? null : seasonStr.replace(/ Playoffs$/, "");
+    let teamQuery = supabase
       .from("player_teams")
-      .select("mc_uuid, teams(id, name, abbreviation)")
+      .select("mc_uuid, teams(id, name, abbreviation, logo_url)")
       .eq("league", league as string);
+    if (lookupSeason) teamQuery = teamQuery.eq("season", lookupSeason);
+    const { data: teamRows } = await teamQuery;
     const teamMap: Record<string, unknown> = {};
     for (const row of teamRows ?? []) {
       if (row.mc_uuid && row.teams) teamMap[row.mc_uuid] = row.teams;

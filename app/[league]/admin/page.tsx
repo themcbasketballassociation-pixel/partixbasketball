@@ -560,6 +560,10 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
   const [playerTeams, setPlayerTeams] = useState<{ mc_uuid: string; team_id: string; players: Player }[]>([]);
   const [addingToTeam, setAddingToTeam] = useState<Record<string, string>>({});
   const [contracts, setContracts] = useState<{ mc_uuid: string; team_id: string; amount: number; status: string }[]>([]);
+  const [connectFrom, setConnectFrom] = useState(SEASONS[SEASONS.length - 1]);
+  const [connectTo, setConnectTo] = useState(SEASONS[SEASONS.length - 2] ?? SEASONS[0]);
+  const [connecting, setConnecting] = useState(false);
+  const [connectMsg, setConnectMsg] = useState("");
 
   // Keep internal season in sync when parent season prop changes
   useEffect(() => {
@@ -650,6 +654,22 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
     const params = new URLSearchParams({ mc_uuid: uuid, league, season });
     const r = await fetch(`/api/teams/players?${params}`, { method: "DELETE" });
     if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Failed to remove player"); return; }
+    refresh();
+  };
+
+  const connectByName = async () => {
+    if (connectFrom === connectTo) { setConnectMsg("Seasons must differ"); return; }
+    setConnecting(true);
+    setConnectMsg("");
+    const r = await fetch("/api/teams/connect-by-name", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ league, fromSeason: connectFrom, toSeason: connectTo }),
+    });
+    const d = await r.json();
+    setConnecting(false);
+    if (!r.ok) { setConnectMsg(d.error ?? "Failed"); return; }
+    setConnectMsg(`Done: ${d.created} created, ${d.skipped} skipped`);
     refresh();
   };
 
@@ -795,6 +815,21 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
               {SEASONS.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
+        </div>
+        {/* Connect seasons by team name */}
+        <div className="mb-3 pb-3 border-b border-slate-800 flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-slate-500 font-semibold">Copy rosters by team name:</span>
+          <select className="rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-white focus:outline-none" value={connectFrom} onChange={(e) => setConnectFrom(e.target.value)}>
+            {SEASONS.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <span className="text-xs text-slate-500">→</span>
+          <select className="rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-white focus:outline-none" value={connectTo} onChange={(e) => setConnectTo(e.target.value)}>
+            {SEASONS.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <button className={btnSecondary} onClick={connectByName} disabled={connecting || connectFrom === connectTo} style={{ fontSize: "12px", padding: "4px 10px" }}>
+            {connecting ? "Connecting..." : "Connect"}
+          </button>
+          {connectMsg && <span className="text-xs text-green-400">{connectMsg}</span>}
         </div>
         {teams.length === 0 ? (
           <p className="text-slate-600 text-sm">No teams yet.</p>

@@ -24,8 +24,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const league = resolveLeague(leagueRaw);
     if (!mc_uuid || !team_id || !league) return res.status(400).json({ error: "mc_uuid, team_id, league required" });
 
-    // Delete any existing assignment for this player in this league, then insert fresh
-    await supabase.from("player_teams").delete().eq("mc_uuid", mc_uuid).eq("league", league);
+    // Delete the existing assignment for this player in this league+season only, then insert fresh
+    let deleteQuery = supabase.from("player_teams").delete().eq("mc_uuid", mc_uuid).eq("league", league);
+    if (season) deleteQuery = (deleteQuery as typeof deleteQuery).eq("season", season);
+    await deleteQuery;
     const { error } = await supabase
       .from("player_teams")
       .insert([{ mc_uuid, team_id, league, season: season ?? null }]);
