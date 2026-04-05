@@ -11,6 +11,7 @@ type RecordEntry = {
 
 type Records = {
   season: Record<string, RecordEntry>;
+  seasonAvg: Record<string, RecordEntry>;
   career: Record<string, RecordEntry>;
   game: Record<string, RecordEntry>;
 };
@@ -24,8 +25,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   // Aggregates from game_stats (individual game rows — used by PCAA/PBGL)
   const seasonTotals: Record<string, Record<string, { points: number; rebounds: number; assists: number; steals: number }>> = {};
+  const seasonGameCount: Record<string, Record<string, number>> = {};
   const careerTotals: Record<string, { points: number; rebounds: number; assists: number; steals: number }> = {};
   const playerMap: Record<string, string> = {};
+  // Direct avg rows from stats table (PBA source)
+  const statsTableAvgs: { uuid: string; season: string; ppg: number; rpg: number; apg: number; spg: number; gp: number }[] = [];
 
   // ── Source 1: game_stats table ─────────────────────────────────────────────
   const { data: games } = await supabase
@@ -64,6 +68,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       seasonTotals[uuid][season].rebounds += reb;
       seasonTotals[uuid][season].assists += ast;
       seasonTotals[uuid][season].steals += stl;
+
+      if (!seasonGameCount[uuid]) seasonGameCount[uuid] = {};
+      seasonGameCount[uuid][season] = (seasonGameCount[uuid][season] ?? 0) + 1;
 
       if (!careerTotals[uuid]) careerTotals[uuid] = { points: 0, rebounds: 0, assists: 0, steals: 0 };
       careerTotals[uuid].points += pts;
@@ -108,6 +115,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       careerTotals[uuid].rebounds += reb;
       careerTotals[uuid].assists += ast;
       careerTotals[uuid].steals += stl;
+
+      statsTableAvgs.push({
+        uuid, season, gp,
+        ppg: (row.ppg as number) ?? 0,
+        rpg: (row.rpg as number) ?? 0,
+        apg: (row.apg as number) ?? 0,
+        spg: (row.spg as number) ?? 0,
+      });
     }
   }
 
@@ -121,6 +136,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
       }
     }
+    return best;
+  }
+
+  function bestSeasonAvg(stat: "ppg" | "rpg" | "apg" | "spg"): RecordEntry {
+    const MIN_GAMES = 3;
+    let best: RecordEntry = { mc_uuid: "", mc_username: "", value: 0, season: "" };
+    const totalKey = ({ ppg: "points", rpg: "rebounds", apg: "assists", spg: "steals" } as const)[stat];
+
+    // From game_stats source
+    for (const [uuid, seasons] of Object.entries(seasonTotals)) {
+      for (const [season, totals] of Object.entries(seasons)) {
+        const gp = seasonGameCount[uuid]?.[season] ?? 0;
+        if (gp < MIN_GAMES) continue;
+        const avg = totals[totalKey] / gp;
+        if (avg > best.value) {
+          best = { mc_uuid: uuid, mc_username: playerMap[uuid] ?? uuid, value: Math.round(avg * 10) / 10, season };
+        }
+      }
+    }
+
+    // From stats table source (already averages)
+    for (const row of statsTableAvgs) {
+      if (row.gp < MIN_GAMES) continue;
+      if (row[stat] > best.value) {
+        best = { mc_uuid: row.uuid, mc_username: playerMap[row.uuid] ?? row.uuid, value: Math.round(row[stat] * 10) / 10, season: row.season };
+      }
+    }
+
     return best;
   }
 
@@ -140,6 +183,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       rebounds: bestSeason("rebounds"),
       assists: bestSeason("assists"),
       steals: bestSeason("steals"),
+    },
+    seasonAvg: {
+      ppg: bestSeasonAvg("ppg"),
+      rpg: bestSeasonAvg("rpg"),
+      apg: bestSeasonAvg("apg"),
+      spg: bestSeasonAvg("spg"),
     },
     career: {
       points: bestCareer("points"),

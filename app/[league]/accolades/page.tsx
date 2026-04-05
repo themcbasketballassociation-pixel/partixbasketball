@@ -21,6 +21,7 @@ type RecordEntry = {
 
 type Records = {
   season: Record<string, RecordEntry>;
+  seasonAvg: Record<string, RecordEntry>;
   career: Record<string, RecordEntry>;
   game: Record<string, RecordEntry>;
 };
@@ -36,7 +37,7 @@ function PlayerFace({ username }: { username: string }) {
   );
 }
 
-function RecordCard({ label, entry }: { label: string; entry: RecordEntry | undefined }) {
+function RecordCard({ label, entry, suffix }: { label: string; entry: RecordEntry | undefined; suffix?: string }) {
   if (!entry || !entry.mc_uuid) {
     return (
       <div className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-3">
@@ -54,7 +55,9 @@ function RecordCard({ label, entry }: { label: string; entry: RecordEntry | unde
           <div className="font-bold text-white text-sm truncate">{entry.mc_username || entry.mc_uuid}</div>
           <div className="text-xs text-slate-500 truncate">{entry.season}</div>
         </div>
-        <div className="ml-auto text-xl font-bold text-blue-400 flex-shrink-0">{entry.value.toLocaleString()}</div>
+        <div className="ml-auto text-xl font-bold text-blue-400 flex-shrink-0">
+          {entry.value.toLocaleString()}{suffix ?? ""}
+        </div>
       </div>
     </div>
   );
@@ -121,7 +124,7 @@ export default function AccoladesPage({ params }: { params?: Promise<{ league?: 
 
             {/* Season Records */}
             <div>
-              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Season</h3>
+              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Season Totals</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 <RecordCard label="Most Points in a Season" entry={records.season?.points} />
                 <RecordCard label="Most Assists in a Season" entry={records.season?.assists} />
@@ -129,6 +132,19 @@ export default function AccoladesPage({ params }: { params?: Promise<{ league?: 
                 <RecordCard label="Most Steals in a Season" entry={records.season?.steals} />
               </div>
             </div>
+
+            {/* Season Average Records */}
+            {records.seasonAvg && (
+              <div>
+                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Season Averages</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <RecordCard label="Highest PPG in a Season" entry={records.seasonAvg?.ppg} suffix=" PPG" />
+                  <RecordCard label="Highest APG in a Season" entry={records.seasonAvg?.apg} suffix=" APG" />
+                  <RecordCard label="Highest RPG in a Season" entry={records.seasonAvg?.rpg} suffix=" RPG" />
+                  <RecordCard label="Highest SPG in a Season" entry={records.seasonAvg?.spg} suffix=" SPG" />
+                </div>
+              </div>
+            )}
 
             {/* Career Records */}
             <div>
