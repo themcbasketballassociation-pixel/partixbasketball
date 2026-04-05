@@ -41,7 +41,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     .in("status", ["completed", "final"]);
 
   const gameMap: Record<string, string> = {};
-  for (const g of games ?? []) gameMap[g.id] = g.season ?? "Unknown";
+  for (const g of games ?? []) {
+    if ((g.season ?? "").toLowerCase().includes("playoff")) continue; // skip playoffs
+    gameMap[g.id] = g.season ?? "Unknown";
+  }
   const gameIds = Object.keys(gameMap);
 
   if (gameIds.length) {
@@ -90,7 +93,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     .eq("league", league);
 
   if (statsRows?.length) {
-    const statsUuids = [...new Set(statsRows.map((r) => r.mc_uuid as string))];
+    const statsUuids = [...new Set(statsRows.filter((r) => !((r.season ?? "").toLowerCase().includes("playoff"))).map((r) => r.mc_uuid as string))];
     const { data: statsPlayers } = statsUuids.length
       ? await supabase.from("players").select("mc_uuid, mc_username").in("mc_uuid", statsUuids)
       : { data: [] };
@@ -99,6 +102,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     for (const row of statsRows) {
       const uuid = row.mc_uuid as string;
       const season = row.season as string;
+      if (season.toLowerCase().includes("playoff")) continue; // skip playoffs
       const gp = (row.gp as number) ?? 0;
       if (!gp) continue;
       const pts = Math.round(((row.ppg as number) ?? 0) * gp);
