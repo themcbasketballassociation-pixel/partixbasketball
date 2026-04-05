@@ -151,17 +151,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const playerMap: Record<string, string> = {};
     for (const p of playerRows ?? []) playerMap[p.mc_uuid] = p.mc_username;
 
-    // Look up team for the specific season (strip Playoffs suffix; skip for career "all")
+    // Look up team — prefer season-specific, fall back to most recent assignment
     const lookupSeason = seasonStr === "all" ? null : seasonStr.replace(/ Playoffs$/, "");
-    let teamQuery = supabase
+    const { data: allTeamRows } = await supabase
       .from("player_teams")
-      .select("mc_uuid, teams(id, name, abbreviation, logo_url)")
-      .eq("league", league as string);
-    if (lookupSeason) teamQuery = teamQuery.eq("season", lookupSeason);
-    const { data: teamRows } = await teamQuery;
+      .select("mc_uuid, season, teams(id, name, abbreviation, logo_url)")
+      .eq("league", league as string)
+      .order("season", { ascending: false });
     const teamMap: Record<string, unknown> = {};
-    for (const row of teamRows ?? []) {
-      if (row.mc_uuid && row.teams) teamMap[row.mc_uuid] = row.teams;
+    // Pass 1: set most-recent assignment as default
+    for (const row of allTeamRows ?? []) {
+      if (row.mc_uuid && row.teams && !teamMap[row.mc_uuid]) {
+        teamMap[row.mc_uuid] = row.teams;
+      }
+    }
+    // Pass 2: override with season-specific if it exists
+    if (lookupSeason) {
+      for (const row of allTeamRows ?? []) {
+        if (row.mc_uuid && row.teams && row.season === lookupSeason) {
+          teamMap[row.mc_uuid] = row.teams;
+        }
+      }
     }
 
     const result = uuids.map((uuid) => {

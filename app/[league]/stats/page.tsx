@@ -197,10 +197,13 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
                         <div>
                           <div className="font-bold text-white text-base">{s.mc_username}</div>
                           {s.team && (
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              <span className="text-xs text-slate-400">{s.team.name}</span>
-                              {s.team.logo_url && <img src={s.team.logo_url} alt={s.team.name} className="w-4 h-4 object-contain flex-shrink-0" />}
-                            </div>
+                            <a
+                              href={`/${slug}/teams?team=${s.team.id}&season=${encodeURIComponent(statType === "playoffs" ? season : season)}`}
+                              className="flex items-center gap-1.5 mt-0.5 hover:opacity-80 transition"
+                            >
+                              {s.team.logo_url && <img src={s.team.logo_url} alt={s.team.name} className="w-5 h-5 object-contain flex-shrink-0" />}
+                              <span className="text-sm text-slate-300 font-medium">{s.team.name}</span>
+                            </a>
                           )}
                         </div>
                       </div>

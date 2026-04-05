@@ -110,22 +110,22 @@ function TeamDetailModal({ team, league, seasons, defaultSeason, onClose }: {
   const rosterUuids = React.useMemo(() => new Set(seasonRoster.map(pt => pt.mc_uuid)), [seasonRoster]);
   const teamStats = React.useMemo(() => stats.filter(s => rosterUuids.has(s.mc_uuid)), [stats, rosterUuids]);
 
-  // Per-game team averages (sum each player's contribution weighted by their GP)
+  // Team totals per game = sum of each player's per-game averages
   const totals = React.useMemo(() => {
     if (teamStats.length === 0) return null;
-    let pts = 0, reb = 0, ast = 0, stl = 0, blk = 0, to = 0, gp = 0;
+    let ppg = 0, rpg = 0, apg = 0, spg = 0, bpg = 0, topg = 0, gp = 0;
     for (const s of teamStats) {
-      const g = s.gp ?? 0;
-      pts += (s.ppg ?? 0) * g;
-      reb += (s.rpg ?? 0) * g;
-      ast += (s.apg ?? 0) * g;
-      stl += (s.spg ?? 0) * g;
-      blk += (s.bpg ?? 0) * g;
-      to  += (s.topg ?? 0) * g;
-      gp = Math.max(gp, g);
+      ppg  += s.ppg  ?? 0;
+      rpg  += s.rpg  ?? 0;
+      apg  += s.apg  ?? 0;
+      spg  += s.spg  ?? 0;
+      bpg  += s.bpg  ?? 0;
+      topg += s.topg ?? 0;
+      gp = Math.max(gp, s.gp ?? 0);
     }
     if (gp === 0) return null;
-    return { ppg: pts / gp, rpg: reb / gp, apg: ast / gp, spg: stl / gp, bpg: blk / gp, topg: to / gp, gp };
+    const r1 = (n: number) => Math.round(n * 10) / 10;
+    return { ppg: r1(ppg), rpg: r1(rpg), apg: r1(apg), spg: r1(spg), bpg: r1(bpg), topg: r1(topg), gp };
   }, [teamStats]);
 
   // Games for this team — match by ID OR abbreviation (teams can get new UUIDs each season)
@@ -260,7 +260,7 @@ function TeamDetailModal({ team, league, seasons, defaultSeason, onClose }: {
                           <td style={{ padding: "8px 10px", color: "#aaa", textAlign: "center" }}>{fmt(s.spg)}</td>
                           <td style={{ padding: "8px 10px", color: "#aaa", textAlign: "center" }}>{fmt(s.bpg)}</td>
                           <td style={{ padding: "8px 10px", color: "#aaa", textAlign: "center" }}>{fmt(s.topg)}</td>
-                          <td style={{ padding: "8px 10px", color: "#aaa", textAlign: "center" }}>{s.fg_pct != null ? `${(s.fg_pct * 100).toFixed(1)}%` : "—"}</td>
+                          <td style={{ padding: "8px 10px", color: "#aaa", textAlign: "center" }}>{s.fg_pct != null ? `${s.fg_pct.toFixed(1)}%` : "—"}</td>
                         </tr>
                       ))}
                       {totals && (
@@ -507,6 +507,15 @@ export default function TeamsPage({ params }: { params?: Promise<{ league?: stri
   const slug = resolved?.league ?? "";
   const leagueDisplay = leagueNames[slug] ?? slug.toUpperCase();
 
+  // Read URL params for deep-linking from stats page
+  const [urlTeamId, setUrlTeamId] = React.useState<string | null>(null);
+  const [urlSeason, setUrlSeason] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    setUrlTeamId(sp.get("team"));
+    setUrlSeason(sp.get("season"));
+  }, []);
+
   const [teams, setTeams] = React.useState<Team[]>([]);
   const [playerTeams, setPlayerTeams] = React.useState<PlayerTeam[]>([]);
   const [contracts, setContracts] = React.useState<ContractSimple[]>([]);
@@ -525,10 +534,12 @@ export default function TeamsPage({ params }: { params?: Promise<{ league?: stri
             data.map(d => d.season).filter(s => s && !s.toLowerCase().includes("playoff"))
           )].sort((a, b) => b.localeCompare(a));
           setSeasons(unique);
-          if (unique.length > 0) setSeason(unique[0]);
+          // Use URL season param if provided, else default to most recent
+          const initial = urlSeason && unique.includes(urlSeason) ? urlSeason : (unique[0] ?? "");
+          setSeason(initial);
         }
       }).catch(() => {});
-  }, [slug]);
+  }, [slug, urlSeason]);
 
   React.useEffect(() => {
     if (!slug || !season) { setLoading(false); return; }
@@ -538,12 +549,18 @@ export default function TeamsPage({ params }: { params?: Promise<{ league?: stri
       fetch(`/api/teams/players?league=${slug}&season=${encodeURIComponent(season)}`).then(r => r.json()),
       fetch(`/api/contracts?league=${slug}&season=${encodeURIComponent(season)}&status=active`).then(r => r.json()),
     ]).then(([t, pt, c]) => {
-      setTeams(Array.isArray(t) ? t : []);
+      const loadedTeams: Team[] = Array.isArray(t) ? t : [];
+      setTeams(loadedTeams);
       setPlayerTeams(Array.isArray(pt) ? pt : []);
       setContracts(Array.isArray(c) ? c : []);
       setLoading(false);
+      // Auto-open team from URL param
+      if (urlTeamId && !selectedTeam) {
+        const match = loadedTeams.find(tm => tm.id === urlTeamId);
+        if (match) setSelectedTeam(match);
+      }
     }).catch(() => setLoading(false));
-  }, [slug, season]);
+  }, [slug, season, urlTeamId]);
 
   const westTeams = teams.filter(t => t.division === "West");
   const eastTeams = teams.filter(t => t.division === "East");
