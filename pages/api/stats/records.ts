@@ -13,6 +13,7 @@ type Records = {
   season: Record<string, RecordEntry>;
   seasonAvg: Record<string, RecordEntry>;
   career: Record<string, RecordEntry>;
+  careerAvg: Record<string, RecordEntry>;
   game: Record<string, RecordEntry>;
 };
 
@@ -27,6 +28,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const seasonTotals: Record<string, Record<string, { points: number; rebounds: number; assists: number; steals: number }>> = {};
   const seasonGameCount: Record<string, Record<string, number>> = {};
   const careerTotals: Record<string, { points: number; rebounds: number; assists: number; steals: number }> = {};
+  const careerGameCount: Record<string, number> = {};
   const playerMap: Record<string, string> = {};
   // Direct avg rows from stats table (PBA source)
   const statsTableAvgs: { uuid: string; season: string; ppg: number; rpg: number; apg: number; spg: number; gp: number }[] = [];
@@ -77,6 +79,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       careerTotals[uuid].rebounds += reb;
       careerTotals[uuid].assists += ast;
       careerTotals[uuid].steals += stl;
+      careerGameCount[uuid] = (careerGameCount[uuid] ?? 0) + 1;
     }
   }
 
@@ -115,6 +118,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       careerTotals[uuid].rebounds += reb;
       careerTotals[uuid].assists += ast;
       careerTotals[uuid].steals += stl;
+      careerGameCount[uuid] = (careerGameCount[uuid] ?? 0) + gp;
 
       statsTableAvgs.push({
         uuid, season, gp,
@@ -177,6 +181,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return best;
   }
 
+  function bestCareerAvg(stat: "points" | "rebounds" | "assists" | "steals"): RecordEntry {
+    const MIN_GAMES = 3;
+    let best: RecordEntry = { mc_uuid: "", mc_username: "", value: 0, season: "Career" };
+    for (const [uuid, totals] of Object.entries(careerTotals)) {
+      const gp = careerGameCount[uuid] ?? 0;
+      if (gp < MIN_GAMES) continue;
+      const avg = totals[stat] / gp;
+      if (avg > best.value) {
+        const seasons = Object.keys(seasonTotals[uuid] ?? {}).length;
+        best = {
+          mc_uuid: uuid,
+          mc_username: playerMap[uuid] ?? uuid,
+          value: Math.round(avg * 10) / 10,
+          season: `${gp} GP · ${seasons} season${seasons !== 1 ? "s" : ""}`,
+        };
+      }
+    }
+    return best;
+  }
+
   const result: Records = {
     season: {
       points: bestSeason("points"),
@@ -195,6 +219,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       rebounds: bestCareer("rebounds"),
       assists: bestCareer("assists"),
       steals: bestCareer("steals"),
+    },
+    careerAvg: {
+      ppg: bestCareerAvg("points"),
+      rpg: bestCareerAvg("rebounds"),
+      apg: bestCareerAvg("assists"),
+      spg: bestCareerAvg("steals"),
     },
     game: {},
   };

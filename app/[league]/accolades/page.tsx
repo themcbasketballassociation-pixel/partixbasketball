@@ -23,6 +23,7 @@ type Records = {
   season: Record<string, RecordEntry>;
   seasonAvg: Record<string, RecordEntry>;
   career: Record<string, RecordEntry>;
+  careerAvg: Record<string, RecordEntry>;
   game: Record<string, RecordEntry>;
 };
 
@@ -146,9 +147,9 @@ export default function AccoladesPage({ params }: { params?: Promise<{ league?: 
               </div>
             )}
 
-            {/* Career Records */}
+            {/* Career Totals */}
             <div>
-              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Career</h3>
+              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Career Totals</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 <RecordCard label="Most Career Points" entry={records.career?.points} />
                 <RecordCard label="Most Career Assists" entry={records.career?.assists} />
@@ -156,6 +157,19 @@ export default function AccoladesPage({ params }: { params?: Promise<{ league?: 
                 <RecordCard label="Most Career Steals" entry={records.career?.steals} />
               </div>
             </div>
+
+            {/* Career Averages */}
+            {records.careerAvg && (
+              <div>
+                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Career Averages</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <RecordCard label="Best Career PPG" entry={records.careerAvg?.ppg} suffix=" PPG" />
+                  <RecordCard label="Best Career APG" entry={records.careerAvg?.apg} suffix=" APG" />
+                  <RecordCard label="Best Career RPG" entry={records.careerAvg?.rpg} suffix=" RPG" />
+                  <RecordCard label="Best Career SPG" entry={records.careerAvg?.spg} suffix=" SPG" />
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
