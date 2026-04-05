@@ -81,17 +81,27 @@ function TeamDetailModal({ team, league, seasons, defaultSeason, onClose }: {
   React.useEffect(() => {
     if (!modalSeason) return;
     setLoadingSeason(true);
+    // First resolve the correct team ID for this season (teams are per-season rows)
     Promise.all([
-      fetch(`/api/contracts?league=${league}&team_id=${team.id}&season=${encodeURIComponent(modalSeason)}&status=active`).then(r => r.json()),
+      fetch(`/api/teams?league=${league}&season=${encodeURIComponent(modalSeason)}`).then(r => r.json()),
       fetch(`/api/stats?league=${league}&season=${encodeURIComponent(modalSeason)}`).then(r => r.json()),
       fetch(`/api/teams/players?league=${league}&season=${encodeURIComponent(modalSeason)}`).then(r => r.json()),
-    ]).then(([c, s, pt]) => {
-      setContracts(Array.isArray(c) ? c : []);
-      setStats(Array.isArray(s) ? s : []);
-      setSeasonRoster((Array.isArray(pt) ? pt : []).filter((p: PlayerTeam) => p.team_id === team.id));
-      setLoadingSeason(false);
+    ]).then(([seasonTeams, s, pt]) => {
+      // Match this team to the season's version by name
+      const seasonTeam = Array.isArray(seasonTeams)
+        ? seasonTeams.find((t: { id: string; name: string }) => t.name === team.name)
+        : null;
+      const effectiveId = seasonTeam?.id ?? team.id;
+      return fetch(`/api/contracts?league=${league}&team_id=${effectiveId}&season=${encodeURIComponent(modalSeason)}&status=active`)
+        .then(r => r.json())
+        .then(c => {
+          setContracts(Array.isArray(c) ? c : []);
+          setStats(Array.isArray(s) ? s : []);
+          setSeasonRoster((Array.isArray(pt) ? pt : []).filter((p: PlayerTeam) => p.team_id === effectiveId));
+          setLoadingSeason(false);
+        });
     }).catch(() => setLoadingSeason(false));
-  }, [league, team.id, modalSeason]);
+  }, [league, team.id, team.name, modalSeason]);
 
   // Championships: seasons where this team won a Finals
   const championships = React.useMemo(() => {
