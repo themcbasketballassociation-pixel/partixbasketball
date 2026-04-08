@@ -1201,27 +1201,48 @@ function ScheduleTab({ league, season }: { league: string; season: string }) {
   const randomizeTimes = async () => {
     const scheduled = games.filter((g) => g.status !== "completed");
     if (!scheduled.length) { setErr("No scheduled games to randomize."); return; }
+    const timeSlots: Record<number, string[]> = {
+      4: ["20:30", "21:15", "22:00"],
+      5: ["20:30", "21:15", "22:00"],
+      0: ["19:30", "20:30", "21:15", "22:00"],
+    };
+    // Group by date string (YYYY-MM-DD) so each date gets its own shuffled slot pool
+    const byDate = scheduled.reduce<Record<string, typeof scheduled>>((acc, g) => {
+      const dateKey = new Date(g.scheduled_at).toISOString().slice(0, 10);
+      if (!acc[dateKey]) acc[dateKey] = [];
+      acc[dateKey].push(g);
+      return acc;
+    }, {});
+    // Validate slot capacity before doing anything
+    for (const [dateKey, dayGames] of Object.entries(byDate)) {
+      const dow = new Date(dateKey + "T12:00:00").getDay();
+      const slots = timeSlots[dow];
+      if (!slots) continue;
+      if (dayGames.length > slots.length) {
+        setErr(`${dateKey} has ${dayGames.length} games but only ${slots.length} time slots available.`);
+        return;
+      }
+    }
     if (!confirm(`Randomize times for ${scheduled.length} scheduled game(s)?`)) return;
     setRandomizingTimes(true); setErr("");
-    const timeSlots: Record<number, string[]> = {
-      4: ["20:30", "21:15", "22:00"],   // Thursday
-      5: ["20:30", "21:15", "22:00"],   // Friday
-      0: ["19:30", "20:30", "21:15", "22:00"], // Sunday
-    };
-    for (const g of scheduled) {
-      const d = new Date(g.scheduled_at);
-      const dow = d.getDay();
+    for (const [dateKey, dayGames] of Object.entries(byDate)) {
+      const dow = new Date(dateKey + "T12:00:00").getDay();
       const slots = timeSlots[dow];
-      if (!slots) continue; // skip games not on Thu/Fri/Sun
-      const [h, m] = slots[Math.floor(Math.random() * slots.length)].split(":").map(Number);
-      const updated = new Date(d);
-      updated.setHours(h, m, 0, 0);
-      const r = await fetch(`/api/games/${g.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scheduled_at: updated.toISOString() }),
-      });
-      if (!r.ok) { const data = await r.json(); setErr(data.error ?? "Randomize times failed"); setRandomizingTimes(false); return; }
+      if (!slots) continue;
+      // Shuffle slots and assign one per game — no two games share a time
+      const shuffled = [...slots].sort(() => Math.random() - 0.5);
+      for (let i = 0; i < dayGames.length; i++) {
+        const g = dayGames[i];
+        const [h, m] = shuffled[i].split(":").map(Number);
+        const updated = new Date(g.scheduled_at);
+        updated.setHours(h, m, 0, 0);
+        const r = await fetch(`/api/games/${g.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scheduled_at: updated.toISOString() }),
+        });
+        if (!r.ok) { const data = await r.json(); setErr(data.error ?? "Randomize times failed"); setRandomizingTimes(false); return; }
+      }
     }
     setRandomizingTimes(false); refresh();
   };
