@@ -1197,6 +1197,35 @@ function ScheduleTab({ league, season }: { league: string; season: string }) {
     refresh();
   };
 
+  const [randomizingTimes, setRandomizingTimes] = useState(false);
+  const randomizeTimes = async () => {
+    const scheduled = games.filter((g) => g.status !== "completed");
+    if (!scheduled.length) { setErr("No scheduled games to randomize."); return; }
+    if (!confirm(`Randomize times for ${scheduled.length} scheduled game(s)?`)) return;
+    setRandomizingTimes(true); setErr("");
+    const timeSlots: Record<number, string[]> = {
+      4: ["20:30", "21:15", "22:00"],   // Thursday
+      5: ["20:30", "21:15", "22:00"],   // Friday
+      0: ["19:30", "20:30", "21:15", "22:00"], // Sunday
+    };
+    for (const g of scheduled) {
+      const d = new Date(g.scheduled_at);
+      const dow = d.getDay();
+      const slots = timeSlots[dow];
+      if (!slots) continue; // skip games not on Thu/Fri/Sun
+      const [h, m] = slots[Math.floor(Math.random() * slots.length)].split(":").map(Number);
+      const updated = new Date(d);
+      updated.setHours(h, m, 0, 0);
+      const r = await fetch(`/api/games/${g.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scheduled_at: updated.toISOString() }),
+      });
+      if (!r.ok) { const data = await r.json(); setErr(data.error ?? "Randomize times failed"); setRandomizingTimes(false); return; }
+    }
+    setRandomizingTimes(false); refresh();
+  };
+
   const [randomizing, setRandomizing] = useState(false);
   const randomizeHomeAway = async () => {
     if (!confirm("Randomly swap home/away for all scheduled games?")) return;
@@ -1349,9 +1378,14 @@ function ScheduleTab({ league, season }: { league: string; season: string }) {
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest">All Games ({games.length})</h3>
           {games.length > 0 && (
-            <button className={btnSecondary} onClick={randomizeHomeAway} disabled={randomizing}>
-              {randomizing ? "Randomizing..." : "Randomize Home/Away"}
-            </button>
+            <div className="flex gap-2">
+              <button className={btnSecondary} onClick={randomizeTimes} disabled={randomizingTimes}>
+                {randomizingTimes ? "Randomizing..." : "Randomize Times"}
+              </button>
+              <button className={btnSecondary} onClick={randomizeHomeAway} disabled={randomizing}>
+                {randomizing ? "Randomizing..." : "Randomize Home/Away"}
+              </button>
+            </div>
           )}
         </div>
         {games.length === 0 ? (
