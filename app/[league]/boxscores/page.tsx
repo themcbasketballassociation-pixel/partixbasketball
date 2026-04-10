@@ -21,7 +21,12 @@ type GameStat = {
   three_pt_made: number | null; three_pt_attempted: number | null;
   players: { mc_uuid: string; mc_username: string };
 };
-type PlayerTeam = { mc_uuid: string; team_id: string; season?: string | null };
+type PlayerTeam = {
+  mc_uuid: string;
+  team_id: string;
+  season?: string | null;
+  teams?: { id: string; name: string; abbreviation: string } | null;
+};
 
 function fmtMins(seconds: number | null) {
   if (seconds === null) return "—";
@@ -275,19 +280,38 @@ export default function BoxScoresPage({ params }: { params?: Promise<{ league?: 
             const homeWon = (g.home_score ?? 0) > (g.away_score ?? 0);
             const awayWon = (g.away_score ?? 0) > (g.home_score ?? 0);
 
-            // Split stats by team — filter allPlayerTeams by exact team_id match.
-            // Also filter by season (strip " Playoffs" suffix) so a player who was
-            // on Toronto in S5 but Boston in S7 shows on the correct side in S7 games.
+            // Split stats by team using a two-pass approach:
+            // Pass 1: exact team_id match (works when game and player_teams share the same UUIDs)
+            // Pass 2: team abbreviation match (fallback for when teams were re-created with new UUIDs)
             const homeId = g.home_team?.id;
             const awayId = g.away_team?.id;
+            const homeAbbr = g.home_team?.abbreviation?.toUpperCase();
+            const awayAbbr = g.away_team?.abbreviation?.toUpperCase();
             const baseSeason = season.replace(/ Playoffs$/i, "");
-            // Build per-season team lookup first; fall back to any record if season doesn't match
-            const seasonRecords = allPlayerTeams.filter((pt) => pt.season === baseSeason || pt.season === season);
-            const recordsToUse = seasonRecords.length > 0 ? seasonRecords : allPlayerTeams;
-            const homeStats = stats.filter((s) => recordsToUse.some((pt) => pt.mc_uuid === s.mc_uuid && pt.team_id === homeId));
-            const awayStats = stats.filter((s) => recordsToUse.some((pt) => pt.mc_uuid === s.mc_uuid && pt.team_id === awayId));
-            const matchedCount = homeStats.length + awayStats.length;
-            // Fallback to single unsplit table only if fewer than half are matched
+
+            // Prefer records from the current (or base) season so historical assignments don't bleed in
+            const seasonRecords = allPlayerTeams.filter(
+              (pt) => pt.season === baseSeason || pt.season === season
+            );
+            const pool = seasonRecords.length > 0 ? seasonRecords : allPlayerTeams;
+
+            let homeStats = stats.filter((s) => pool.some((pt) => pt.mc_uuid === s.mc_uuid && pt.team_id === homeId));
+            let awayStats = stats.filter((s) => pool.some((pt) => pt.mc_uuid === s.mc_uuid && pt.team_id === awayId));
+            let matchedCount = homeStats.length + awayStats.length;
+
+            // Fallback: if UUIDs didn't match (teams were re-created), try matching by abbreviation
+            if (matchedCount < Math.ceil(stats.length / 2) && (homeAbbr || awayAbbr)) {
+              const allPool = allPlayerTeams; // use all records for abbr fallback
+              homeStats = stats.filter((s) =>
+                allPool.some((pt) => pt.mc_uuid === s.mc_uuid && pt.teams?.abbreviation?.toUpperCase() === homeAbbr)
+              );
+              awayStats = stats.filter((s) =>
+                allPool.some((pt) => pt.mc_uuid === s.mc_uuid && pt.teams?.abbreviation?.toUpperCase() === awayAbbr)
+              );
+              matchedCount = homeStats.length + awayStats.length;
+            }
+
+            // If still not enough, show all stats in a single table rather than nothing
             const allStats = stats.length > 0 && matchedCount < Math.ceil(stats.length / 2) ? stats : null;
 
             return (
