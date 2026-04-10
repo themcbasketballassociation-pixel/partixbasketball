@@ -6,6 +6,11 @@ const LEAGUE_LABELS: Record<string, string> = { pba: "MBA", pcaa: "MCAA", pbgl: 
 const LEAGUE_COLORS: Record<string, number>  = { pba: 0xC8102E, pcaa: 0x003087, pbgl: 0xBB3430 };
 const LEAGUE_SLUGS:  Record<string, string>  = { pba: "mba",   pcaa: "mcaa",   pbgl: "mbgl" };
 
+// Set LEAGUE_LOGO_PBA / LEAGUE_LOGO_PCAA / LEAGUE_LOGO_PBGL in your Vercel env vars
+function getLeagueLogo(league: string): string | undefined {
+  return process.env[`LEAGUE_LOGO_${league.toUpperCase()}`] ?? undefined;
+}
+
 type StatRow = {
   mc_uuid: string;
   points: number | null; rebounds_off: number | null; rebounds_def: number | null;
@@ -110,14 +115,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   // ── Embed ─────────────────────────────────────────────────────────────────────
   // author line: [Home Logo icon]  TOR  67 — 64  BOS
-  // thumbnail (top-right): Away Logo
+  // thumbnail (top-right): League Logo
+  const leagueLogo = getLeagueLogo(league);
   const embed: Record<string, unknown> = {
     color: LEAGUE_COLORS[league] ?? 0x5865F2,
     author: {
       name: `${home.abbreviation}  ${homeScore}  —  ${awayScore}  ${away.abbreviation}`,
       icon_url: home.logo_url ?? undefined,
     },
-    thumbnail: { url: away.logo_url ?? "" },
+    thumbnail: leagueLogo ? { url: leagueLogo } : undefined,
     description: `🟢  **FINAL**  ·  ${gameDate}`,
     fields: potgField ? [potgField] : [],
     footer: {
