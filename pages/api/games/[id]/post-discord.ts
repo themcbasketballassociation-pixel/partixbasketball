@@ -111,7 +111,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       inline: false,
     };
 
-    if (discordId) pingContent = `<@${discordId}> is the Player of the Game!`;
+    if (discordId) pingContent = `🏆 <@${discordId}> is the Player of the Game!`;
   }
 
   // ── Embed ─────────────────────────────────────────────────────────────────────
@@ -120,18 +120,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const leagueLogoUrl = leagueLogoPath ? `${baseUrl}${leagueLogoPath}` : undefined;
   const scorecardUrl = `${baseUrl}/api/scorecard/${id}`;
 
+  // Image is the main content — scorecard includes score + logos + POTG.
+  // Only a small "View box score" link sits below the image.
   const embed: Record<string, unknown> = {
     color: LEAGUE_COLORS[league] ?? 0x5865F2,
+    description: `[📋  View full box score ↗](${boxscoreUrl})`,
     image: { url: scorecardUrl },
-    description: potgField
-      ? `🏆  **Player of the Game**\n${(potgField.value as string)}\n\n[📋 View full box score ↗](${boxscoreUrl})`
-      : `[📋 View full box score ↗](${boxscoreUrl})`,
     footer: {
       text: LEAGUE_LABELS[league] ?? league.toUpperCase(),
       icon_url: leagueLogoUrl ?? (homeWon ? home.logo_url : away.logo_url) ?? undefined,
     },
     timestamp: new Date().toISOString(),
-    url: boxscoreUrl,
   };
 
   try {
