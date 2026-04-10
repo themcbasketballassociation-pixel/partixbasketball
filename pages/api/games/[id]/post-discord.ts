@@ -115,21 +115,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   // ── Embed ─────────────────────────────────────────────────────────────────────
-  // author line (clickable): [Home Logo icon]  TOR  67 — 64  BOS
-  // thumbnail (top-right):   Away team logo  — gives visual "BOS logo right of BOS"
-  // footer icon:             League logo
+  // image: generated scorecard with both team logos + score + league logo
   const leagueLogoPath = LEAGUE_LOGOS[league];
   const leagueLogoUrl = leagueLogoPath ? `${baseUrl}${leagueLogoPath}` : undefined;
+  const scorecardUrl = `${baseUrl}/api/scorecard/${id}`;
+
   const embed: Record<string, unknown> = {
     color: LEAGUE_COLORS[league] ?? 0x5865F2,
-    author: {
-      name: `${home.abbreviation}  ${homeScore}  —  ${awayScore}  ${away.abbreviation}`,
-      icon_url: home.logo_url ?? undefined,
-      url: boxscoreUrl,           // clicking the score line → box score
-    },
-    thumbnail: away.logo_url ? { url: away.logo_url } : undefined,
-    description: `🟢  **FINAL**  ·  ${gameDate}\n[📋 View full box score ↗](${boxscoreUrl})`,
-    fields: potgField ? [potgField] : [],
+    image: { url: scorecardUrl },
+    description: potgField
+      ? `🏆  **Player of the Game**\n${(potgField.value as string)}\n\n[📋 View full box score ↗](${boxscoreUrl})`
+      : `[📋 View full box score ↗](${boxscoreUrl})`,
     footer: {
       text: LEAGUE_LABELS[league] ?? league.toUpperCase(),
       icon_url: leagueLogoUrl ?? (homeWon ? home.logo_url : away.logo_url) ?? undefined,
