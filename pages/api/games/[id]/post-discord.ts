@@ -115,8 +115,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   // ── Embed ─────────────────────────────────────────────────────────────────────
-  // author line: [Home Logo icon]  TOR  67 — 64  BOS
-  // thumbnail (top-right): League Logo
+  // author line (clickable): [Home Logo icon]  TOR  67 — 64  BOS
+  // thumbnail (top-right):   Away team logo  — gives visual "BOS logo right of BOS"
+  // footer icon:             League logo
   const leagueLogoPath = LEAGUE_LOGOS[league];
   const leagueLogoUrl = leagueLogoPath ? `${baseUrl}${leagueLogoPath}` : undefined;
   const embed: Record<string, unknown> = {
@@ -124,13 +125,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     author: {
       name: `${home.abbreviation}  ${homeScore}  —  ${awayScore}  ${away.abbreviation}`,
       icon_url: home.logo_url ?? undefined,
+      url: boxscoreUrl,           // clicking the score line → box score
     },
-    thumbnail: leagueLogoUrl ? { url: leagueLogoUrl } : undefined,
+    thumbnail: away.logo_url ? { url: away.logo_url } : undefined,
     description: `🟢  **FINAL**  ·  ${gameDate}`,
     fields: potgField ? [potgField] : [],
     footer: {
       text: `${LEAGUE_LABELS[league] ?? league.toUpperCase()}  ·  View full box score ↗`,
-      icon_url: (homeWon ? home.logo_url : away.logo_url) ?? undefined,
+      icon_url: leagueLogoUrl ?? (homeWon ? home.logo_url : away.logo_url) ?? undefined,
     },
     timestamp: new Date().toISOString(),
     url: boxscoreUrl,
