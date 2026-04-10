@@ -116,7 +116,7 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
       .then((r) => r.json())
       .then((data) => {
         if (Array.isArray(data)) {
-          const completed = data.filter((g: Game) => g.status === "completed" && g.home_score !== null);
+          const completed = data.filter((g: Game) => (g.status === "final" || g.status === "completed") && g.home_score !== null);
           setRecentGames(completed.slice(-5).reverse());
         }
       })
@@ -165,7 +165,12 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
                 <h2 className="text-xs font-bold tracking-widest uppercase mb-3" style={{ color: "#555" }}>Recent Results</h2>
                 <div className="flex flex-col gap-2">
                   {recentGames.map((g) => (
-                    <div key={g.id} className="rounded-xl px-5 py-3 flex items-center justify-between gap-4" style={{ background: "#111", border: "1px solid #1e1e1e" }}>
+                    <a key={g.id} href={`/${slug}/boxscores?game=${g.id}`}
+                      className="rounded-xl px-5 py-3 flex items-center justify-between gap-4 transition-colors"
+                      style={{ background: "#111", border: "1px solid #1e1e1e", textDecoration: "none", display: "flex", cursor: "pointer" }}
+                      onMouseEnter={(e) => (e.currentTarget.style.borderColor = "#333")}
+                      onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#1e1e1e")}
+                    >
                       <div className="flex items-center gap-3 flex-1 justify-end">
                         {g.home_team?.logo_url && <img src={g.home_team.logo_url} alt="" style={{ width: 24, height: 24, objectFit: "contain", borderRadius: 4 }} />}
                         <span className="font-semibold text-white text-sm">{g.home_team?.abbreviation}</span>
@@ -181,7 +186,7 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
                       <span className="text-xs flex-shrink-0" style={{ color: "#444" }}>
                         {new Date(g.scheduled_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                       </span>
-                    </div>
+                    </a>
                   ))}
                 </div>
               </div>

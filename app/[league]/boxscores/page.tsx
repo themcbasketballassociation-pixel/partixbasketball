@@ -41,6 +41,7 @@ const COLS: { key: string; label: string; render: (s: GameStat) => string }[] = 
   { key: "pts", label: "PTS", render: (s) => na(s.points) },
   { key: "orb", label: "ORB", render: (s) => na(s.rebounds_off) },
   { key: "drb", label: "DRB", render: (s) => na(s.rebounds_def) },
+  { key: "trb", label: "REB", render: (s) => String((s.rebounds_off ?? 0) + (s.rebounds_def ?? 0)) },
   { key: "ast", label: "AST", render: (s) => na(s.assists) },
   { key: "stl", label: "STL", render: (s) => na(s.steals) },
   { key: "blk", label: "BLK", render: (s) => na(s.blocks) },
@@ -59,6 +60,7 @@ function sumCol(stats: GameStat[], key: string): string {
     case "pts": return String(stats.reduce((acc, s) => acc + (s.points ?? 0), 0));
     case "orb": return String(stats.reduce((acc, s) => acc + (s.rebounds_off ?? 0), 0));
     case "drb": return String(stats.reduce((acc, s) => acc + (s.rebounds_def ?? 0), 0));
+    case "trb": return String(stats.reduce((acc, s) => acc + (s.rebounds_off ?? 0) + (s.rebounds_def ?? 0), 0));
     case "ast": return String(stats.reduce((acc, s) => acc + (s.assists ?? 0), 0));
     case "stl": return String(stats.reduce((acc, s) => acc + (s.steals ?? 0), 0));
     case "blk": return String(stats.reduce((acc, s) => acc + (s.blocks ?? 0), 0));
@@ -167,7 +169,12 @@ export default function BoxScoresPage({ params }: { params?: Promise<{ league?: 
 
   const [games, setGames] = React.useState<Game[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const [expanded, setExpanded] = React.useState<string | null>(null);
+  const [expanded, setExpanded] = React.useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      return new URLSearchParams(window.location.search).get("game");
+    }
+    return null;
+  });
   const [statsCache, setStatsCache] = React.useState<Record<string, GameStat[]>>({});
   // Raw list of all player_team records for the league — used to look up by team_id per game
   const [allPlayerTeams, setAllPlayerTeams] = React.useState<PlayerTeam[]>([]);
@@ -222,6 +229,21 @@ export default function BoxScoresPage({ params }: { params?: Promise<{ league?: 
           : [];
         setGames(completed.reverse());
         setLoading(false);
+        // Pre-load stats for the game specified in the URL ?game= param
+        const urlGameId = typeof window !== "undefined"
+          ? new URLSearchParams(window.location.search).get("game")
+          : null;
+        if (urlGameId) {
+          setStatsCache((prev) => {
+            if (prev[urlGameId]) return prev; // already cached
+            fetch(`/api/game-stats?game_id=${urlGameId}`)
+              .then((r) => r.json())
+              .then((stats) => {
+                setStatsCache((p) => ({ ...p, [urlGameId]: Array.isArray(stats) ? stats : [] }));
+              }).catch(() => {});
+            return prev;
+          });
+        }
       })
       .catch(() => setLoading(false));
   }, [slug, season]);

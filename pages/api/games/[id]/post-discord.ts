@@ -14,11 +14,16 @@ type StatRow = {
   players: { mc_username: string | null; discord_id: string | null } | null;
 };
 
+// POTG formula — points-first, TO is only a light penalty
 function potgScore(s: StatRow) {
-  const pts = s.points ?? 0, reb = (s.rebounds_off ?? 0) + (s.rebounds_def ?? 0);
-  const ast = s.assists ?? 0, stl = s.steals ?? 0, blk = s.blocks ?? 0, tov = s.turnovers ?? 0;
+  const pts  = s.points ?? 0;
+  const reb  = (s.rebounds_off ?? 0) + (s.rebounds_def ?? 0);
+  const ast  = s.assists ?? 0;
+  const stl  = s.steals ?? 0;
+  const blk  = s.blocks ?? 0;
+  const tov  = s.turnovers ?? 0;
   const miss = (s.fg_attempted ?? 0) - (s.fg_made ?? 0);
-  return pts + reb * 1.2 + ast * 1.5 + stl * 2 + blk * 2 - tov - miss * 0.5;
+  return pts + reb * 1.2 + ast * 1.5 + stl * 2.5 + blk * 2 - tov * 0.3 - miss * 0.5;
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -52,6 +57,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const homeScore = game.home_score as number;
   const awayScore = game.away_score as number;
   const homeWon = homeScore > awayScore;
+  const winnerTeamId = homeWon ? home.id : away.id;
 
   const gameDate = new Date(game.scheduled_at as string).toLocaleDateString("en-US", {
     month: "short", day: "numeric", year: "numeric",
@@ -61,12 +67,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const baseUrl = process.env.NEXTAUTH_URL ?? "https://partixbasketball.com";
   const boxscoreUrl = `${baseUrl}/${slug}/boxscores?game=${id}`;
 
+  // ── Determine winning team roster (used to restrict POTG eligibility) ────────
+  // Try by exact team_id first; fall back to all stats if roster lookup fails
+  const { data: winnerRoster } = await supabase
+    .from("player_teams")
+    .select("mc_uuid")
+    .eq("team_id", winnerTeamId);
+
+  const winnerUuids = new Set((winnerRoster ?? []).map((r: { mc_uuid: string }) => r.mc_uuid));
+  const potgPool = winnerUuids.size > 0
+    ? allStats.filter((s) => winnerUuids.has(s.mc_uuid))
+    : allStats; // fallback: no roster data, use everyone
+
   // ── POTG ─────────────────────────────────────────────────────────────────────
   let potgField: Record<string, unknown> | null = null;
   let pingContent = "";
 
-  if (allStats.length > 0) {
-    const best = allStats.reduce((a, b) => potgScore(a) >= potgScore(b) ? a : b);
+  if (potgPool.length > 0) {
+    const best = potgPool.reduce((a, b) => potgScore(a) >= potgScore(b) ? a : b);
     const name = best.players?.mc_username ?? best.mc_uuid;
     const discordId = best.players?.discord_id;
     const reb = (best.rebounds_off ?? 0) + (best.rebounds_def ?? 0);
@@ -75,8 +93,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       `**${best.points ?? 0}** PTS`,
       `**${reb}** REB`,
       `**${best.assists ?? 0}** AST`,
-      (best.steals  ?? 0) > 0 ? `**${best.steals}** STL`  : null,
-      (best.blocks  ?? 0) > 0 ? `**${best.blocks}** BLK`  : null,
+      (best.steals   ?? 0) > 0 ? `**${best.steals}** STL`  : null,
+      (best.blocks   ?? 0) > 0 ? `**${best.blocks}** BLK`  : null,
       (best.turnovers ?? 0) > 0 ? `**${best.turnovers}** TO` : null,
       `**${best.fg_made ?? 0}/${best.fg_attempted ?? 0}** FG`,
     ].filter(Boolean).join("  ·  ");
@@ -91,17 +109,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   // ── Embed ─────────────────────────────────────────────────────────────────────
-  // author = home team (icon top-left), thumbnail = away team (image top-right)
-  // This mirrors the boxscore header layout as closely as Discord allows
+  // author line: [Home Logo icon]  TOR  67 — 64  BOS
+  // thumbnail (top-right): Away Logo
   const embed: Record<string, unknown> = {
+    color: LEAGUE_COLORS[league] ?? 0x5865F2,
     author: {
-      name: `${home.name}  ·  ${home.abbreviation}  ·  HOME`,
+      name: `${home.abbreviation}  ${homeScore}  —  ${awayScore}  ${away.abbreviation}`,
       icon_url: home.logo_url ?? undefined,
     },
-    title: `${homeScore}  –  ${awayScore}`,
-    description: `${away.name}  ·  ${away.abbreviation}  ·  AWAY\n\n🟢  **FINAL**  ·  ${gameDate}`,
-    color: LEAGUE_COLORS[league] ?? 0x5865F2,
     thumbnail: { url: away.logo_url ?? "" },
+    description: `🟢  **FINAL**  ·  ${gameDate}`,
     fields: potgField ? [potgField] : [],
     footer: {
       text: `${LEAGUE_LABELS[league] ?? league.toUpperCase()}  ·  View full box score ↗`,
