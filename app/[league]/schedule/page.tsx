@@ -220,10 +220,31 @@ export default function SchedulePage({ params }: { params?: Promise<{ league?: s
   const leagueDisplay = leagueNames[slug] ?? slug.toUpperCase();
 
   const [games, setGames] = React.useState<Game[]>([]);
+  const [teamLogoMap, setTeamLogoMap] = React.useState<Record<string, string>>({});
   const [loading, setLoading] = React.useState(true);
   const [seasons, setSeasons] = React.useState<string[]>([]);
   const [season, setSeason] = React.useState<string>("");
   const [tab, setTab] = React.useState<"schedule"|"bracket">("schedule");
+
+  // Fetch ALL teams for the league (no season filter) to build a logo lookup
+  // keyed by both id and abbreviation — so logos resolve even if team IDs differ between seasons
+  React.useEffect(() => {
+    if (!slug) return;
+    fetch(`/api/teams?league=${slug}`)
+      .then((r) => r.json())
+      .then((data: Team[]) => {
+        if (!Array.isArray(data)) return;
+        const map: Record<string, string> = {};
+        for (const t of data) {
+          if (t.logo_url) {
+            map[t.id] = t.logo_url;
+            map[t.abbreviation.toUpperCase()] = t.logo_url;
+          }
+        }
+        setTeamLogoMap(map);
+      })
+      .catch(() => {});
+  }, [slug]);
 
   React.useEffect(() => {
     if (!slug) { setLoading(false); return; }
@@ -249,6 +270,15 @@ export default function SchedulePage({ params }: { params?: Promise<{ league?: s
       .then((data) => { setGames(Array.isArray(data) ? data : []); setLoading(false); })
       .catch(() => setLoading(false));
   }, [slug, season]);
+
+  // Resolve logo: prefer joined team data, fall back to id lookup, then abbreviation lookup
+  const getLogo = React.useCallback((team: Team | null | undefined): string | null => {
+    if (!team) return null;
+    return team.logo_url
+      || teamLogoMap[team.id]
+      || teamLogoMap[team.abbreviation?.toUpperCase()]
+      || null;
+  }, [teamLogoMap]);
 
   const grouped = games.reduce<Record<string, Game[]>>((acc, g) => {
     const key = getWeekKey(g.scheduled_at);
@@ -328,8 +358,8 @@ export default function SchedulePage({ params }: { params?: Promise<{ league?: s
                                 <div style={{ fontWeight: 600, color: "#fff" }}>{g.home_team?.name ?? "?"}</div>
                                 <div style={{ fontSize: "0.75rem", color: "#555" }}>{g.home_team?.abbreviation}</div>
                               </div>
-                              {g.home_team?.logo_url
-                                ? <img src={g.home_team.logo_url} alt="" style={{ width: 32, height: 32, objectFit: "contain", flexShrink: 0 }} />
+                              {getLogo(g.home_team)
+                                ? <img src={getLogo(g.home_team)!} alt="" style={{ width: 32, height: 32, objectFit: "contain", flexShrink: 0 }} />
                                 : <div style={{ width: 32, height: 32, borderRadius: 6, background: "#1a1a1a", border: "1px solid #333", display: "flex", alignItems: "center", justifyContent: "center", color: "#555", fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{g.home_team?.abbreviation ?? "?"}</div>
                               }
                             </div>
@@ -342,8 +372,8 @@ export default function SchedulePage({ params }: { params?: Promise<{ league?: s
                               <div style={{ color: "#333", fontWeight: 500, padding: "0 12px" }}>vs</div>
                             )}
                             <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 130 }}>
-                              {g.away_team?.logo_url
-                                ? <img src={g.away_team.logo_url} alt="" style={{ width: 32, height: 32, objectFit: "contain", flexShrink: 0 }} />
+                              {getLogo(g.away_team)
+                                ? <img src={getLogo(g.away_team)!} alt="" style={{ width: 32, height: 32, objectFit: "contain", flexShrink: 0 }} />
                                 : <div style={{ width: 32, height: 32, borderRadius: 6, background: "#1a1a1a", border: "1px solid #333", display: "flex", alignItems: "center", justifyContent: "center", color: "#555", fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{g.away_team?.abbreviation ?? "?"}</div>
                               }
                               <div style={{ textAlign: "left" }}>
