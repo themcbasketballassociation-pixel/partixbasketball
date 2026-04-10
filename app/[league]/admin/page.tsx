@@ -1156,7 +1156,8 @@ function ScheduleTab({ league, season }: { league: string; season: string }) {
   const refresh = useCallback(async () => {
     const [g, t] = await Promise.all([
       fetch(`/api/games?league=${league}&season=${encodeURIComponent(season)}`).then((r) => r.json()),
-      fetch(`/api/teams?league=${league}`).then((r) => r.json()),
+      // For playoffs, strip " Playoffs" suffix to get the base season's teams
+      fetch(`/api/teams?league=${league}&season=${encodeURIComponent(season.replace(/ Playoffs$/i, ""))}`).then((r) => r.json()),
     ]);
     setGames(Array.isArray(g) ? g : []);
     setTeams(Array.isArray(t) ? t : []);
