@@ -1427,11 +1427,19 @@ function ScheduleTab({ league, season }: { league: string; season: string }) {
                           <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${g.status === "completed" ? "bg-green-900 text-green-300" : "bg-yellow-900 text-yellow-300"}`}>{g.status === "completed" ? "Final" : "Scheduled"}</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          {g.status !== "completed" && (
-                            <button className={btnSecondary} onClick={() => { setCompletingId(completingId === g.id ? null : g.id); setErr(""); }}>
-                              {completingId === g.id ? "Cancel" : "Enter Score"}
-                            </button>
-                          )}
+                          <button className={btnSecondary} onClick={() => {
+                            const opening = completingId !== g.id;
+                            setCompletingId(opening ? g.id : null);
+                            if (opening && g.status === "completed") {
+                              setHomeScore(String(g.home_score ?? ""));
+                              setAwayScore(String(g.away_score ?? ""));
+                            } else if (opening) {
+                              setHomeScore(""); setAwayScore("");
+                            }
+                            setErr("");
+                          }}>
+                            {completingId === g.id ? "Cancel" : g.status === "completed" ? "Edit Score" : "Enter Score"}
+                          </button>
                           <button className={btnDanger} onClick={() => deleteGame(g.id)}>Delete</button>
                         </div>
                       </div>
