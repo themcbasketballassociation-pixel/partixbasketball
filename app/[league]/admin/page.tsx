@@ -1457,7 +1457,17 @@ function ScheduleTab({ league, season }: { league: string; season: string }) {
 
 // ─── Stat block parser ────────────────────────────────────────────────────────
 
-type ParsedStat = { name: string; matched: Player | null; fields: Record<string, string> };
+type ParsedStat = {
+  name: string;
+  matched: Player | null;
+  fields: Record<string, string>;
+  /** UUID looked up from Mojang — set during async resolution */
+  resolvedUuid?: string | null;
+  /** Old name if the player's username was updated in the DB */
+  oldName?: string | null;
+  /** Resolution state for async lookup */
+  resolving?: boolean;
+};
 
 function parseStatBlock(text: string, players: Player[]): ParsedStat[] {
   const results: ParsedStat[] = [];
@@ -1472,7 +1482,6 @@ function parseStatBlock(text: string, players: Player[]): ParsedStat[] {
     let fields: Record<string, string>;
 
     if (/\bPTS\b/i.test(line)) {
-      // Labeled format: "PlayerName | MIN 0:14 | PTS 2 | FG 1/2 | 3FG 1/3 | OREB 0 | ..."
       const ext = (pat: RegExp) => line.match(pat)?.[1] ?? "";
       const fgM = line.match(/\bFG\s+(\d+)\/(\d+)/i);
       const tfgM = line.match(/\b3FG\s+(\d+)\/(\d+)/i);
@@ -1491,7 +1500,6 @@ function parseStatBlock(text: string, players: Player[]): ParsedStat[] {
         possession_time: ext(/\bPOSS\s+(\d+)/i),
       };
     } else {
-      // Positional format: "Name | Min | PTS | FGM/FGA | 3PM/3PA | ORB | DRB | AST | STL | BLK | TOV"
       const hasTwoShotCols = parts.length > 10;
       const offset = hasTwoShotCols ? 1 : 0;
       fields = {
@@ -1520,6 +1528,59 @@ function parseStatBlock(text: string, players: Player[]): ParsedStat[] {
     results.push({ name, matched, fields });
   }
   return results;
+}
+
+/**
+ * For any unmatched entries, look up the Minecraft UUID by username via playerdb.co.
+ * If that UUID already exists in the players table, update the player's username in the DB
+ * (same UUID = same player, just a name change) and mark them as matched.
+ */
+async function resolveUnmatched(
+  entries: ParsedStat[],
+  players: Player[],
+  onUpdate: (updated: ParsedStat[]) => void
+): Promise<void> {
+  const copy = entries.map((e) => ({ ...e }));
+  const unmatched = copy.filter((e) => !e.matched);
+  if (unmatched.length === 0) return;
+
+  // Mark all unmatched as resolving
+  for (const e of unmatched) e.resolving = true;
+  onUpdate([...copy]);
+
+  for (const entry of unmatched) {
+    try {
+      const res = await fetch(`/api/mojang/${encodeURIComponent(entry.name)}`);
+      if (!res.ok) { entry.resolving = false; continue; }
+      const data = await res.json();
+      // Only trust the UUID if Mojang confirmed the player exists
+      if (!data?.found) { entry.resolving = false; continue; }
+      const uuid: string | undefined = data?.uuid;
+      if (!uuid) { entry.resolving = false; continue; }
+
+      entry.resolvedUuid = uuid;
+      const existingPlayer = players.find((p) => p.mc_uuid === uuid);
+
+      if (existingPlayer) {
+        // Same UUID → player renamed their MC account. Update DB and mark matched.
+        if (existingPlayer.mc_username.toLowerCase() !== entry.name.toLowerCase()) {
+          entry.oldName = existingPlayer.mc_username;
+          await fetch(`/api/players/${uuid}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ mc_username: entry.name }),
+          });
+          // Update local player object so the rest of the session reflects the new name
+          existingPlayer.mc_username = entry.name;
+        }
+        entry.matched = { ...existingPlayer, mc_username: entry.name };
+      }
+    } catch {
+      // Network failure — leave unmatched
+    }
+    entry.resolving = false;
+    onUpdate([...copy]);
+  }
 }
 
 // ─── Tab: Box Scores ──────────────────────────────────────────────────────────
@@ -1679,29 +1740,52 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
                   value={pasteText}
                   onChange={(e) => { setPasteText(e.target.value); setPastePreview(null); }}
                 />
-                <button className={btnPrimary} onClick={() => setPastePreview(parseStatBlock(pasteText, players))} disabled={!pasteText.trim()}>
+                <button className={btnPrimary} onClick={async () => {
+                  const initial = parseStatBlock(pasteText, players);
+                  setPastePreview(initial);
+                  // Async: resolve unmatched names via Mojang UUID lookup
+                  await resolveUnmatched(initial, players, (updated) => setPastePreview([...updated]));
+                }} disabled={!pasteText.trim()}>
                   Parse Stats
                 </button>
                 {pastePreview && (
                   <div className="space-y-2 mt-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-slate-300">
+                      <span className="text-sm text-slate-300 flex items-center gap-2 flex-wrap">
                         <span className="text-green-400 font-semibold">{pastePreview.filter(e => e.matched).length} matched</span>
-                        {pastePreview.filter(e => !e.matched).length > 0 && (
-                          <span className="text-red-400 ml-2">{pastePreview.filter(e => !e.matched).length} unmatched</span>
+                        {pastePreview.some(e => e.oldName) && (
+                          <span className="text-blue-400">· {pastePreview.filter(e => e.oldName).length} name{pastePreview.filter(e => e.oldName).length !== 1 ? "s" : ""} updated</span>
+                        )}
+                        {pastePreview.some(e => e.resolving) && (
+                          <span className="text-yellow-400 animate-pulse">· looking up {pastePreview.filter(e => e.resolving).length} via Mojang…</span>
+                        )}
+                        {pastePreview.filter(e => !e.matched && !e.resolving).length > 0 && (
+                          <span className="text-red-400">{pastePreview.filter(e => !e.matched && !e.resolving).length} unmatched</span>
                         )}
                       </span>
-                      <button className={btnPrimary} onClick={applyPastePreview} disabled={!pastePreview.some(e => e.matched)}>
+                      <button className={btnPrimary} onClick={applyPastePreview}
+                        disabled={!pastePreview.some(e => e.matched) || pastePreview.some(e => e.resolving)}>
                         Apply to Form
                       </button>
                     </div>
                     {pastePreview.map((entry, i) => (
-                      <div key={i} className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-sm ${entry.matched ? "border-slate-800 bg-slate-900" : "border-red-900 bg-red-950"}`}>
-                        {entry.matched ? (
+                      <div key={i} className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-sm
+                        ${entry.resolving ? "border-yellow-900 bg-yellow-950/30 animate-pulse"
+                        : entry.matched && entry.oldName ? "border-blue-800 bg-blue-950/40"
+                        : entry.matched ? "border-slate-800 bg-slate-900"
+                        : "border-red-900 bg-red-950"}`}>
+                        {entry.resolving ? (
+                          <span className="text-yellow-400 text-xs">🔍 Looking up {entry.name}…</span>
+                        ) : entry.matched ? (
                           <>
-                            <img src={`https://minotar.net/avatar/${entry.matched.mc_username}/24`} className="w-6 h-6 rounded" alt="" />
+                            <img src={`https://minotar.net/avatar/${entry.matched.mc_username}/24`} className="w-6 h-6 rounded flex-shrink-0" alt="" />
                             <span className="text-green-400 font-semibold">{entry.matched.mc_username}</span>
-                            <span className="text-slate-600 text-xs">← {entry.name}</span>
+                            {entry.oldName && (
+                              <span className="text-blue-400 text-xs font-medium">🔄 renamed from {entry.oldName}</span>
+                            )}
+                            {!entry.oldName && entry.name.toLowerCase() !== entry.matched.mc_username.toLowerCase() && (
+                              <span className="text-slate-600 text-xs">← {entry.name}</span>
+                            )}
                           </>
                         ) : (
                           <span className="text-red-400 font-semibold">⚠ {entry.name} — no match found</span>

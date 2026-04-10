@@ -9,10 +9,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "PUT") {
     const admin = await requireAdmin(req, res);
     if (!admin) return;
-    const { discord_id } = req.body;
+    const { discord_id, mc_username } = req.body;
+    const updates: Record<string, unknown> = {};
+    if (discord_id !== undefined) updates.discord_id = discord_id;
+    if (mc_username !== undefined) updates.mc_username = mc_username;
     const { data, error } = await supabase
       .from("players")
-      .update({ discord_id })
+      .update(updates)
       .eq("mc_uuid", uuid)
       .select()
       .single();
