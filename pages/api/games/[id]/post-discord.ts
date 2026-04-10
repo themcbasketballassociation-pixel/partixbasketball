@@ -5,11 +5,8 @@ import { requireAdmin } from "../../../../lib/adminAuth";
 const LEAGUE_LABELS: Record<string, string> = { pba: "MBA", pcaa: "MCAA", pbgl: "MBGL" };
 const LEAGUE_COLORS: Record<string, number>  = { pba: 0xC8102E, pcaa: 0x003087, pbgl: 0xBB3430 };
 const LEAGUE_SLUGS:  Record<string, string>  = { pba: "mba",   pcaa: "mcaa",   pbgl: "mbgl" };
-
-const LEAGUE_LOGOS: Record<string, string> = {
-  pba:  "/logos/mba.webp",
-  pcaa: "/logos/mcaa.webp",
-  pbgl: "/logos/MBGL.png",
+const LEAGUE_LOGOS:  Record<string, string>  = {
+  pba: "/logos/mba.webp", pcaa: "/logos/mcaa.webp", pbgl: "/logos/MBGL.png",
 };
 
 type StatRow = {
@@ -20,7 +17,6 @@ type StatRow = {
   players: { mc_username: string | null; discord_id: string | null } | null;
 };
 
-// POTG formula — points-first, TO is only a light penalty
 function potgScore(s: StatRow) {
   const pts  = s.points ?? 0;
   const reb  = (s.rebounds_off ?? 0) + (s.rebounds_def ?? 0);
@@ -72,20 +68,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const slug = LEAGUE_SLUGS[league] ?? league;
   const baseUrl = process.env.NEXTAUTH_URL ?? "https://partixbasketball.com";
   const boxscoreUrl = `${baseUrl}/${slug}/boxscores?game=${id}`;
+  const leagueLogoUrl = `${baseUrl}${LEAGUE_LOGOS[league] ?? ""}`;
 
-  // ── Determine winning team roster (used to restrict POTG eligibility) ────────
-  // Try by exact team_id first; fall back to all stats if roster lookup fails
+  // ── Winning team roster for POTG eligibility ─────────────────────────────
   const { data: winnerRoster } = await supabase
     .from("player_teams")
     .select("mc_uuid")
     .eq("team_id", winnerTeamId);
-
   const winnerUuids = new Set((winnerRoster ?? []).map((r: { mc_uuid: string }) => r.mc_uuid));
   const potgPool = winnerUuids.size > 0
     ? allStats.filter((s) => winnerUuids.has(s.mc_uuid))
-    : allStats; // fallback: no roster data, use everyone
+    : allStats;
 
-  // ── POTG ─────────────────────────────────────────────────────────────────────
+  // ── POTG ─────────────────────────────────────────────────────────────────
   let potgField: Record<string, unknown> | null = null;
   let pingContent = "";
 
@@ -99,8 +94,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       `**${best.points ?? 0}** PTS`,
       `**${reb}** REB`,
       `**${best.assists ?? 0}** AST`,
-      (best.steals   ?? 0) > 0 ? `**${best.steals}** STL`  : null,
-      (best.blocks   ?? 0) > 0 ? `**${best.blocks}** BLK`  : null,
+      (best.steals   ?? 0) > 0  ? `**${best.steals}** STL`  : null,
+      (best.blocks   ?? 0) > 0  ? `**${best.blocks}** BLK`  : null,
       (best.turnovers ?? 0) > 0 ? `**${best.turnovers}** TO` : null,
       `**${best.fg_made ?? 0}/${best.fg_attempted ?? 0}** FG`,
     ].filter(Boolean).join("  ·  ");
@@ -111,24 +106,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       inline: false,
     };
 
-    if (discordId) pingContent = `🏆 <@${discordId}> is the Player of the Game!`;
+    if (discordId) pingContent = `<@${discordId}> is the Player of the Game!`;
   }
 
-  // ── Embed ─────────────────────────────────────────────────────────────────────
-  // image: generated scorecard with both team logos + score + league logo
-  const leagueLogoPath = LEAGUE_LOGOS[league];
-  const leagueLogoUrl = leagueLogoPath ? `${baseUrl}${leagueLogoPath}` : undefined;
-  const scorecardUrl = `${baseUrl}/api/scorecard/${id}`;
-
-  // Image is the main content — scorecard includes score + logos + POTG.
-  // Only a small "View box score" link sits below the image.
+  // ── Embed ─────────────────────────────────────────────────────────────────
   const embed: Record<string, unknown> = {
     color: LEAGUE_COLORS[league] ?? 0x5865F2,
-    description: `[📋  View full box score ↗](${boxscoreUrl})`,
-    image: { url: scorecardUrl },
+    author: {
+      name: `${home.abbreviation}  ${homeScore}  —  ${awayScore}  ${away.abbreviation}`,
+      icon_url: home.logo_url ?? undefined,
+      url: boxscoreUrl,
+    },
+    thumbnail: { url: leagueLogoUrl },
+    description: `🟢  **FINAL**  ·  ${gameDate}\n[📋 View full box score ↗](${boxscoreUrl})`,
+    fields: potgField ? [potgField] : [],
     footer: {
       text: LEAGUE_LABELS[league] ?? league.toUpperCase(),
-      icon_url: leagueLogoUrl ?? (homeWon ? home.logo_url : away.logo_url) ?? undefined,
+      icon_url: (homeWon ? home.logo_url : away.logo_url) ?? undefined,
     },
     timestamp: new Date().toISOString(),
   };
