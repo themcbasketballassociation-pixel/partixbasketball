@@ -18,6 +18,17 @@ type StatRow = {
 type SortKey = "gp" | "ppg" | "rpg" | "apg" | "spg" | "bpg" | "fg_pct" | "mpg" | "topg";
 type StatType = "regular" | "playoffs" | "total";
 
+type TeamStatRow = {
+  team: { id: string; name: string; abbreviation: string; logo_url: string | null };
+  gp: number;
+  ppg: number | null; rpg: number | null; apg: number | null;
+  spg: number | null; bpg: number | null; topg: number | null; fg_pct: number | null;
+  opp_ppg: number | null; opp_rpg: number | null; opp_apg: number | null;
+  opp_spg: number | null; opp_bpg: number | null; opp_topg: number | null; opp_fg_pct: number | null;
+  diff: number | null;
+};
+type TeamSortKey = "ppg"|"rpg"|"apg"|"spg"|"bpg"|"topg"|"fg_pct"|"opp_ppg"|"opp_rpg"|"opp_apg"|"opp_spg"|"opp_bpg"|"opp_topg"|"opp_fg_pct"|"diff"|"gp";
+
 const PAGE_SIZE = 10;
 
 const COLS: { key: SortKey | "_rank" | "_player"; label: string; always?: boolean }[] = [
@@ -47,6 +58,11 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
   const [sortKey, setSortKey] = React.useState<SortKey>("ppg");
   const [sortAsc, setSortAsc] = React.useState(false);
   const [page, setPage] = React.useState(0);
+
+  const [teamStats, setTeamStats] = React.useState<TeamStatRow[]>([]);
+  const [teamSortKey, setTeamSortKey] = React.useState<TeamSortKey>("ppg");
+  const [teamSortAsc, setTeamSortAsc] = React.useState(false);
+  const [teamView, setTeamView] = React.useState<"for"|"against">("for");
 
   const seasonNum = parseInt(season.replace(/\D/g, "")) || 0;
   const showMpg = seasonNum >= 6;
@@ -86,6 +102,15 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
       .then((data) => { setStats(Array.isArray(data) ? data : []); setLoading(false); });
   }, [slug, season, statType]);
 
+  // Fetch team stats (only for regular season, per-season)
+  React.useEffect(() => {
+    if (!slug || !season || statType !== "regular") { setTeamStats([]); return; }
+    fetch(`/api/stats/team-stats?league=${slug}&season=${encodeURIComponent(season)}`)
+      .then((r) => r.json())
+      .then((data) => setTeamStats(Array.isArray(data) ? data : []))
+      .catch(() => setTeamStats([]));
+  }, [slug, season, statType]);
+
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
       setSortAsc((a) => !a);
@@ -95,6 +120,19 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
     }
     setPage(0);
   };
+
+  const handleTeamSort = (key: TeamSortKey) => {
+    if (teamSortKey === key) setTeamSortAsc((a) => !a);
+    else { setTeamSortKey(key); setTeamSortAsc(false); }
+  };
+
+  const sortedTeamStats = React.useMemo(() => {
+    return [...teamStats].sort((a, b) => {
+      const av = (a[teamSortKey] as number | null) ?? -999;
+      const bv = (b[teamSortKey] as number | null) ?? -999;
+      return teamSortAsc ? av - bv : bv - av;
+    });
+  }, [teamStats, teamSortKey, teamSortAsc]);
 
   const sorted = React.useMemo(() => {
     return [...stats].sort((a, b) => {
@@ -251,6 +289,123 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
             </div>
           )}
         </>
+      )}
+      {/* ── Team Stats ── */}
+      {statType === "regular" && (
+        <div className="mt-8 rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <h3 className="text-lg font-bold text-white">Team Stats</h3>
+              <p className="text-slate-500 text-xs mt-0.5">{season} · Per Game</p>
+            </div>
+            <div className="flex rounded-lg border border-slate-700 overflow-hidden text-xs">
+              {(["for", "against"] as const).map((v) => (
+                <button key={v} onClick={() => setTeamView(v)}
+                  className={`px-4 py-1.5 font-semibold capitalize transition ${
+                    teamView === v ? "bg-slate-700 text-white" : "bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700"
+                  }`}>
+                  {v === "for" ? "Offense" : "Defense (Opp)"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {teamStats.length === 0 ? (
+            <div className="p-8 text-center text-slate-500 text-sm">No team stats yet for {season}.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="border-b-2 border-slate-800">
+                    <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-widest text-slate-400">Team</th>
+                    <th className="px-4 py-3 text-center text-xs font-bold uppercase tracking-widest text-slate-500 cursor-pointer hover:text-white" onClick={() => handleTeamSort("gp")}>
+                      GP {teamSortKey === "gp" ? (teamSortAsc ? "↑" : "↓") : <span className="text-slate-700">↕</span>}
+                    </th>
+                    {(teamView === "for"
+                      ? [
+                          { key: "ppg" as TeamSortKey,    label: "PPG" },
+                          { key: "rpg" as TeamSortKey,    label: "RPG" },
+                          { key: "apg" as TeamSortKey,    label: "APG" },
+                          { key: "spg" as TeamSortKey,    label: "SPG" },
+                          { key: "bpg" as TeamSortKey,    label: "BPG" },
+                          { key: "topg" as TeamSortKey,   label: "TOPG" },
+                          { key: "fg_pct" as TeamSortKey, label: "FG%" },
+                          { key: "diff" as TeamSortKey,   label: "+/-" },
+                        ]
+                      : [
+                          { key: "opp_ppg" as TeamSortKey,    label: "OPP PPG" },
+                          { key: "opp_rpg" as TeamSortKey,    label: "OPP RPG" },
+                          { key: "opp_apg" as TeamSortKey,    label: "OPP APG" },
+                          { key: "opp_spg" as TeamSortKey,    label: "OPP SPG" },
+                          { key: "opp_bpg" as TeamSortKey,    label: "OPP BPG" },
+                          { key: "opp_topg" as TeamSortKey,   label: "OPP TOPG" },
+                          { key: "opp_fg_pct" as TeamSortKey, label: "OPP FG%" },
+                          { key: "diff" as TeamSortKey,       label: "+/-" },
+                        ]
+                    ).map(({ key, label }) => (
+                      <th key={key}
+                        className={`px-4 py-3 text-center text-xs font-bold uppercase tracking-widest cursor-pointer transition select-none ${
+                          teamSortKey === key ? "text-blue-400 bg-blue-950/40" : "text-slate-500 hover:text-white"
+                        }`}
+                        onClick={() => handleTeamSort(key)}>
+                        {label} {teamSortKey === key ? (teamSortAsc ? "↑" : "↓") : <span className="text-slate-700">↕</span>}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {sortedTeamStats.map((row) => {
+                    const f = (v: number | null) => v != null ? v.toFixed(1) : "—";
+                    const fPct = (v: number | null) => v != null ? `${v.toFixed(1)}%` : "—";
+                    const diffVal = row.diff ?? 0;
+                    const diffColor = diffVal > 0 ? "text-green-400" : diffVal < 0 ? "text-red-400" : "text-slate-400";
+                    const hl = (key: TeamSortKey) => teamSortKey === key ? "bg-blue-950/20 font-bold text-white" : "text-slate-300";
+                    return (
+                      <tr key={row.team.id} className="hover:bg-slate-800/30 transition">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            {row.team.logo_url
+                              ? <img src={row.team.logo_url} alt="" className="w-7 h-7 object-contain flex-shrink-0" />
+                              : <div className="w-7 h-7 rounded bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-500 text-xs font-bold flex-shrink-0">{row.team.abbreviation}</div>
+                            }
+                            <div>
+                              <div className="font-bold text-white text-sm">{row.team.name}</div>
+                              <div className="text-xs text-slate-500">{row.gp} GP</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center text-slate-400 text-sm">{row.gp}</td>
+                        {teamView === "for" ? (
+                          <>
+                            <td className={`px-4 py-3 text-center text-sm ${hl("ppg")}`}>{f(row.ppg)}</td>
+                            <td className={`px-4 py-3 text-center text-sm ${hl("rpg")}`}>{f(row.rpg)}</td>
+                            <td className={`px-4 py-3 text-center text-sm ${hl("apg")}`}>{f(row.apg)}</td>
+                            <td className={`px-4 py-3 text-center text-sm ${hl("spg")}`}>{f(row.spg)}</td>
+                            <td className={`px-4 py-3 text-center text-sm ${hl("bpg")}`}>{f(row.bpg)}</td>
+                            <td className={`px-4 py-3 text-center text-sm ${hl("topg")}`}>{f(row.topg)}</td>
+                            <td className={`px-4 py-3 text-center text-sm ${hl("fg_pct")}`}>{fPct(row.fg_pct)}</td>
+                            <td className={`px-4 py-3 text-center text-sm font-bold ${diffColor} ${hl("diff")}`}>{row.diff != null ? (row.diff > 0 ? `+${row.diff.toFixed(1)}` : row.diff.toFixed(1)) : "—"}</td>
+                          </>
+                        ) : (
+                          <>
+                            <td className={`px-4 py-3 text-center text-sm ${hl("opp_ppg")}`}>{f(row.opp_ppg)}</td>
+                            <td className={`px-4 py-3 text-center text-sm ${hl("opp_rpg")}`}>{f(row.opp_rpg)}</td>
+                            <td className={`px-4 py-3 text-center text-sm ${hl("opp_apg")}`}>{f(row.opp_apg)}</td>
+                            <td className={`px-4 py-3 text-center text-sm ${hl("opp_spg")}`}>{f(row.opp_spg)}</td>
+                            <td className={`px-4 py-3 text-center text-sm ${hl("opp_bpg")}`}>{f(row.opp_bpg)}</td>
+                            <td className={`px-4 py-3 text-center text-sm ${hl("opp_topg")}`}>{f(row.opp_topg)}</td>
+                            <td className={`px-4 py-3 text-center text-sm ${hl("opp_fg_pct")}`}>{fPct(row.opp_fg_pct)}</td>
+                            <td className={`px-4 py-3 text-center text-sm font-bold ${diffColor} ${hl("diff")}`}>{row.diff != null ? (row.diff > 0 ? `+${row.diff.toFixed(1)}` : row.diff.toFixed(1)) : "—"}</td>
+                          </>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
