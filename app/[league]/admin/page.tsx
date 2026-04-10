@@ -1601,6 +1601,9 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
   const [activeUuids, setActiveUuids] = useState<string[]>([]); // uuids shown in table
   const [addUuid, setAddUuid] = useState<string>("");
   const [saving, setSaving] = useState(false);
+  const [statsSaved, setStatsSaved] = useState(false);
+  const [posting, setPosting] = useState(false);
+  const [postMsg, setPostMsg] = useState<string>("");
   const [err, setErr] = useState("");
   const [showPaste, setShowPaste] = useState(false);
   const [pasteText, setPasteText] = useState("");
@@ -1682,7 +1685,8 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
       if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Save failed"); setSaving(false); return; }
     }
     setSaving(false);
-    alert("Box scores saved!");
+    setStatsSaved(true);
+    setPostMsg("");
   };
 
   const statCols = ["points","rebounds_off","rebounds_def","assists","steals","blocks","turnovers","minutes_played","fg","three_fg","pass_attempts","possession_time"] as const;
@@ -1711,7 +1715,7 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
       <ErrMsg msg={err} />
       <div className={card}>
         <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Select Completed Game</h3>
-        <select className={input} value={selectedGameId} onChange={(e) => { setSelectedGameId(e.target.value); setShowPaste(false); setPastePreview(null); }}>
+        <select className={input} value={selectedGameId} onChange={(e) => { setSelectedGameId(e.target.value); setShowPaste(false); setPastePreview(null); setStatsSaved(false); setPostMsg(""); }}>
           <option value="">Choose a game...</option>
           {games.map((g) => (
             <option key={g.id} value={g.id}>{g.home_team?.abbreviation} {g.home_score}–{g.away_score} {g.away_team?.abbreviation} · {new Date(g.scheduled_at).toLocaleDateString()}</option>
@@ -1816,7 +1820,26 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
                 Player Stats
                 <span className="ml-2 text-slate-600 normal-case font-normal">{activeUuids.length} player{activeUuids.length !== 1 ? "s" : ""}</span>
               </h3>
-              <button className={btnPrimary} onClick={saveStats} disabled={saving}>{saving ? "Saving..." : "Save All"}</button>
+              <div className="flex items-center gap-2 flex-wrap">
+                {statsSaved && (
+                  <button
+                    className={`${btnSecondary} flex items-center gap-1.5`}
+                    disabled={posting}
+                    onClick={async () => {
+                      setPosting(true); setPostMsg(""); setErr("");
+                      const r = await fetch(`/api/games/${selectedGameId}/post-discord`, { method: "POST" });
+                      const d = await r.json();
+                      if (!r.ok) { setErr(d.error ?? "Failed to post"); }
+                      else { setPostMsg("Posted to Discord!"); }
+                      setPosting(false);
+                    }}
+                  >
+                    {posting ? "Posting..." : "📢 Post to Discord"}
+                  </button>
+                )}
+                {postMsg && <span className="text-green-400 text-xs font-semibold">{postMsg}</span>}
+                <button className={btnPrimary} onClick={saveStats} disabled={saving}>{saving ? "Saving..." : "Save All"}</button>
+              </div>
             </div>
 
             {/* Add player row */}
