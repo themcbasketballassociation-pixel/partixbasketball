@@ -1440,6 +1440,20 @@ function ScheduleTab({ league, season }: { league: string; season: string }) {
                           }}>
                             {completingId === g.id ? "Cancel" : g.status === "completed" ? "Edit Score" : "Enter Score"}
                           </button>
+                          {g.status === "completed" && (
+                            <button className={btnSecondary} onClick={async () => {
+                              if (!confirm("Revert this game back to Scheduled? Scores will be cleared.")) return;
+                              const r = await fetch(`/api/games/${g.id}`, {
+                                method: "PUT",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ status: "scheduled", home_score: null, away_score: null }),
+                              });
+                              if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Revert failed"); return; }
+                              setCompletingId(null); setHomeScore(""); setAwayScore(""); refresh();
+                            }}>
+                              Revert
+                            </button>
+                          )}
                           <button className={btnDanger} onClick={() => deleteGame(g.id)}>Delete</button>
                         </div>
                       </div>

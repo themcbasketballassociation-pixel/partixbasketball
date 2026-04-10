@@ -159,8 +159,10 @@ export default function BoxScoresPage({ params }: { params?: Promise<{ league?: 
   const [expanded, setExpanded] = React.useState<string | null>(null);
   const [statsCache, setStatsCache] = React.useState<Record<string, GameStat[]>>({});
   const [playerTeamMap, setPlayerTeamMap] = React.useState<Record<string, string>>({});
-  const [seasons, setSeasons] = React.useState<string[]>([]);
+  const [regularSeasons, setRegularSeasons] = React.useState<string[]>([]);
+  const [playoffSeasons, setPlayoffSeasons] = React.useState<string[]>([]);
   const [season, setSeason] = React.useState<string>("");
+  const [tab, setTab] = React.useState<"regular" | "playoffs">("regular");
 
   React.useEffect(() => {
     if (!slug) return;
@@ -168,14 +170,22 @@ export default function BoxScoresPage({ params }: { params?: Promise<{ league?: 
       .then((r) => r.json())
       .then((data: { season: string }[]) => {
         if (Array.isArray(data)) {
-          const unique = [...new Set(
-            data.map((d) => d.season).filter((s) => s && !s.toLowerCase().includes("playoff"))
-          )].sort((a, b) => b.localeCompare(a));
-          setSeasons(unique);
-          if (unique.length > 0) setSeason(unique[0]);
+          const all = data.map((d) => d.season).filter(Boolean);
+          const reg = [...new Set(all.filter((s) => !s.toLowerCase().includes("playoff")))].sort((a, b) => b.localeCompare(a));
+          const po  = [...new Set(all.filter((s) =>  s.toLowerCase().includes("playoff")))].sort((a, b) => b.localeCompare(a));
+          setRegularSeasons(reg);
+          setPlayoffSeasons(po);
+          if (reg.length > 0) setSeason(reg[0]);
         }
       }).catch(() => {});
   }, [slug]);
+
+  // When tab changes reset season to first available of that type
+  React.useEffect(() => {
+    if (tab === "regular" && regularSeasons.length > 0) setSeason(regularSeasons[0]);
+    if (tab === "playoffs" && playoffSeasons.length > 0) setSeason(playoffSeasons[0]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
 
   // Load player→team map for this league
   React.useEffect(() => {
@@ -222,18 +232,35 @@ export default function BoxScoresPage({ params }: { params?: Promise<{ league?: 
           <h2 style={{ fontSize: "1.5rem", fontWeight: 700, color: "#fff", margin: 0 }}>Box Scores</h2>
           <p style={{ color: "#888", fontSize: "0.875rem", margin: "2px 0 0" }}>{leagueDisplay}</p>
         </div>
-        {seasons.length > 0 && (
-          <select value={season} onChange={(e) => setSeason(e.target.value)}
-            style={{ background: "#111", border: "1px solid #1e1e1e", color: "#fff", borderRadius: "0.75rem", padding: "6px 12px", fontSize: "0.875rem", outline: "none", cursor: "pointer" }}>
-            {seasons.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
-        )}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          {/* Regular / Playoffs toggle */}
+          <div style={{ display: "flex", borderRadius: 8, overflow: "hidden", border: "1px solid #2a2a2a" }}>
+            {(["regular", "playoffs"] as const).map((t) => (
+              <button key={t} onClick={() => setTab(t)}
+                style={{ padding: "6px 16px", fontSize: "0.78rem", fontWeight: 700, cursor: "pointer", border: "none",
+                  borderRight: t === "regular" ? "1px solid #2a2a2a" : "none",
+                  background: tab === t ? "#2563eb" : "#161616",
+                  color: tab === t ? "#fff" : "#666" }}>
+                {t === "regular" ? "Regular Season" : "🏆 Playoffs"}
+              </button>
+            ))}
+          </div>
+          {/* Season dropdown for whichever tab is active */}
+          {(tab === "regular" ? regularSeasons : playoffSeasons).length > 0 && (
+            <select value={season} onChange={(e) => setSeason(e.target.value)}
+              style={{ background: "#111", border: "1px solid #1e1e1e", color: "#fff", borderRadius: "0.75rem", padding: "6px 12px", fontSize: "0.875rem", outline: "none", cursor: "pointer" }}>
+              {(tab === "regular" ? regularSeasons : playoffSeasons).map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          )}
+        </div>
       </div>
 
       {loading ? (
         <div style={{ padding: 40, textAlign: "center", color: "#555" }}>Loading...</div>
       ) : games.length === 0 ? (
-        <div style={{ padding: 40, textAlign: "center", color: "#555" }}>No completed games yet.</div>
+        <div style={{ padding: 40, textAlign: "center", color: "#555" }}>
+          {tab === "playoffs" ? "No playoff box scores yet." : "No completed games yet."}
+        </div>
       ) : (
         <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
           {games.map((g) => {
