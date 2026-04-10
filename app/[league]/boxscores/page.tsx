@@ -112,9 +112,15 @@ function TeamTable({ team, stats, side }: { team: Team; stats: GameStat[]; side:
                   <td style={{ padding: "8px 10px", whiteSpace: "nowrap" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: isRight ? "flex-end" : "flex-start", flexDirection: isRight ? "row-reverse" : "row" }}>
                       <img
-                        src={`https://crafatar.com/avatars/${s.mc_uuid}?size=20&default=MHF_Steve&overlay`}
+                        src={`https://minotar.net/avatar/${s.players?.mc_username ?? s.mc_uuid}/20`}
                         alt=""
-                        style={{ width: 20, height: 20, borderRadius: 4, flexShrink: 0 }}
+                        style={{ width: 20, height: 20, borderRadius: 4, flexShrink: 0, imageRendering: "pixelated" }}
+                        onError={(e) => {
+                          const img = e.currentTarget;
+                          if (!img.src.includes("crafatar")) {
+                            img.src = `https://crafatar.com/avatars/${s.mc_uuid}?size=20&default=MHF_Steve&overlay`;
+                          }
+                        }}
                       />
                       <span style={{ fontWeight: 600, color: "#e2e8f0", fontSize: "0.8rem" }}>{s.players?.mc_username ?? s.mc_uuid}</span>
                     </div>
@@ -187,10 +193,11 @@ export default function BoxScoresPage({ params }: { params?: Promise<{ league?: 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
-  // Load player→team map for this league
+  // Load player→team map filtered by the active season (strip " Playoffs" for playoff seasons)
   React.useEffect(() => {
-    if (!slug) return;
-    fetch(`/api/teams/players?league=${slug}`)
+    if (!slug || !season) return;
+    const baseSeason = season.replace(/ Playoffs$/i, "");
+    fetch(`/api/teams/players?league=${slug}&season=${encodeURIComponent(baseSeason)}`)
       .then((r) => r.json())
       .then((data: PlayerTeam[]) => {
         if (!Array.isArray(data)) return;
@@ -198,7 +205,7 @@ export default function BoxScoresPage({ params }: { params?: Promise<{ league?: 
         for (const pt of data) map[pt.mc_uuid] = pt.team_id;
         setPlayerTeamMap(map);
       }).catch(() => {});
-  }, [slug]);
+  }, [slug, season]);
 
   React.useEffect(() => {
     if (!slug || !season) return;
@@ -269,11 +276,13 @@ export default function BoxScoresPage({ params }: { params?: Promise<{ league?: 
             const homeWon = (g.home_score ?? 0) > (g.away_score ?? 0);
             const awayWon = (g.away_score ?? 0) > (g.home_score ?? 0);
 
-            // Split stats by team
+            // Split stats by team using season-filtered player_teams map
             const homeStats = stats.filter((s) => playerTeamMap[s.mc_uuid] === g.home_team?.id);
             const awayStats = stats.filter((s) => playerTeamMap[s.mc_uuid] === g.away_team?.id);
-            // Fallback: if player_team map is empty, just split by order
-            const allStats = homeStats.length === 0 && awayStats.length === 0 ? stats : null;
+            const matchedCount = homeStats.length + awayStats.length;
+            // Fallback to single unsplit table if fewer than half the players are matched
+            // (avoids silently dropping players when roster assignments are missing)
+            const allStats = matchedCount < Math.ceil(stats.length / 2) ? stats : null;
 
             return (
               <div key={g.id} style={{ borderRadius: "0.875rem", border: "1px solid #1e1e1e", background: "#161616", overflow: "hidden" }}>
