@@ -164,7 +164,8 @@ export default function BoxScoresPage({ params }: { params?: Promise<{ league?: 
   const [loading, setLoading] = React.useState(true);
   const [expanded, setExpanded] = React.useState<string | null>(null);
   const [statsCache, setStatsCache] = React.useState<Record<string, GameStat[]>>({});
-  const [playerTeamMap, setPlayerTeamMap] = React.useState<Record<string, string>>({});
+  // Maps mc_uuid → all team_ids they've ever been assigned to (all seasons)
+  const [playerTeamsAll, setPlayerTeamsAll] = React.useState<Record<string, Set<string>>>({});
   const [regularSeasons, setRegularSeasons] = React.useState<string[]>([]);
   const [playoffSeasons, setPlayoffSeasons] = React.useState<string[]>([]);
   const [season, setSeason] = React.useState<string>("");
@@ -193,19 +194,22 @@ export default function BoxScoresPage({ params }: { params?: Promise<{ league?: 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
-  // Load player→team map filtered by the active season (strip " Playoffs" for playoff seasons)
+  // Fetch ALL player_team records for the league (all seasons) so we can match
+  // any player to any team_id that appears as home/away in a game
   React.useEffect(() => {
-    if (!slug || !season) return;
-    const baseSeason = season.replace(/ Playoffs$/i, "");
-    fetch(`/api/teams/players?league=${slug}&season=${encodeURIComponent(baseSeason)}`)
+    if (!slug) return;
+    fetch(`/api/teams/players?league=${slug}`)
       .then((r) => r.json())
       .then((data: PlayerTeam[]) => {
         if (!Array.isArray(data)) return;
-        const map: Record<string, string> = {};
-        for (const pt of data) map[pt.mc_uuid] = pt.team_id;
-        setPlayerTeamMap(map);
+        const map: Record<string, Set<string>> = {};
+        for (const pt of data) {
+          if (!map[pt.mc_uuid]) map[pt.mc_uuid] = new Set();
+          map[pt.mc_uuid].add(pt.team_id);
+        }
+        setPlayerTeamsAll(map);
       }).catch(() => {});
-  }, [slug, season]);
+  }, [slug]);
 
   React.useEffect(() => {
     if (!slug || !season) return;
@@ -276,13 +280,15 @@ export default function BoxScoresPage({ params }: { params?: Promise<{ league?: 
             const homeWon = (g.home_score ?? 0) > (g.away_score ?? 0);
             const awayWon = (g.away_score ?? 0) > (g.home_score ?? 0);
 
-            // Split stats by team using season-filtered player_teams map
-            const homeStats = stats.filter((s) => playerTeamMap[s.mc_uuid] === g.home_team?.id);
-            const awayStats = stats.filter((s) => playerTeamMap[s.mc_uuid] === g.away_team?.id);
+            // Split stats by team — check all historical team assignments for each player
+            // so the correct team is found regardless of season string format
+            const homeId = g.home_team?.id;
+            const awayId = g.away_team?.id;
+            const homeStats = stats.filter((s) => playerTeamsAll[s.mc_uuid]?.has(homeId));
+            const awayStats = stats.filter((s) => playerTeamsAll[s.mc_uuid]?.has(awayId));
             const matchedCount = homeStats.length + awayStats.length;
-            // Fallback to single unsplit table if fewer than half the players are matched
-            // (avoids silently dropping players when roster assignments are missing)
-            const allStats = matchedCount < Math.ceil(stats.length / 2) ? stats : null;
+            // Fallback to single unsplit table only if fewer than half are matched
+            const allStats = stats.length > 0 && matchedCount < Math.ceil(stats.length / 2) ? stats : null;
 
             return (
               <div key={g.id} style={{ borderRadius: "0.875rem", border: "1px solid #1e1e1e", background: "#161616", overflow: "hidden" }}>
