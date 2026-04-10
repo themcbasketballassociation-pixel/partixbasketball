@@ -128,10 +128,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       url: boxscoreUrl,           // clicking the score line → box score
     },
     thumbnail: away.logo_url ? { url: away.logo_url } : undefined,
-    description: `🟢  **FINAL**  ·  ${gameDate}`,
+    description: `🟢  **FINAL**  ·  ${gameDate}\n[📋 View full box score ↗](${boxscoreUrl})`,
     fields: potgField ? [potgField] : [],
     footer: {
-      text: `${LEAGUE_LABELS[league] ?? league.toUpperCase()}  ·  View full box score ↗`,
+      text: LEAGUE_LABELS[league] ?? league.toUpperCase(),
       icon_url: leagueLogoUrl ?? (homeWon ? home.logo_url : away.logo_url) ?? undefined,
     },
     timestamp: new Date().toISOString(),
