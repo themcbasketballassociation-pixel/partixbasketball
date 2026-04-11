@@ -108,10 +108,18 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
       .then((data) => { setStats(Array.isArray(data) ? data : []); setLoading(false); });
   }, [slug, season, statType]);
 
-  // Fetch team stats (only for regular season, per-season)
+  // Fetch team stats for all stat types
   React.useEffect(() => {
-    if (!slug || !season || statType !== "regular") { setTeamStats([]); return; }
-    fetch(`/api/stats/team-stats?league=${slug}&season=${encodeURIComponent(season)}`)
+    if (!slug || !season) { setTeamStats([]); return; }
+    let url: string;
+    if (statType === "total") {
+      url = `/api/stats/team-stats?league=${slug}&season=all&type=regular`;
+    } else if (statType === "playoffs") {
+      url = `/api/stats/team-stats?league=${slug}&season=${encodeURIComponent(season)}&type=playoffs`;
+    } else {
+      url = `/api/stats/team-stats?league=${slug}&season=${encodeURIComponent(season)}`;
+    }
+    fetch(url)
       .then((r) => r.json())
       .then((data) => setTeamStats(Array.isArray(data) ? data : []))
       .catch(() => setTeamStats([]));
@@ -300,12 +308,12 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
         </>
       )}
       {/* ── Team Stats ── */}
-      {statType === "regular" && (
+      {true && (
         <div className="mt-8 rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between flex-wrap gap-3">
             <div>
               <h3 className="text-lg font-bold text-white">Team Stats</h3>
-              <p className="text-slate-500 text-xs mt-0.5">{season} · Per Game</p>
+              <p className="text-slate-500 text-xs mt-0.5">{statType === "total" ? "All Seasons" : statType === "playoffs" ? `${season} Playoffs` : season} · Per Game</p>
             </div>
             <div className="flex rounded-lg border border-slate-700 overflow-hidden text-xs">
               {(["for", "against"] as const).map((v) => (

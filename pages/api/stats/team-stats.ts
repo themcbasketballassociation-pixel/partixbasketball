@@ -31,22 +31,38 @@ function blank(): TeamAccum {
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
 
-  const { league: leagueRaw, season } = req.query;
+  const { league: leagueRaw, season, type } = req.query;
   const league = resolveLeague(leagueRaw);
   if (!league || !season) return res.status(400).json({ error: "league and season required" });
+
+  const seasonStr = season as string;
+  const typeStr = (type as string) ?? "regular";
 
   // 1. All teams for this league
   const { data: teams, error: teamsErr } = await supabase
     .from("teams").select("id,name,abbreviation,logo_url").eq("league", league);
   if (teamsErr) return res.status(500).json({ error: teamsErr.message });
 
-  // 2. All completed games for this league + season
-  const { data: games, error: gamesErr } = await supabase
+  // 2. All completed games for this league + season(s)
+  let gamesQuery = supabase
     .from("games")
-    .select("id,home_team_id,away_team_id,home_score,away_score")
+    .select("id,home_team_id,away_team_id,home_score,away_score,season")
     .eq("league", league)
-    .eq("season", season as string)
-    .eq("status", "completed");
+    .not("home_score", "is", null);
+
+  if (seasonStr === "all") {
+    if (typeStr === "playoffs") gamesQuery = gamesQuery.ilike("season", "%Playoff%");
+    else if (typeStr === "regular") gamesQuery = gamesQuery.not("season", "ilike", "%Playoff%");
+    // type=combined or no filter → all seasons
+  } else if (seasonStr.toLowerCase().includes("playoff")) {
+    gamesQuery = gamesQuery.eq("season", seasonStr);
+  } else if (typeStr === "playoffs") {
+    gamesQuery = gamesQuery.eq("season", `${seasonStr} Playoffs`);
+  } else {
+    gamesQuery = gamesQuery.eq("season", seasonStr);
+  }
+
+  const { data: games, error: gamesErr } = await gamesQuery;
   if (gamesErr) return res.status(500).json({ error: gamesErr.message });
   if (!games || games.length === 0) return res.status(200).json([]);
 
