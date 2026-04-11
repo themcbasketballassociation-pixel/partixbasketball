@@ -121,27 +121,105 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (season) {
     const typeStr = (type as string) ?? "regular";
     const seasonStr = season as string;
+    const querySeasons = seasonStr === "all" ? null : getQuerySeasons(seasonStr, typeStr);
 
+    // ── 1. Manual stats from stats table ──────────────────────────────────
     let statsQuery = supabase.from("stats").select("*").eq("league", league as string);
-    if (seasonStr !== "all") {
-      // Specific season — filter by computed season names
-      const querySeasons = getQuerySeasons(seasonStr, typeStr);
+    if (querySeasons) {
       statsQuery = statsQuery.in("season", querySeasons);
     } else if (typeStr === "playoffs") {
       statsQuery = statsQuery.ilike("season", "%Playoff%");
     } else if (typeStr === "regular") {
       statsQuery = statsQuery.not("season", "ilike", "%Playoff%");
     }
-    // type="combined" or season="all" with no type filter → all rows for league
-
-    const { data, error } = await statsQuery;
+    const { data: manualData, error } = await statsQuery;
     if (error) return res.status(500).json({ error: error.message });
 
-    // Group by mc_uuid and merge across seasons
+    // Set of players who have manual stats — these won't be overwritten
+    const manualUuids = new Set((manualData ?? []).map((r) => r.mc_uuid as string));
+
+    // ── 2. Compute stats from game_stats for this season ──────────────────
+    let gamesQuery = supabase
+      .from("games")
+      .select("id")
+      .eq("league", league as string)
+      .not("home_score", "is", null);
+    if (querySeasons) {
+      gamesQuery = gamesQuery.in("season", querySeasons);
+    } else if (typeStr === "playoffs") {
+      gamesQuery = (gamesQuery as typeof gamesQuery).ilike("season", "%Playoff%");
+    } else if (typeStr === "regular") {
+      gamesQuery = (gamesQuery as typeof gamesQuery).not("season", "ilike", "%Playoff%");
+    }
+    const { data: completedGames } = await gamesQuery;
+    const gameIds = (completedGames ?? []).map((g) => g.id as string);
+
+    // Aggregate game_stats per player (only for players WITHOUT manual stats)
+    const computedByUuid: Record<string, Record<string, unknown>> = {};
+    if (gameIds.length > 0) {
+      const { data: gameStatsRows } = await supabase
+        .from("game_stats")
+        .select("mc_uuid, points, rebounds_off, rebounds_def, assists, steals, blocks, turnovers, minutes_played, fg_made, fg_attempted, three_pt_made, three_pt_attempted")
+        .in("game_id", gameIds);
+
+      for (const s of gameStatsRows ?? []) {
+        const uuid = s.mc_uuid as string;
+        if (manualUuids.has(uuid)) continue; // manual entry takes priority
+        if (!computedByUuid[uuid]) {
+          computedByUuid[uuid] = { gp: 0, pts: 0, reb: 0, orb: 0, drb: 0, ast: 0, stl: 0, blk: 0, tov: 0, min: 0, fgm: 0, fga: 0, tpm: 0, tpa: 0 };
+        }
+        const c = computedByUuid[uuid] as Record<string, number>;
+        c.gp  += 1;
+        c.pts += (s.points           ?? 0) as number;
+        c.orb += (s.rebounds_off     ?? 0) as number;
+        c.drb += (s.rebounds_def     ?? 0) as number;
+        c.reb += ((s.rebounds_off ?? 0) + (s.rebounds_def ?? 0)) as number;
+        c.ast += (s.assists          ?? 0) as number;
+        c.stl += (s.steals           ?? 0) as number;
+        c.blk += (s.blocks           ?? 0) as number;
+        c.tov += (s.turnovers        ?? 0) as number;
+        c.min += (s.minutes_played   ?? 0) as number;
+        c.fgm += (s.fg_made          ?? 0) as number;
+        c.fga += (s.fg_attempted     ?? 0) as number;
+        c.tpm += (s.three_pt_made    ?? 0) as number;
+        c.tpa += (s.three_pt_attempted ?? 0) as number;
+      }
+    }
+
+    const r1 = (n: number) => Math.round(n * 10) / 10;
+    const computedRows = Object.entries(computedByUuid).map(([uuid, c]) => {
+      const cv = c as Record<string, number>;
+      const gp = cv.gp;
+      return {
+        mc_uuid: uuid,
+        season: seasonStr,
+        gp,
+        ppg:  gp > 0 ? r1(cv.pts / gp) : null,
+        rpg:  gp > 0 ? r1(cv.reb / gp) : null,
+        orpg: gp > 0 ? r1(cv.orb / gp) : null,
+        drpg: gp > 0 ? r1(cv.drb / gp) : null,
+        apg:  gp > 0 ? r1(cv.ast / gp) : null,
+        spg:  gp > 0 ? r1(cv.stl / gp) : null,
+        bpg:  gp > 0 ? r1(cv.blk / gp) : null,
+        topg: gp > 0 ? r1(cv.tov / gp) : null,
+        mpg:  gp > 0 ? r1((cv.min / 60) / gp) : null,
+        fg_pct: cv.fga > 0 ? r1((cv.fgm / cv.fga) * 100) : null,
+        three_pt_made: cv.tpm,
+        three_pt_pct: cv.tpa > 0 ? r1((cv.tpm / cv.tpa) * 100) : null,
+        tppg: gp > 0 ? r1(cv.tpm / gp) : null,
+        pass_attempts_pg: null,
+        possession_time_pg: null,
+      };
+    });
+
+    // ── 3. Merge: manual rows + computed rows ─────────────────────────────
+    const allRows = [...(manualData ?? []), ...computedRows];
+
     const byPlayer: Record<string, Record<string, unknown>[]> = {};
-    for (const row of data ?? []) {
-      if (!byPlayer[row.mc_uuid]) byPlayer[row.mc_uuid] = [];
-      byPlayer[row.mc_uuid].push(row);
+    for (const row of allRows) {
+      const uuid = row.mc_uuid as string;
+      if (!byPlayer[uuid]) byPlayer[uuid] = [];
+      byPlayer[uuid].push(row as Record<string, unknown>);
     }
 
     const uuids = Object.keys(byPlayer);
@@ -151,7 +229,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const playerMap: Record<string, string> = {};
     for (const p of playerRows ?? []) playerMap[p.mc_uuid] = p.mc_username;
 
-    // Look up team strictly by the queried season (strip Playoffs suffix; skip for career "all")
     const lookupSeason = seasonStr === "all" ? null : seasonStr.replace(/ Playoffs$/, "");
     let teamQuery = supabase
       .from("player_teams")
