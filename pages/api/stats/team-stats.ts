@@ -53,11 +53,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (seasonStr === "all") {
     if (typeStr === "playoffs") gamesQuery = gamesQuery.ilike("season", "%Playoff%");
     else if (typeStr === "regular") gamesQuery = gamesQuery.not("season", "ilike", "%Playoff%");
-    // type=combined or no filter → all seasons
+    // type=combined → all seasons (no extra filter)
   } else if (seasonStr.toLowerCase().includes("playoff")) {
     gamesQuery = gamesQuery.eq("season", seasonStr);
   } else if (typeStr === "playoffs") {
     gamesQuery = gamesQuery.eq("season", `${seasonStr} Playoffs`);
+  } else if (typeStr === "combined") {
+    gamesQuery = gamesQuery.in("season", [seasonStr, `${seasonStr} Playoffs`]);
   } else {
     gamesQuery = gamesQuery.eq("season", seasonStr);
   }
@@ -75,9 +77,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     .in("game_id", gameIds);
   if (statsErr) return res.status(500).json({ error: statsErr.message });
 
-  // 4. Player→team mapping for this league
-  const { data: playerTeams, error: ptErr } = await supabase
-    .from("player_teams").select("mc_uuid,team_id").eq("league", league);
+  // 4. Player→team mapping for this league (filter by season so team IDs match)
+  const lookupSeason = seasonStr === "all" ? null : seasonStr.replace(/ Playoffs$/i, "");
+  let ptQuery = supabase.from("player_teams").select("mc_uuid,team_id").eq("league", league);
+  if (lookupSeason) ptQuery = ptQuery.eq("season", lookupSeason);
+  const { data: playerTeams, error: ptErr } = await ptQuery;
   if (ptErr) return res.status(500).json({ error: ptErr.message });
 
   const playerTeamMap: Record<string, string> = {};

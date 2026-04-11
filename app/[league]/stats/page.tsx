@@ -94,14 +94,15 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
     if (!slug || !season) return;
     setLoading(true);
     setPage(0);
+    const s = season === "all" ? "all" : encodeURIComponent(season);
     let url: string;
     if (statType === "total") {
-      // All regular seasons merged into career totals
-      url = `/api/stats?league=${slug}&season=all`;
+      // Regular + playoffs combined for the selected season
+      url = `/api/stats?league=${slug}&season=${s}&type=combined`;
     } else if (statType === "playoffs") {
-      url = `/api/stats?league=${slug}&season=${encodeURIComponent(`${season} Playoffs`)}`;
+      url = `/api/stats?league=${slug}&season=${s}&type=playoffs`;
     } else {
-      url = `/api/stats?league=${slug}&season=${encodeURIComponent(season)}`;
+      url = `/api/stats?league=${slug}&season=${s}`;
     }
     fetch(url)
       .then((r) => r.json())
@@ -111,13 +112,14 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
   // Fetch team stats for all stat types
   React.useEffect(() => {
     if (!slug || !season) { setTeamStats([]); return; }
+    const s = season === "all" ? "all" : encodeURIComponent(season);
     let url: string;
     if (statType === "total") {
-      url = `/api/stats/team-stats?league=${slug}&season=all&type=regular`;
+      url = `/api/stats/team-stats?league=${slug}&season=${s}&type=combined`;
     } else if (statType === "playoffs") {
-      url = `/api/stats/team-stats?league=${slug}&season=${encodeURIComponent(season)}&type=playoffs`;
+      url = `/api/stats/team-stats?league=${slug}&season=${s}&type=playoffs`;
     } else {
-      url = `/api/stats/team-stats?league=${slug}&season=${encodeURIComponent(season)}`;
+      url = `/api/stats/team-stats?league=${slug}&season=${s}`;
     }
     fetch(url)
       .then((r) => r.json())
@@ -203,23 +205,24 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
               </button>
             ))}
           </div>
-          {/* Season dropdown — hidden on Total since it spans all seasons */}
-          {statType !== "total" && (
-            <select
-              className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-white focus:border-zinc-500 focus:outline-none"
-              value={season}
-              onChange={(e) => setSeason(e.target.value)}
-            >
-              {regularSeasons.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-          )}
+          {/* Season dropdown */}
+          <select
+            className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-white focus:border-zinc-500 focus:outline-none"
+            value={season}
+            onChange={(e) => setSeason(e.target.value)}
+          >
+            <option value="all">All Time</option>
+            {regularSeasons.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
         </div>
       </div>
 
       {loading ? (
         <div className="p-10 text-center text-slate-500">Loading stats...</div>
       ) : stats.length === 0 ? (
-        <div className="p-10 text-center text-slate-500">No {statType === "total" ? "career" : statType} stats {statType !== "total" ? `for ${season}` : ""} yet.</div>
+        <div className="p-10 text-center text-slate-500">
+          No {statType === "playoffs" ? "playoff" : statType === "total" ? "combined" : "regular season"} stats for {season === "all" ? "all time" : season} yet.
+        </div>
       ) : (
         <>
           <div className="overflow-x-auto">
@@ -313,7 +316,14 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
           <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between flex-wrap gap-3">
             <div>
               <h3 className="text-lg font-bold text-white">Team Stats</h3>
-              <p className="text-slate-500 text-xs mt-0.5">{statType === "total" ? "All Seasons" : statType === "playoffs" ? `${season} Playoffs` : season} · Per Game</p>
+              <p className="text-slate-500 text-xs mt-0.5">
+                {season === "all"
+                  ? statType === "playoffs" ? "All Time · Playoffs" : statType === "total" ? "All Time · Regular + Playoffs" : "All Time · Regular Season"
+                  : statType === "playoffs" ? `${season} Playoffs`
+                  : statType === "total" ? `${season} · Regular + Playoffs`
+                  : season
+                } · Per Game
+              </p>
             </div>
             <div className="flex rounded-lg border border-slate-700 overflow-hidden text-xs">
               {(["for", "against"] as const).map((v) => (
