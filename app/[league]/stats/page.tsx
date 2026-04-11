@@ -12,10 +12,13 @@ type StatRow = {
   ppg: number | null; rpg: number | null; apg: number | null;
   spg: number | null; bpg: number | null; fg_pct: number | null;
   mpg: number | null; topg: number | null;
+  tppg: number | null;
+  pass_attempts_pg: number | null;
+  possession_time_pg: number | null;
   team?: { id: string; name: string; abbreviation: string; logo_url?: string | null } | null;
 };
 
-type SortKey = "gp" | "ppg" | "rpg" | "apg" | "spg" | "bpg" | "fg_pct" | "mpg" | "topg";
+type SortKey = "gp" | "ppg" | "rpg" | "apg" | "spg" | "bpg" | "fg_pct" | "mpg" | "topg" | "tppg" | "pass_attempts_pg" | "possession_time_pg";
 type StatType = "regular" | "playoffs" | "total";
 
 type TeamStatRow = {
@@ -32,17 +35,20 @@ type TeamSortKey = "ppg"|"rpg"|"apg"|"spg"|"bpg"|"topg"|"fg_pct"|"opp_ppg"|"opp_
 const PAGE_SIZE = 10;
 
 const COLS: { key: SortKey | "_rank" | "_player"; label: string; always?: boolean }[] = [
-  { key: "_rank",    label: "#",      always: true },
-  { key: "_player",  label: "Player", always: true },
-  { key: "gp",       label: "GP",     always: true },
-  { key: "ppg",      label: "PPG",    always: true },
-  { key: "rpg",      label: "RPG",    always: true },
-  { key: "apg",      label: "APG",    always: true },
-  { key: "spg",      label: "SPG",    always: true },
-  { key: "bpg",      label: "BPG",    always: true },
-  { key: "topg",     label: "TOPG",   always: true },
-  { key: "fg_pct",   label: "FG%",    always: true },
-  { key: "mpg",      label: "MPG",    always: false },
+  { key: "_rank",             label: "#",       always: true },
+  { key: "_player",           label: "Player",  always: true },
+  { key: "gp",                label: "GP",      always: true },
+  { key: "ppg",               label: "PPG",     always: true },
+  { key: "rpg",               label: "RPG",     always: true },
+  { key: "apg",               label: "APG",     always: true },
+  { key: "spg",               label: "SPG",     always: true },
+  { key: "bpg",               label: "BPG",     always: true },
+  { key: "topg",              label: "TOPG",    always: true },
+  { key: "tppg",              label: "3PG",     always: true },
+  { key: "fg_pct",            label: "FG%",     always: true },
+  { key: "mpg",               label: "MPG",     always: false },
+  { key: "pass_attempts_pg",  label: "PAPG",    always: true },
+  { key: "possession_time_pg",label: "POSS",    always: true },
 ];
 
 export default function StatsPage({ params }: { params?: Promise<{ league?: string }> }) {
@@ -253,8 +259,11 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
                     <td className={`px-4 py-4 text-center text-base ${tdHighlight("spg") || "text-slate-300"}`}>{fmt(s.spg)}</td>
                     <td className={`px-4 py-4 text-center text-base ${tdHighlight("bpg") || "text-slate-300"}`}>{fmt(s.bpg)}</td>
                     <td className={`px-4 py-4 text-center text-base ${tdHighlight("topg") || "text-slate-300"}`}>{fmt(s.topg)}</td>
+                    <td className={`px-4 py-4 text-center text-base ${tdHighlight("tppg") || "text-slate-300"}`}>{s.tppg != null ? fmt(s.tppg) : <span className="text-slate-600">N/A</span>}</td>
                     <td className={`px-4 py-4 text-center text-base ${tdHighlight("fg_pct") || "text-slate-300"}`}>{s.fg_pct != null ? `${s.fg_pct.toFixed(1)}%` : "—"}</td>
                     {showMpg && <td className={`px-4 py-4 text-center text-base ${tdHighlight("mpg") || "text-slate-300"}`}>{fmt(s.mpg)}</td>}
+                    <td className={`px-4 py-4 text-center text-base ${tdHighlight("pass_attempts_pg") || "text-slate-300"}`}>{s.pass_attempts_pg != null ? fmt(s.pass_attempts_pg) : <span className="text-slate-600">N/A</span>}</td>
+                    <td className={`px-4 py-4 text-center text-base ${tdHighlight("possession_time_pg") || "text-slate-300"}`}>{s.possession_time_pg != null ? `${s.possession_time_pg}s` : <span className="text-slate-600">N/A</span>}</td>
                   </tr>
                 ))}
               </tbody>

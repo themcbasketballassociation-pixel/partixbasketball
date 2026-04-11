@@ -159,14 +159,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (gameIds.length > 0) {
       const { data: gameStatsRows } = await supabase
         .from("game_stats")
-        .select("mc_uuid, points, rebounds_off, rebounds_def, assists, steals, blocks, turnovers, minutes_played, fg_made, fg_attempted, three_pt_made, three_pt_attempted")
+        .select("mc_uuid, points, rebounds_off, rebounds_def, assists, steals, blocks, turnovers, minutes_played, fg_made, fg_attempted, three_pt_made, three_pt_attempted, pass_attempts, possession_time")
         .in("game_id", gameIds);
 
       for (const s of gameStatsRows ?? []) {
         const uuid = s.mc_uuid as string;
         if (manualUuids.has(uuid)) continue; // manual entry takes priority
         if (!computedByUuid[uuid]) {
-          computedByUuid[uuid] = { gp: 0, pts: 0, reb: 0, orb: 0, drb: 0, ast: 0, stl: 0, blk: 0, tov: 0, min: 0, fgm: 0, fga: 0, tpm: 0, tpa: 0 };
+          computedByUuid[uuid] = { gp: 0, pts: 0, reb: 0, orb: 0, drb: 0, ast: 0, stl: 0, blk: 0, tov: 0, min: 0, fgm: 0, fga: 0, tpm: 0, tpa: 0, pass: 0, passGames: 0, poss: 0, possGames: 0 };
         }
         const c = computedByUuid[uuid] as Record<string, number>;
         c.gp  += 1;
@@ -183,6 +183,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         c.fga += (s.fg_attempted     ?? 0) as number;
         c.tpm += (s.three_pt_made    ?? 0) as number;
         c.tpa += (s.three_pt_attempted ?? 0) as number;
+        if (s.pass_attempts != null)   { c.pass += s.pass_attempts as number;  c.passGames += 1; }
+        if (s.possession_time != null) { c.poss += s.possession_time as number; c.possGames += 1; }
       }
     }
 
@@ -207,8 +209,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         three_pt_made: cv.tpm,
         three_pt_pct: cv.tpa > 0 ? r1((cv.tpm / cv.tpa) * 100) : null,
         tppg: gp > 0 ? r1(cv.tpm / gp) : null,
-        pass_attempts_pg: null,
-        possession_time_pg: null,
+        pass_attempts_pg:   cv.passGames > 0 ? r1(cv.pass / cv.passGames) : null,
+        possession_time_pg: cv.possGames > 0 ? Math.round(cv.poss / cv.possGames) : null,
       };
     });
 
