@@ -122,22 +122,26 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
       })
       .catch(() => {});
 
-    // Fetch most recent regular season and load its stats
-    fetch(`/api/stats/seasons?league=${slug}`)
-      .then((r) => r.json())
-      .then((data: { season: string }[]) => {
+    // Fetch most recent season that actually has stats
+    (async () => {
+      try {
+        const r = await fetch(`/api/stats/seasons?league=${slug}`);
+        const data: { season: string; gp?: number | null }[] = await r.json();
         if (!Array.isArray(data)) return;
         const reg = [...new Set(
           data.map((d) => d.season).filter((s) => s && !s.toLowerCase().includes("playoff"))
         )].sort((a, b) => b.localeCompare(a));
-        if (reg.length === 0) return;
-        const latest = reg[0];
-        setLeaderSeason(latest);
-        return fetch(`/api/stats?league=${slug}&season=${encodeURIComponent(latest)}`);
-      })
-      .then((r) => r?.json())
-      .then((data) => { if (Array.isArray(data)) setLeaders(data); })
-      .catch(() => {});
+        for (const s of reg) {
+          const sr = await fetch(`/api/stats?league=${slug}&season=${encodeURIComponent(s)}`);
+          const sd = await sr.json();
+          if (Array.isArray(sd) && sd.length > 0) {
+            setLeaderSeason(s);
+            setLeaders(sd);
+            break;
+          }
+        }
+      } catch { /**/ }
+    })();
   }, [slug]);
 
   return (
