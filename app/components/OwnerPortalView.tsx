@@ -420,11 +420,14 @@ type SigningPlayer = { mc_uuid: string; mc_username: string; min_price: number }
 function SigningsView({ teamId, leagueSlug, contracts, onRefresh }: {
   teamId: string; leagueSlug: string; contracts: Contract[]; onRefresh: () => void;
 }) {
+  const isMcaa = leagueSlug === "mcaa";
+  const hideCap = leagueSlug === "mcaa" || leagueSlug === "mbgl";
   const TOTAL_CAP = 25000;
   const [available, setAvailable] = useState<SigningPlayer[]>([]);
   const [pendingSignings, setPendingSignings] = useState<Contract[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPlayer, setSelectedPlayer] = useState("");
+  const [signingRole, setSigningRole] = useState<"player" | "coach">("player");
   const [err, setErr] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
   const [signing, setSigning] = useState(false);
@@ -451,17 +454,20 @@ function SigningsView({ teamId, leagueSlug, contracts, onRefresh }: {
   const signPlayer = async () => {
     if (!selectedPlayer) return setErr("Select a player");
     setErr(""); setSuccessMsg(""); setSigning(true);
-    const r = await fetch("/api/contracts/sign", {
+    const isCoach = isMcaa && signingRole === "coach";
+    const r = await fetch(isCoach ? "/api/contracts/coach" : "/api/contracts/sign", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ league: leagueSlug, mc_uuid: selectedPlayer }),
+      body: JSON.stringify(isCoach
+        ? { league: leagueSlug, mc_username: selectedInfo?.mc_username }
+        : { league: leagueSlug, mc_uuid: selectedPlayer }),
     });
     const d = await r.json();
     setSigning(false);
     if (!r.ok) {
       setErr(d.error);
     } else {
-      setSuccessMsg(`Signing request submitted for ${selectedInfo?.mc_username ?? "player"} at ${fmt(selectedInfo?.min_price ?? 0)} — waiting for admin approval.`);
+      setSuccessMsg(`${isCoach ? "Coach" : "Signing"} request submitted for ${selectedInfo?.mc_username ?? "player"}${!hideCap && !isCoach ? ` at ${fmt(selectedInfo?.min_price ?? 0)}` : ""} — waiting for admin approval.`);
       setSelectedPlayer("");
       loadData(); onRefresh();
     }
@@ -469,35 +475,56 @@ function SigningsView({ teamId, leagueSlug, contracts, onRefresh }: {
 
   return (
     <div>
-      <div style={{ ...st.innerCard, marginBottom: 14, display: "flex", gap: 20, flexWrap: "wrap" as const }}>
-        <span style={{ color: "#555", fontSize: 13 }}>Cap remaining: <strong style={{ color: "#22d3ee" }}>{fmt(capRemaining)}</strong></span>
-      </div>
+      {!hideCap && (
+        <div style={{ ...st.innerCard, marginBottom: 14, display: "flex", gap: 20, flexWrap: "wrap" as const }}>
+          <span style={{ color: "#555", fontSize: 13 }}>Cap remaining: <strong style={{ color: "#22d3ee" }}>{fmt(capRemaining)}</strong></span>
+        </div>
+      )}
       <div style={{ background: "#0d1117", border: "1px solid #1a2030", borderRadius: 8, padding: "8px 12px", marginBottom: 14, fontSize: 12, color: "#555" }}>
-        Post-auction signings only · Players signed at their auction minimum price · No 2-season contracts · Requires admin approval
+        {isMcaa
+          ? "Sign available players · Requires admin approval"
+          : "Post-auction signings only · Players signed at their auction minimum price · No 2-season contracts · Requires admin approval"}
       </div>
 
       {/* Form */}
       <div style={{ ...st.innerCard, marginBottom: 16 }}>
         <div style={{ color: "#aaa", fontWeight: 700, marginBottom: 12 }}>Request a Signing</div>
         <div style={{ marginBottom: 10 }}>
-          <div style={{ color: "#555", fontSize: 12, marginBottom: 4 }}>Player (went undrafted in auction)</div>
+          <div style={{ color: "#555", fontSize: 12, marginBottom: 4 }}>{isMcaa ? "Available player" : "Player (went undrafted in auction)"}</div>
           {loading
             ? <div style={{ color: "#444", fontSize: 13 }}>Loading…</div>
             : available.length === 0
-            ? <div style={{ color: "#555", fontSize: 13 }}>No players available for signing yet. Players appear here after the auction closes without a bid.</div>
+            ? <div style={{ color: "#555", fontSize: 13 }}>{isMcaa ? "No players available for signing." : "No players available for signing yet. Players appear here after the auction closes without a bid."}</div>
             : <select style={st.input} value={selectedPlayer} onChange={e => setSelectedPlayer(e.target.value)}>
                 <option value="">— Select player —</option>
-                {available.map(p => <option key={p.mc_uuid} value={p.mc_uuid}>{p.mc_username} — {fmt(p.min_price)}</option>)}
+                {available.map(p => <option key={p.mc_uuid} value={p.mc_uuid}>{p.mc_username}{!hideCap ? ` — ${fmt(p.min_price)}` : ""}</option>)}
               </select>
           }
         </div>
-        {selectedInfo && (
+        {isMcaa && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ color: "#555", fontSize: 12, marginBottom: 6 }}>Signing as</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              {(["player", "coach"] as const).map(role => (
+                <button key={role} onClick={() => setSigningRole(role)} style={{
+                  padding: "6px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "1px solid",
+                  borderColor: signingRole === role ? "#3b82f6" : "#222",
+                  background: signingRole === role ? "#1e3a5f" : "#0d1117",
+                  color: signingRole === role ? "#93c5fd" : "#555",
+                }}>
+                  {role === "player" ? "🏀 Player" : "🎓 Coach"}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {selectedInfo && !hideCap && signingRole === "player" && (
           <div style={{ ...st.innerCard, marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ color: "#555", fontSize: 13 }}>Signing salary (auction minimum)</span>
             <span style={{ color: "#22d3ee", fontWeight: 700, fontSize: 18 }}>{fmt(selectedInfo.min_price)}</span>
           </div>
         )}
-        {selectedInfo && capUsed + selectedInfo.min_price > TOTAL_CAP && (
+        {selectedInfo && !hideCap && signingRole === "player" && capUsed + selectedInfo.min_price > TOTAL_CAP && (
           <div style={{ color: "#fca5a5", background: "#450a0a", border: "1px solid #7f1d1d", borderRadius: 8, padding: "7px 12px", marginBottom: 8, fontSize: 13 }}>
             ⚠ This signing would exceed your cap ({fmt(capUsed)} + {fmt(selectedInfo.min_price)} = {fmt(capUsed + selectedInfo.min_price)} / {fmt(TOTAL_CAP)})
           </div>
@@ -506,10 +533,10 @@ function SigningsView({ teamId, leagueSlug, contracts, onRefresh }: {
         {successMsg && <div style={{ color: "#86efac", background: "#052e16", border: "1px solid #166534", borderRadius: 8, padding: "7px 12px", marginBottom: 8, fontSize: 13 }}>{successMsg}</div>}
         <button
           onClick={signPlayer}
-          disabled={signing || !selectedPlayer || (selectedInfo ? capUsed + selectedInfo.min_price > TOTAL_CAP : false)}
+          disabled={signing || !selectedPlayer || (!hideCap && signingRole === "player" && selectedInfo ? capUsed + selectedInfo.min_price > TOTAL_CAP : false)}
           style={{ ...ownerBtn("primary"), opacity: (signing || !selectedPlayer) ? 0.5 : 1 }}
         >
-          {signing ? "Submitting…" : "Submit Signing Request"}
+          {signing ? "Submitting…" : isMcaa && signingRole === "coach" ? "Submit Coach Request" : "Submit Signing Request"}
         </button>
       </div>
 
@@ -521,7 +548,7 @@ function SigningsView({ teamId, leagueSlug, contracts, onRefresh }: {
             <div key={c.id} style={{ ...st.innerCard, display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
               <img src={`https://minotar.net/avatar/${c.players.mc_username}/32`} style={{ width: 32, height: 32, borderRadius: 6, border: "1px solid #222" }} onError={e => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/32"; }} alt="" />
               <span style={{ color: "#fff", fontWeight: 600, flex: 1 }}>{c.players.mc_username}</span>
-              <span style={{ color: "#22d3ee", fontWeight: 700 }}>{fmt(c.amount)}</span>
+              {!hideCap && <span style={{ color: "#22d3ee", fontWeight: 700 }}>{fmt(c.amount)}</span>}
               <span style={{ color: "#fbbf24", background: "#1c1200", border: "1px solid #78350f", borderRadius: 6, fontSize: 11, padding: "2px 7px", fontWeight: 600 }}>pending approval</span>
             </div>
           ))}
@@ -536,12 +563,114 @@ function SigningsView({ teamId, leagueSlug, contracts, onRefresh }: {
             <div key={c.id} style={{ ...st.innerCard, display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
               <img src={`https://minotar.net/avatar/${c.players.mc_username}/32`} style={{ width: 32, height: 32, borderRadius: 6, border: "1px solid #222" }} onError={e => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/32"; }} alt="" />
               <span style={{ color: "#fff", fontWeight: 600, flex: 1 }}>{c.players.mc_username}</span>
-              <span style={{ color: "#22d3ee", fontWeight: 700 }}>{fmt(c.amount)}</span>
+              {!hideCap && <span style={{ color: "#22d3ee", fontWeight: 700 }}>{fmt(c.amount)}</span>}
               {c.is_two_season && <span style={{ color: "#a855f7", fontSize: 11 }}>2yr</span>}
             </div>
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Cut ───────────────────────────────────────────────────────────────────────
+function CutView({ teamId, leagueSlug, contracts, onRefresh }: {
+  teamId: string; leagueSlug: string; contracts: Contract[]; onRefresh: () => void;
+}) {
+  const [selectedId, setSelectedId] = useState("");
+  const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const activeContracts = contracts.filter(c => c.status === "active");
+
+  const submit = async () => {
+    if (!selectedId) return setMsg({ type: "err", text: "Select a player" });
+    setMsg(null); setSubmitting(true);
+    const r = await fetch("/api/contracts/cut", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contract_id: selectedId, league: leagueSlug }),
+    });
+    const d = await r.json();
+    setSubmitting(false);
+    if (!r.ok) return setMsg({ type: "err", text: d.error });
+    setMsg({ type: "ok", text: d.message ?? "Cut request submitted — awaiting admin approval." });
+    setSelectedId(""); onRefresh();
+  };
+
+  return (
+    <div>
+      <div style={{ background: "#0d1117", border: "1px solid #1a2030", borderRadius: 8, padding: "8px 12px", marginBottom: 16, fontSize: 12, color: "#555" }}>
+        Request to cut a player from your roster. Requires admin approval.
+      </div>
+      <div style={{ ...st.innerCard, marginBottom: 20 }}>
+        <div style={{ color: "#aaa", fontWeight: 700, marginBottom: 12 }}>Cut a Player</div>
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ color: "#555", fontSize: 12, marginBottom: 4 }}>Select player to cut</div>
+          {activeContracts.length === 0
+            ? <div style={{ color: "#555", fontSize: 13 }}>No active contracts on your roster.</div>
+            : <select style={st.input} value={selectedId} onChange={e => setSelectedId(e.target.value)}>
+                <option value="">— Select player —</option>
+                {activeContracts.map(c => <option key={c.id} value={c.id}>{c.players.mc_username}{c.amount > 0 ? ` (${fmt(c.amount)})` : ""}</option>)}
+              </select>
+          }
+        </div>
+        {msg && <div style={{ color: msg.type === "err" ? "#fca5a5" : "#86efac", background: msg.type === "err" ? "#450a0a" : "#052e16", border: `1px solid ${msg.type === "err" ? "#7f1d1d" : "#166534"}`, borderRadius: 8, padding: "7px 12px", marginBottom: 8, fontSize: 13 }}>{msg.text}</div>}
+        <button onClick={submit} disabled={submitting || !selectedId} style={{ ...ownerBtn("danger"), opacity: (submitting || !selectedId) ? 0.5 : 1 }}>
+          {submitting ? "Submitting…" : "Request Cut"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Portal ────────────────────────────────────────────────────────────────────
+function PortalView({ teamId, leagueSlug, contracts, onRefresh }: {
+  teamId: string; leagueSlug: string; contracts: Contract[]; onRefresh: () => void;
+}) {
+  const [selectedId, setSelectedId] = useState("");
+  const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const activeContracts = contracts.filter(c => c.status === "active");
+
+  const submit = async () => {
+    if (!selectedId) return setMsg({ type: "err", text: "Select a player" });
+    setMsg(null); setSubmitting(true);
+    const r = await fetch("/api/contracts/portal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contract_id: selectedId, league: leagueSlug }),
+    });
+    const d = await r.json();
+    setSubmitting(false);
+    if (!r.ok) return setMsg({ type: "err", text: d.error });
+    setMsg({ type: "ok", text: d.message ?? "Portal request submitted — awaiting admin approval." });
+    setSelectedId(""); onRefresh();
+  };
+
+  return (
+    <div>
+      <div style={{ background: "#0d1117", border: "1px solid #1a2030", borderRadius: 8, padding: "8px 12px", marginBottom: 16, fontSize: 12, color: "#555" }}>
+        Submit a transfer portal request for a player. Once approved, they will enter the portal and become available to other teams.
+      </div>
+      <div style={{ ...st.innerCard, marginBottom: 20 }}>
+        <div style={{ color: "#aaa", fontWeight: 700, marginBottom: 12 }}>Enter Transfer Portal</div>
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ color: "#555", fontSize: 12, marginBottom: 4 }}>Select player to portal</div>
+          {activeContracts.length === 0
+            ? <div style={{ color: "#555", fontSize: 13 }}>No active contracts on your roster.</div>
+            : <select style={st.input} value={selectedId} onChange={e => setSelectedId(e.target.value)}>
+                <option value="">— Select player —</option>
+                {activeContracts.map(c => <option key={c.id} value={c.id}>{c.players.mc_username}</option>)}
+              </select>
+          }
+        </div>
+        {msg && <div style={{ color: msg.type === "err" ? "#fca5a5" : "#86efac", background: msg.type === "err" ? "#450a0a" : "#052e16", border: `1px solid ${msg.type === "err" ? "#7f1d1d" : "#166534"}`, borderRadius: 8, padding: "7px 12px", marginBottom: 8, fontSize: 13 }}>{msg.text}</div>}
+        <button onClick={submit} disabled={submitting || !selectedId} style={{ ...ownerBtn("primary"), opacity: (submitting || !selectedId) ? 0.5 : 1 }}>
+          {submitting ? "Submitting…" : "Submit Portal Request"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -559,7 +688,8 @@ export default function OwnerPortalView({ teamRecord, leagueSlug, onBack }: {
   const [allTeams, setAllTeams] = useState<Team[]>([]);
   const [myPicks, setMyPicks] = useState<DraftPick[]>([]);
   const [seasonTeamIds, setSeasonTeamIds] = useState<string[]>([]);
-  const [tab, setTab] = useState<"roster" | "bid" | "trades" | "signings">("roster");
+  const [tab, setTab] = useState<"roster" | "bid" | "trades" | "signings" | "cut" | "portal">("roster");
+  const isMcaa = leagueSlug === "mcaa";
 
   const load = useCallback(async () => {
     const [c, ret, a, teams, picks] = await Promise.all([
@@ -602,50 +732,34 @@ export default function OwnerPortalView({ teamRecord, leagueSlug, onBack }: {
             <div style={{ color: "#fff", fontWeight: 800, fontSize: 24 }}>{team.name}</div>
             <div style={{ color: "#555", fontSize: 13, marginTop: 2 }}>{team.division ? `${team.division} Division · ` : ""}{leagueSlug.toUpperCase()} Owner Portal</div>
           </div>
-          <div style={{ textAlign: "right", background: "#0d0d0d", border: "1px solid #1a1a1a", borderRadius: 10, padding: "10px 16px" }}>
-            <div style={{ color: "#888", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Salary Cap</div>
-            <div style={{ color: totalUsed > 22500 ? "#ef4444" : "#22d3ee", fontWeight: 700, fontSize: 22 }}>{(totalUsed).toLocaleString()}</div>
-            <div style={{ color: "#333", fontSize: 13 }}>/ 25,000</div>
-          </div>
+          {leagueSlug !== "mcaa" && leagueSlug !== "mbgl" && (
+            <div style={{ textAlign: "right", background: "#0d0d0d", border: "1px solid #1a1a1a", borderRadius: 10, padding: "10px 16px" }}>
+              <div style={{ color: "#888", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Salary Cap</div>
+              <div style={{ color: totalUsed > 22500 ? "#ef4444" : "#22d3ee", fontWeight: 700, fontSize: 22 }}>{(totalUsed).toLocaleString()}</div>
+              <div style={{ color: "#333", fontSize: 13 }}>/ 25,000</div>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Tabs */}
-      <div style={{ display: "flex", borderBottom: "1px solid #1a1a1a", marginBottom: 20, gap: 4 }}>
-        {([
-          ["roster",   "Roster & Cap",                    "Your players and salary breakdown"],
-          ["signings", "Sign Players",                     "Sign free agents"],
-          ["bid",      `Auctions${activeAuctions.length > 0 ? ` (${activeAuctions.length})` : ""}`, "Bid on players in live auctions"],
-          ["trades",   "Trades",                           "Propose or manage trades"],
-        ] as const).map(([t, label]) => (
-          <button key={t} onClick={() => setTab(t)} style={{ padding: "10px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer", border: "none", background: "none", borderBottom: `2px solid ${tab === t ? "#3b82f6" : "transparent"}`, color: tab === t ? "#fff" : "#555", transition: "color 0.15s" }}>{label}</button>
+      <div style={{ display: "flex", borderBottom: "1px solid #1a1a1a", marginBottom: 20, gap: 4, flexWrap: "wrap" as const }}>
+        {(isMcaa
+          ? [["roster", "Roster"], ["signings", "Sign Players"], ["cut", "Cut Player"], ["portal", "Transfer Portal"]] as const
+          : [["roster", "Roster & Cap"], ["signings", "Sign Players"], ["bid", `Auctions${activeAuctions.length > 0 ? ` (${activeAuctions.length})` : ""}`], ["trades", "Trades"], ["cut", "Cut Player"]] as const
+        ).map(([t, label]) => (
+          <button key={t} onClick={() => setTab(t as typeof tab)} style={{ padding: "10px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer", border: "none", background: "none", borderBottom: `2px solid ${tab === t ? "#3b82f6" : "transparent"}`, color: tab === t ? "#fff" : "#555", transition: "color 0.15s" }}>{label}</button>
         ))}
       </div>
 
-      {tab === "roster" && (
-        <div>
-          <p style={{ color: "#444", fontSize: 13, marginBottom: 14 }}>Your active roster and salary cap breakdown for this season.</p>
-          <RosterView contracts={contracts} retentions={retentions} />
-        </div>
-      )}
-      {tab === "signings" && (
-        <div>
-          <p style={{ color: "#444", fontSize: 13, marginBottom: 14 }}>Sign free agents by submitting a contract offer. Offers go to the commissioner for approval.</p>
-          <SigningsView teamId={team.id} leagueSlug={leagueSlug} contracts={contracts} onRefresh={load} />
-        </div>
-      )}
-      {tab === "bid" && (
-        <div>
-          <p style={{ color: "#444", fontSize: 13, marginBottom: 14 }}>Place bids on players in active auctions. The highest valid bid when the auction closes wins.</p>
-          <BidView auctions={auctions} teamId={team.id} contracts={contracts} onRefresh={load} />
-        </div>
-      )}
+      {tab === "roster" && <RosterView contracts={contracts} retentions={retentions} />}
+      {tab === "signings" && <SigningsView teamId={team.id} leagueSlug={leagueSlug} contracts={contracts} onRefresh={load} />}
+      {tab === "bid" && <BidView auctions={auctions} teamId={team.id} contracts={contracts} onRefresh={load} />}
       {tab === "trades" && (
-        <div>
-          <p style={{ color: "#444", fontSize: 13, marginBottom: 14 }}>Propose trades with other teams. Send players or draft picks in exchange for assets from another team.</p>
-          <TradesView teamId={team.id} leagueSlug={leagueSlug} contracts={contracts} allTeams={seasonFilteredTeams} myPicks={myPicks} onRefresh={load} />
-        </div>
+        <TradesView teamId={team.id} leagueSlug={leagueSlug} contracts={contracts} allTeams={seasonFilteredTeams} myPicks={myPicks} onRefresh={load} />
       )}
+      {tab === "cut" && <CutView teamId={team.id} leagueSlug={leagueSlug} contracts={contracts} onRefresh={load} />}
+      {tab === "portal" && <PortalView teamId={team.id} leagueSlug={leagueSlug} contracts={contracts} onRefresh={load} />}
     </div>
   );
 }
