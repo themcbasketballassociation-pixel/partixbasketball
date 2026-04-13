@@ -2,10 +2,11 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "dev",
+      "name": "partixbasketball",
       "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
-      "runtimeArgs": ["C:\\Users\\bryce\\partixbasketball\\node_modules\\next\\dist\\bin\\next", "dev", "--port", "3000"],
-      "port": 3000
+      "runtimeArgs": ["C:\\Users\\bryce\\partixbasketball\\node_modules\\next\\dist\\bin\\next", "dev"],
+      "port": 3000,
+      "autoPort": true
     }
   ]
 }

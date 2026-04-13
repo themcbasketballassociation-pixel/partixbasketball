@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useSession, signIn } from "next-auth/react";
 
-const EPOCH_MS   = new Date("2026-04-11T14:00:00Z").getTime();
+const EPOCH_MS   = new Date("2026-04-13T14:00:00Z").getTime();
 const SEASON_SEED = Math.floor(EPOCH_MS / 86400000);
 function getDayNum() {
   return Math.max(1, Math.floor((Date.now() - EPOCH_MS) / 86400000) + 1);

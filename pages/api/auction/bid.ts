@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { supabase } from "../../../lib/supabase";
 import { getSessionDiscordId, isAdminId } from "../../../lib/ownerAuth";
+import { sendWebhook, getWebhookUrl } from "../../../lib/discordWebhook";
 
 const TOTAL_CAP = 25000;
 const COURT_CAP = 22000;
@@ -142,6 +143,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     signingsThisPhase >= 2
       ? `Your team has already signed ${signingsThisPhase} players this phase. You can bid but cannot win until next phase.`
       : null;
+
+  const playerName = (auction as any).players?.mc_username ?? auction.mc_uuid;
+  const teamName = (bid as any).teams?.abbreviation ?? team_id;
+  const leagueDisplay = auction.league === "pba" ? "MBA" : auction.league.toUpperCase();
+  const twoSeasonLabel = is_two_season ? " (2-season)" : "";
+  await sendWebhook(
+    getWebhookUrl(auction.league, "bid"),
+    `🏷️ **[${leagueDisplay}] New Bid**\n**Player:** ${playerName}\n**Team:** ${teamName}\n**Bid:** $${amount.toLocaleString()} → eff. $${effectiveValue.toLocaleString()}${twoSeasonLabel}`
+  );
 
   return res.status(200).json({ bid, closes_at: newClosesAt, warning });
 }

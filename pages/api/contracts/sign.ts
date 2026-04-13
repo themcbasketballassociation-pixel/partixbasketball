@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "../auth/[...nextauth]";
 import { supabase } from "../../../lib/supabase";
 import { resolveLeague } from "../../../lib/leagueMapping";
+import { sendWebhook, getWebhookUrl } from "../../../lib/discordWebhook";
 
 const TOTAL_CAP = 25000;
 
@@ -107,6 +108,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .select("*, players(mc_uuid, mc_username), teams(id, name, abbreviation)")
       .single();
     if (error) return res.status(500).json({ error: error.message });
+
+    const playerName = (contract as any).players?.mc_username ?? mc_uuid;
+    const teamName = (contract as any).teams?.name ?? "Unknown Team";
+    const leagueSlug = league === "pba" ? "MBA" : league === "pcaa" ? "MCAA" : league === "pbgl" ? "MBGL" : league.toUpperCase();
+    await sendWebhook(
+      getWebhookUrl(league, "transaction"),
+      `✍️ **[${leagueSlug}] Signing Request — Pending Admin Approval**\n**Player:** ${playerName}\n**Team:** ${teamName}\n**Salary:** $${amt.toLocaleString()}`
+    );
+
     return res.status(200).json(contract);
   }
 

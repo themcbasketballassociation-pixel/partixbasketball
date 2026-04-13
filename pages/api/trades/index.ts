@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { supabase } from "../../../lib/supabase";
 import { resolveLeague } from "../../../lib/leagueMapping";
 import { getSessionDiscordId, isAdminId } from "../../../lib/ownerAuth";
+import { sendWebhook, getWebhookUrl } from "../../../lib/discordWebhook";
 
 const MAX_CAP_SPACE_TRADE = 2000;
 const MAX_RETENTION_PCT = 0.1; // 10%
@@ -155,6 +156,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }));
     const { error: assetErr } = await supabase.from("trade_assets").insert(assetRows);
     if (assetErr) return res.status(500).json({ error: assetErr.message });
+
+    const leagueDisplay = league === "pba" ? "MBA" : league === "pbgl" ? "MBGL" : league === "pcaa" ? "MCAA" : league.toUpperCase();
+    const assetCount = assets.length;
+    await sendWebhook(
+      getWebhookUrl(league, "transaction"),
+      `🔄 **[${leagueDisplay}] Trade Proposed — Pending Admin Approval**\n${notes ? `> ${notes}\n` : ""}**Assets involved:** ${assetCount} contract(s)`
+    );
 
     return res.status(200).json(trade);
   }
