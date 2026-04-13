@@ -5083,14 +5083,17 @@ function SigningsAdminTab({ league }: { league: string }) {
                 <div className="flex-1">
                   <div className="text-white font-bold">{s.players.mc_username}</div>
                   <div className="text-slate-500 text-xs">
-                    {s.teams?.name ?? "Unknown team"} · Phase {s.phase}{s.season ? ` · ${s.season}` : ""}
+                    {s.teams?.name ?? "Unknown team"}{s.season ? ` · ${s.season}` : ""}
+                    {s.phase === 0 ? <span className="text-violet-400 ml-1">· Coach</span> : null}
                     {s.is_two_season && <span className="text-purple-400 ml-1">· 2-season</span>}
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-cyan-400 font-bold text-lg">{s.amount.toLocaleString()}</div>
-                  <div className="text-slate-600 text-xs">salary</div>
-                </div>
+                {s.amount > 0 && (
+                  <div className="text-right">
+                    <div className="text-cyan-400 font-bold text-lg">{s.amount.toLocaleString()}</div>
+                    <div className="text-slate-600 text-xs">salary</div>
+                  </div>
+                )}
                 <div className="flex gap-2">
                   <button
                     onClick={() => decide(s.id, "approve")}

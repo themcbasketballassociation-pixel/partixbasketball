@@ -81,37 +81,65 @@ function CapBar({ contracts, retentions }: { contracts: Contract[]; retentions: 
 }
 
 // ── RosterTab ──────────────────────────────────────────────────────────────────
-function RosterTab({ contracts, retentions }: { contracts: Contract[]; retentions: CapRetention[] }) {
+function RosterTab({ contracts, retentions, leagueSlug }: { contracts: Contract[]; retentions: CapRetention[]; leagueSlug: string }) {
+  const showCap = leagueSlug !== "mcaa" && leagueSlug !== "mbgl";
+  const players = contracts.filter((c) => c.phase !== 0);
+  const coaches = contracts.filter((c) => c.phase === 0);
   return (
     <div>
-      <CapBar contracts={contracts} retentions={retentions} />
+      {showCap && <CapBar contracts={contracts} retentions={retentions} />}
       {contracts.length === 0 ? (
         <div style={{ color: "#444", textAlign: "center", padding: "32px 0" }}>No active contracts.</div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {contracts.map((c) => (
-            <div key={c.id} style={{ ...innerCard, display: "flex", alignItems: "center", gap: 12 }}>
-              <img
-                src={`https://minotar.net/avatar/${c.players.mc_username}/36`}
-                style={{ width: 36, height: 36, borderRadius: 6, border: "1px solid #222", flexShrink: 0 }}
-                onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/36"; }}
-                alt=""
-              />
-              <div style={{ flex: 1 }}>
-                <div style={{ color: "#fff", fontWeight: 600 }}>{c.players.mc_username}</div>
-                <div style={{ color: "#555", fontSize: 12 }}>
-                  {c.season && `S${c.season} · `}Phase {c.phase}
+        <>
+          {players.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {players.map((c) => (
+                <div key={c.id} style={{ ...innerCard, display: "flex", alignItems: "center", gap: 12 }}>
+                  <img
+                    src={`https://minotar.net/avatar/${c.players.mc_username}/36`}
+                    style={{ width: 36, height: 36, borderRadius: 6, border: "1px solid #222", flexShrink: 0 }}
+                    onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/36"; }}
+                    alt=""
+                  />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ color: "#fff", fontWeight: 600 }}>{c.players.mc_username}</div>
+                    {c.season && <div style={{ color: "#555", fontSize: 12 }}>S{c.season}</div>}
+                  </div>
+                  {showCap && (
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ color: "#22d3ee", fontWeight: 700, fontSize: 18 }}>{fmt(c.amount)}</div>
+                      {c.is_two_season && <div style={{ color: "#a855f7", fontSize: 11 }}>2-season</div>}
+                    </div>
+                  )}
                 </div>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ color: "#22d3ee", fontWeight: 700, fontSize: 18 }}>{fmt(c.amount)}</div>
-                {c.is_two_season && <div style={{ color: "#a855f7", fontSize: 11 }}>2-season</div>}
+              ))}
+            </div>
+          )}
+          {coaches.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <div style={{ color: "#555", fontSize: 12, fontWeight: 600, marginBottom: 8, textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>Coaches</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {coaches.map((c) => (
+                  <div key={c.id} style={{ ...innerCard, display: "flex", alignItems: "center", gap: 12 }}>
+                    <img
+                      src={`https://minotar.net/avatar/${c.players.mc_username}/36`}
+                      style={{ width: 36, height: 36, borderRadius: 6, border: "1px solid #222", flexShrink: 0 }}
+                      onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/36"; }}
+                      alt=""
+                    />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ color: "#fff", fontWeight: 600 }}>{c.players.mc_username}</div>
+                    </div>
+                    <span style={{ color: "#a78bfa", background: "#1e1b4b", border: "1px solid #4c1d95", borderRadius: 6, fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>Coach</span>
+                  </div>
+                ))}
               </div>
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
-      {retentions.filter((r) => r.status === "active").length > 0 && (
+      {showCap && retentions.filter((r) => r.status === "active").length > 0 && (
         <div style={{ marginTop: 20 }}>
           <div style={{ color: "#555", fontSize: 12, fontWeight: 600, marginBottom: 8, textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>Cap Retentions</div>
           {retentions.filter((r) => r.status === "active").map((r) => (
@@ -553,9 +581,11 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
 
   return (
     <div>
-      <div style={{ ...innerCard, marginBottom: 16, display: "flex", gap: 20, flexWrap: "wrap" as const }}>
-        <div><span style={{ color: "#555", fontSize: 12 }}>Cap remaining: </span><span style={{ color: "#22d3ee", fontWeight: 700 }}>{fmt(capRemaining)}</span></div>
-      </div>
+      {!isMcaa && (
+        <div style={{ ...innerCard, marginBottom: 16, display: "flex", gap: 20, flexWrap: "wrap" as const }}>
+          <div><span style={{ color: "#555", fontSize: 12 }}>Cap remaining: </span><span style={{ color: "#22d3ee", fontWeight: 700 }}>{fmt(capRemaining)}</span></div>
+        </div>
+      )}
       <div style={{ background: "#0d1117", border: "1px solid #1a2030", borderRadius: 8, padding: "8px 12px", marginBottom: 16, fontSize: 12, color: "#555" }}>
         {isMcaa
           ? "Sign available players · Players signed at their listed price · Requires admin approval"
@@ -577,13 +607,13 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
             </select>
           )}
         </div>
-        {selectedInfo && (
+        {selectedInfo && !isMcaa && (
           <div style={{ ...innerCard, marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ color: "#555", fontSize: 13 }}>Signing salary (auction minimum)</span>
             <span style={{ color: "#22d3ee", fontWeight: 700, fontSize: 18 }}>{fmt(selectedInfo.min_price)}</span>
           </div>
         )}
-        {selectedInfo && capUsed + selectedInfo.min_price > TOTAL_CAP && (
+        {selectedInfo && !isMcaa && capUsed + selectedInfo.min_price > TOTAL_CAP && (
           <div style={{ color: "#fca5a5", background: "#450a0a", border: "1px solid #7f1d1d", borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 13 }}>
             ⚠ Exceeds cap: {fmt(capUsed)} + {fmt(selectedInfo.min_price)} = {fmt(capUsed + selectedInfo.min_price)} / {fmt(TOTAL_CAP)}
           </div>
@@ -592,7 +622,7 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
         {successMsg && <div style={{ color: "#86efac", background: "#052e16", border: "1px solid #166534", borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 13 }}>{successMsg}</div>}
         <button
           onClick={signPlayer}
-          disabled={signing || !selectedPlayer || (selectedInfo ? capUsed + selectedInfo.min_price > TOTAL_CAP : false)}
+          disabled={signing || !selectedPlayer || (!isMcaa && selectedInfo ? capUsed + selectedInfo.min_price > TOTAL_CAP : false)}
           style={{ ...btn("primary"), opacity: (signing || !selectedPlayer) ? 0.5 : 1 }}
         >
           {signing ? "Submitting…" : "Submit Signing Request"}
@@ -625,6 +655,92 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
                 <span style={{ color: "#aaa", flex: 1 }}>{c.players.mc_username}</span>
                 <span style={{ color: "#22d3ee", fontWeight: 700 }}>{fmt(c.amount)}</span>
                 {c.is_two_season && <span style={{ color: "#a855f7", fontSize: 11 }}>2yr</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── CoachesTab ─────────────────────────────────────────────────────────────────
+const MAX_COACHES = 4;
+
+function CoachesTab({ teamId, leagueSlug, contracts, onRefresh }: {
+  teamId: string; leagueSlug: string; contracts: Contract[]; onRefresh: () => void;
+}) {
+  const [mcUsername, setMcUsername] = useState("");
+  const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const activeCoaches = contracts.filter((c) => c.phase === 0 && (c.status === "active" || c.status === "pending_approval"));
+  const coachCount = activeCoaches.length;
+
+  const submit = async () => {
+    if (!mcUsername.trim()) return setMsg({ type: "err", text: "Enter a Minecraft username" });
+    setMsg(null); setSubmitting(true);
+    const r = await fetch("/api/contracts/coach", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mc_username: mcUsername.trim(), league: leagueSlug }),
+    });
+    const d = await r.json();
+    setSubmitting(false);
+    if (!r.ok) return setMsg({ type: "err", text: d.error });
+    setMsg({ type: "ok", text: `Coach signing request submitted for ${mcUsername} — awaiting admin approval.` });
+    setMcUsername("");
+    onRefresh();
+  };
+
+  return (
+    <div>
+      <div style={{ background: "#0d1117", border: "1px solid #1a2030", borderRadius: 8, padding: "8px 12px", marginBottom: 16, fontSize: 12, color: "#555" }}>
+        Sign coaches to your staff — max {MAX_COACHES} total · No salary · Requires admin approval
+      </div>
+
+      <div style={{ ...innerCard, marginBottom: 20 }}>
+        <div style={{ color: "#aaa", fontWeight: 700, marginBottom: 14 }}>
+          Sign a Coach <span style={{ color: "#555", fontWeight: 400, fontSize: 13 }}>({coachCount} / {MAX_COACHES})</span>
+        </div>
+        {coachCount >= MAX_COACHES ? (
+          <div style={{ color: "#f97316", fontSize: 13 }}>You've reached the maximum of {MAX_COACHES} coaches.</div>
+        ) : (
+          <>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ color: "#555", fontSize: 12, display: "block", marginBottom: 4 }}>Minecraft Username</label>
+              <input
+                style={input}
+                value={mcUsername}
+                onChange={(e) => setMcUsername(e.target.value)}
+                placeholder="e.g. Steve"
+                onKeyDown={(e) => e.key === "Enter" && submit()}
+              />
+            </div>
+            {msg && (
+              <div style={{ color: msg.type === "err" ? "#fca5a5" : "#86efac", background: msg.type === "err" ? "#450a0a" : "#052e16", border: `1px solid ${msg.type === "err" ? "#7f1d1d" : "#166534"}`, borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 13 }}>
+                {msg.text}
+              </div>
+            )}
+            <button onClick={submit} disabled={submitting || !mcUsername.trim()} style={{ ...btn("primary"), opacity: (submitting || !mcUsername.trim()) ? 0.5 : 1 }}>
+              {submitting ? "Submitting…" : "Submit Coach Request"}
+            </button>
+          </>
+        )}
+      </div>
+
+      {activeCoaches.length > 0 && (
+        <div>
+          <div style={{ color: "#555", fontSize: 12, fontWeight: 600, marginBottom: 8, textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>Your Coaches</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {activeCoaches.map((c) => (
+              <div key={c.id} style={{ ...innerCard, display: "flex", alignItems: "center", gap: 12 }}>
+                <img src={`https://minotar.net/avatar/${c.players.mc_username}/32`} style={{ width: 32, height: 32, borderRadius: 6, border: "1px solid #222" }} onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/32"; }} alt="" />
+                <span style={{ color: "#fff", fontWeight: 600, flex: 1 }}>{c.players.mc_username}</span>
+                {c.status === "pending_approval"
+                  ? <span style={{ color: "#fbbf24", background: "#1c1200", border: "1px solid #78350f", borderRadius: 6, fontSize: 11, padding: "2px 8px", fontWeight: 600 }}>pending</span>
+                  : <span style={{ color: "#a78bfa", background: "#1e1b4b", border: "1px solid #4c1d95", borderRadius: 6, fontSize: 11, padding: "2px 8px", fontWeight: 600 }}>Coach</span>
+                }
               </div>
             ))}
           </div>
@@ -674,7 +790,7 @@ function CutTab({ teamId, leagueSlug, contracts, onRefresh }: {
           ) : (
             <select style={input} value={selectedId} onChange={(e) => setSelectedId(e.target.value)}>
               <option value="">— Select player —</option>
-              {activeContracts.map((c) => <option key={c.id} value={c.id}>{c.players.mc_username} ({fmt(c.amount)})</option>)}
+              {activeContracts.map((c) => <option key={c.id} value={c.id}>{c.players.mc_username}{c.amount > 0 ? ` (${fmt(c.amount)})` : ""}</option>)}
             </select>
           )}
         </div>
@@ -731,7 +847,7 @@ function PortalTab({ teamId, leagueSlug, contracts, onRefresh }: {
           ) : (
             <select style={input} value={selectedId} onChange={(e) => setSelectedId(e.target.value)}>
               <option value="">— Select player —</option>
-              {activeContracts.map((c) => <option key={c.id} value={c.id}>{c.players.mc_username} ({fmt(c.amount)})</option>)}
+              {activeContracts.map((c) => <option key={c.id} value={c.id}>{c.players.mc_username}{c.amount > 0 ? ` (${fmt(c.amount)})` : ""}</option>)}
             </select>
           )}
         </div>
@@ -761,7 +877,7 @@ export default function OwnerPage() {
   const [allTeams, setAllTeams] = useState<Team[]>([]);
   const [seasonTeamIds, setSeasonTeamIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"roster" | "bid" | "trades" | "signings" | "cut" | "portal">("roster");
+  const [tab, setTab] = useState<"roster" | "bid" | "trades" | "signings" | "cut" | "portal" | "coaches">("roster");
   const [isBoardMember, setIsBoardMember] = useState(false);
 
   const loadAll = useCallback(async () => {
@@ -863,10 +979,12 @@ export default function OwnerPage() {
             <div style={{ color: "#fff", fontWeight: 800, fontSize: 22 }}>{team.name}</div>
             <div style={{ color: "#555", fontSize: 13 }}>{leagueSlug.toUpperCase()} · {team.division ?? "League"}</div>
           </div>
-          <div style={{ textAlign: "right" }}>
-            <div style={{ color: "#22d3ee", fontWeight: 700, fontSize: 22 }}>{fmt(totalUsed)} <span style={{ color: "#333", fontSize: 16 }}>/ 25,000</span></div>
-            <div style={{ color: "#555", fontSize: 12 }}>cap used</div>
-          </div>
+          {leagueSlug !== "mcaa" && leagueSlug !== "mbgl" && (
+            <div style={{ textAlign: "right" }}>
+              <div style={{ color: "#22d3ee", fontWeight: 700, fontSize: 22 }}>{fmt(totalUsed)} <span style={{ color: "#333", fontSize: 16 }}>/ 25,000</span></div>
+              <div style={{ color: "#555", fontSize: 12 }}>cap used</div>
+            </div>
+          )}
           <div style={{ display: "flex", flexDirection: "column" as const, gap: 6, alignItems: "flex-end" }}>
             {isBoardMember && (
               <a href={`/${leagueSlug}/board`}
@@ -881,7 +999,7 @@ export default function OwnerPage() {
         {/* Tabs */}
         <div style={{ display: "flex", borderBottom: "1px solid #1a1a1a" }}>
           {(leagueSlug === "mcaa"
-            ? [["roster", "My Roster"], ["signings", "Signings"], ["cut", "Cut Player"], ["portal", "Transfer Portal"]] as const
+            ? [["roster", "My Roster"], ["coaches", "Coaches"], ["signings", "Signings"], ["cut", "Cut Player"], ["portal", "Transfer Portal"]] as const
             : [["roster", "My Roster"], ["signings", "Signings"], ["bid", `Live Auctions (${auctions.filter((a) => a.status === "active").length})`], ["trades", "Trades"]] as const
           ).map(([t, label]) => (
             <button
@@ -899,10 +1017,11 @@ export default function OwnerPage() {
         </div>
 
         <div style={{ padding: "20px 24px" }}>
-          {tab === "roster" && <RosterTab contracts={contracts} retentions={retentions} />}
+          {tab === "roster" && <RosterTab contracts={contracts} retentions={retentions} leagueSlug={leagueSlug} />}
           {tab === "signings" && <SigningsTab teamId={team.id} league={ownerRecord.league} leagueSlug={leagueSlug} contracts={contracts} ownerSeason={ownerRecord.season ?? null} onRefresh={loadAll} />}
           {tab === "bid" && <BidTab auctions={auctions} teamId={team.id} contracts={contracts} onRefresh={loadAll} />}
           {tab === "trades" && <TradeTab teamId={team.id} league={ownerRecord.league} leagueSlug={leagueSlug} contracts={contracts} allTeams={allTeams} seasonTeamIds={seasonTeamIds} onRefresh={loadAll} />}
+          {tab === "coaches" && <CoachesTab teamId={team.id} leagueSlug={leagueSlug} contracts={contracts} onRefresh={loadAll} />}
           {tab === "cut" && <CutTab teamId={team.id} leagueSlug={leagueSlug} contracts={contracts} onRefresh={loadAll} />}
           {tab === "portal" && <PortalTab teamId={team.id} leagueSlug={leagueSlug} contracts={contracts} onRefresh={loadAll} />}
         </div>
