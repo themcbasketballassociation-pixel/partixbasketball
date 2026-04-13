@@ -209,6 +209,8 @@ export default function BoxScoresPage({ params }: { params?: Promise<{ league?: 
   const [modalGame, setModalGame] = React.useState<Game | null>(null);
   const [modalStats, setModalStats] = React.useState<GameStat[]>([]);
   const [modalLoading, setModalLoading] = React.useState(false);
+  // Inline expand state
+  const [inlineExpanded, setInlineExpanded] = React.useState<Record<string, boolean>>({});
 
   React.useEffect(() => {
     if (!slug) return;
@@ -291,6 +293,16 @@ export default function BoxScoresPage({ params }: { params?: Promise<{ league?: 
   };
 
   const closeModal = () => { setModalGame(null); setModalStats([]); setModalLoading(false); };
+
+  const toggleInline = async (e: React.MouseEvent, gameId: string) => {
+    e.stopPropagation();
+    const isOpen = inlineExpanded[gameId];
+    setInlineExpanded((prev) => ({ ...prev, [gameId]: !isOpen }));
+    if (!isOpen && !statsCache[gameId]) {
+      const data = await fetch(`/api/game-stats?game_id=${gameId}`).then((r) => r.json()).catch(() => []);
+      setStatsCache((prev) => ({ ...prev, [gameId]: Array.isArray(data) ? data : [] }));
+    }
+  };
 
   // Close modal on Escape key
   React.useEffect(() => {
@@ -444,26 +456,24 @@ export default function BoxScoresPage({ params }: { params?: Promise<{ league?: 
             {games.map((g) => {
               const homeWon = (g.home_score ?? 0) > (g.away_score ?? 0);
               const awayWon = (g.away_score ?? 0) > (g.home_score ?? 0);
+              const isInlineOpen = !!inlineExpanded[g.id];
+              const inlineStats = statsCache[g.id] ?? [];
 
               return (
-                <button
+                <div
                   key={g.id}
-                  onClick={() => openModal(g)}
                   style={{
-                    width: "100%", background: "none", border: "1px solid #1e1e1e", cursor: "pointer", padding: 0,
-                    borderRadius: "0.875rem", overflow: "hidden", transition: "border-color 0.15s",
+                    border: "1px solid #1e1e1e", borderRadius: "0.875rem", overflow: "hidden",
+                    transition: "border-color 0.15s",
                   }}
                   onMouseEnter={(e) => (e.currentTarget.style.borderColor = "#333")}
                   onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#1e1e1e")}
                 >
-                  <div style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr auto 1fr",
-                    alignItems: "center",
-                    padding: "16px 20px",
-                    gap: 12,
-                    background: "#161616",
-                  }}>
+                  {/* Score row — clicking opens modal */}
+                  <div
+                    onClick={() => openModal(g)}
+                    style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", padding: "14px 16px", gap: 12, background: "#161616", cursor: "pointer" }}
+                  >
                     {/* Home team */}
                     <div style={{ display: "flex", alignItems: "center", gap: 10, justifyContent: "flex-end" }}>
                       <div style={{ textAlign: "right" }}>
@@ -503,7 +513,45 @@ export default function BoxScoresPage({ params }: { params?: Promise<{ league?: 
                       </div>
                     </div>
                   </div>
-                </button>
+
+                  {/* Expand arrow */}
+                  <button
+                    onClick={(e) => toggleInline(e, g.id)}
+                    style={{
+                      width: "100%", background: "#111", border: "none", borderTop: "1px solid #1a1a1a",
+                      cursor: "pointer", padding: "5px 0", display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
+                      color: "#444", fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.04em",
+                      transition: "background 0.15s, color 0.15s",
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = "#161616"; e.currentTarget.style.color = "#888"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = "#111"; e.currentTarget.style.color = "#444"; }}
+                  >
+                    <span style={{ fontSize: "0.65rem" }}>{isInlineOpen ? "▲ Hide Stats" : "▼ Show Stats"}</span>
+                  </button>
+
+                  {/* Inline stats */}
+                  {isInlineOpen && (
+                    <div style={{ borderTop: "1px solid #1e1e1e" }}>
+                      {inlineStats.length === 0 ? (
+                        <p style={{ padding: "14px 16px", color: "#444", fontSize: "0.8rem", textAlign: "center" }}>No stats entered yet.</p>
+                      ) : (() => {
+                        const { homeStats, awayStats, allFallback } = splitStats(inlineStats, g, allPlayerTeams, season);
+                        return allFallback ? (
+                          <ModalTeamTable team={g.home_team} stats={allFallback} side="home" />
+                        ) : (
+                          <div style={{ display: "flex", gap: 0 }}>
+                            <div style={{ flex: 1, minWidth: 0, borderRight: "2px solid #0a0a0a" }}>
+                              <ModalTeamTable team={g.home_team} stats={homeStats} side="home" />
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <ModalTeamTable team={g.away_team} stats={awayStats} side="away" />
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>
