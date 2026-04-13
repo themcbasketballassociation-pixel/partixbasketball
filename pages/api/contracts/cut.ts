@@ -34,10 +34,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const playerName = (contract.players as any)?.mc_username ?? contract.mc_uuid;
   const teamName = (contract.teams as any)?.name ?? "Unknown Team";
-  const league = leagueSlug.toUpperCase();
+  const leagueLabel = leagueSlug.toUpperCase();
+  const showSalary = dbLeague !== "pcaa" && dbLeague !== "pbgl";
+  const salaryLine = showSalary ? `\n**Salary:** $${(contract.amount as number).toLocaleString()}` : "";
   await sendWebhook(
     getWebhookUrl(dbLeague, "transaction"),
-    `✂️ **[${league}] Cut Request — Pending Admin Approval**\n**Player:** ${playerName}\n**Team:** ${teamName}\n**Salary:** $${(contract.amount as number).toLocaleString()}`
+    `✂️ **[${leagueLabel}] Cut Request — Pending Admin Approval**\n**Player:** ${playerName}\n**Team:** ${teamName}${salaryLine}`
   );
 
   return res.status(200).json({ success: true, message: "Cut request submitted — awaiting admin approval." });

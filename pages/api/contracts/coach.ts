@@ -51,14 +51,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (alreadyCoach) return res.status(400).json({ error: `${player.mc_username} is already a coach on your team.` });
 
-  // Get owner season
-  const { data: ownerRecord } = await supabase
-    .from("team_owners")
-    .select("season")
-    .eq("team_id", owner.teamId)
-    .eq("league", dbLeague)
-    .maybeSingle();
-
   const { data: contract, error } = await supabase
     .from("contracts")
     .insert([{
@@ -67,7 +59,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       team_id: owner.teamId,
       amount: 0,
       is_two_season: false,
-      season: (ownerRecord as any)?.season ?? null,
+      season: owner.season ?? null,
       phase: 0, // phase 0 = coach
       status: "pending_approval",
     }])

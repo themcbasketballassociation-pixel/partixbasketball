@@ -7,6 +7,11 @@ import { sendWebhook, getWebhookUrl } from "../../../lib/discordWebhook";
 
 const TOTAL_CAP = 25000;
 
+function seasonNum(s: string | null | undefined): number {
+  const m = (s ?? "").match(/\d+/);
+  return m ? parseInt(m[0]) : 0;
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await getServerSession(req, res, authOptions as any);
   if (!session) return res.status(401).json({ error: "Unauthorized" });
@@ -14,37 +19,58 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!discordId) return res.status(401).json({ error: "Unauthorized" });
 
   const leagueRaw = req.query.league ?? req.body?.league;
+  const leagueSlug = Array.isArray(leagueRaw) ? leagueRaw[0] : (leagueRaw ?? "");
   const league = resolveLeague(leagueRaw);
   if (!league) return res.status(400).json({ error: "league required" });
 
-  // Resolve owner's team
+  const isMcaa = league === "pcaa";
+
+  // Resolve owner's team — check both DB identifier and slug to handle storage inconsistency
+  const leagueValues = [...new Set([league, leagueSlug])].filter(Boolean);
   const { data: ownerRecords } = await supabase
     .from("team_owners")
     .select("id, season, teams(id, name, abbreviation)")
     .eq("discord_id", discordId)
-    .eq("league", league);
+    .in("league", leagueValues);
   if (!ownerRecords?.length) return res.status(403).json({ error: "You don't own a team in this league" });
-  const ownerRecord = ownerRecords.sort((a: any, b: any) =>
-    parseInt((b.season ?? "0").match(/\d+/)?.[0] ?? "0") - parseInt((a.season ?? "0").match(/\d+/)?.[0] ?? "0")
+  const ownerRecord = [...ownerRecords].sort((a: any, b: any) =>
+    seasonNum(b.season) - seasonNum(a.season)
   )[0] as any;
   const teamId = ownerRecord.teams?.id;
   if (!teamId) return res.status(403).json({ error: "Team not found" });
 
   if (req.method === "GET") {
-    // Available for signing: players whose auction closed with no winner and no active/pending contract
-    const { data: closedAuctions } = await supabase
-      .from("auction_items")
-      .select("mc_uuid, min_price, players(mc_uuid, mc_username)")
-      .eq("league", league)
-      .eq("status", "closed");
-
+    // Players already contracted (active or pending)
     const { data: takenContracts } = await supabase
       .from("contracts")
       .select("mc_uuid")
       .eq("league", league)
       .in("status", ["active", "pending_approval"]);
-
     const taken = new Set((takenContracts ?? []).map((c: any) => c.mc_uuid));
+
+    if (isMcaa) {
+      // MCAA: any player in the league without an active/pending contract is available
+      // This includes players in the transfer portal (in_portal status)
+      const { data: playerTeams } = await supabase
+        .from("player_teams")
+        .select("mc_uuid, players(mc_uuid, mc_username)")
+        .eq("league", league);
+      const available = (playerTeams ?? [])
+        .filter((pt: any) => !taken.has(pt.mc_uuid))
+        .map((pt: any) => ({
+          mc_uuid: pt.mc_uuid,
+          mc_username: (pt.players as any)?.mc_username ?? pt.mc_uuid,
+          min_price: 0,
+        }));
+      return res.status(200).json(available);
+    }
+
+    // MBA/MBGL: only players whose auction closed with no winner
+    const { data: closedAuctions } = await supabase
+      .from("auction_items")
+      .select("mc_uuid, min_price, players(mc_uuid, mc_username)")
+      .eq("league", league)
+      .eq("status", "closed");
     const available = (closedAuctions ?? [])
       .filter((a: any) => !taken.has(a.mc_uuid))
       .map((a: any) => ({
@@ -52,25 +78,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         mc_username: (a.players as any)?.mc_username ?? a.mc_uuid,
         min_price: a.min_price,
       }));
-
     return res.status(200).json(available);
   }
 
   if (req.method === "POST") {
     const { mc_uuid } = req.body;
     if (!mc_uuid) return res.status(400).json({ error: "mc_uuid required" });
-
-    // Look up their closed auction to get the min_price (that IS the signing salary)
-    const { data: auction } = await supabase
-      .from("auction_items")
-      .select("mc_uuid, min_price")
-      .eq("league", league)
-      .eq("mc_uuid", mc_uuid)
-      .eq("status", "closed")
-      .maybeSingle();
-    if (!auction) return res.status(400).json({ error: "Player is not available for signing (must have a closed auction with no winner)" });
-
-    const amt = (auction as any).min_price as number;
 
     // Player must not already have a contract
     const { data: existingContract } = await supabase
@@ -82,16 +95,41 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .maybeSingle();
     if (existingContract) return res.status(400).json({ error: "Player already has an active or pending contract" });
 
-    // Cap check
-    const { data: teamContracts } = await supabase
-      .from("contracts")
-      .select("amount")
-      .eq("team_id", teamId)
-      .eq("league", league)
-      .in("status", ["active", "pending_approval"]);
-    const capUsed = (teamContracts ?? []).reduce((s: number, c: any) => s + c.amount, 0);
-    if (capUsed + amt > TOTAL_CAP)
-      return res.status(400).json({ error: `Exceeds cap: ${capUsed.toLocaleString()} + ${amt.toLocaleString()} > ${TOTAL_CAP.toLocaleString()}` });
+    let amt = 0;
+
+    if (!isMcaa) {
+      // MBA/MBGL: must have a closed auction to get the signing salary
+      const { data: auction } = await supabase
+        .from("auction_items")
+        .select("mc_uuid, min_price")
+        .eq("league", league)
+        .eq("mc_uuid", mc_uuid)
+        .eq("status", "closed")
+        .maybeSingle();
+      if (!auction) return res.status(400).json({ error: "Player is not available for signing (must have a closed auction with no winner)" });
+      amt = (auction as any).min_price as number;
+
+      // Cap check for non-MCAA leagues
+      const { data: teamContracts } = await supabase
+        .from("contracts")
+        .select("amount")
+        .eq("team_id", teamId)
+        .eq("league", league)
+        .in("status", ["active", "pending_approval"]);
+      const capUsed = (teamContracts ?? []).reduce((s: number, c: any) => s + c.amount, 0);
+      if (capUsed + amt > TOTAL_CAP)
+        return res.status(400).json({ error: `Exceeds cap: ${capUsed.toLocaleString()} + ${amt.toLocaleString()} > ${TOTAL_CAP.toLocaleString()}` });
+    }
+
+    // If signing a portal player, release their old portal contract
+    if (isMcaa) {
+      await supabase
+        .from("contracts")
+        .update({ status: "cut" })
+        .eq("mc_uuid", mc_uuid)
+        .eq("league", league)
+        .in("status", ["in_portal", "portal_requested"]);
+    }
 
     const { data: contract, error } = await supabase
       .from("contracts")
@@ -111,10 +149,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const playerName = (contract as any).players?.mc_username ?? mc_uuid;
     const teamName = (contract as any).teams?.name ?? "Unknown Team";
-    const leagueSlug = league === "pba" ? "MBA" : league === "pcaa" ? "MCAA" : league === "pbgl" ? "MBGL" : league.toUpperCase();
+    const leagueLabel = league === "pba" ? "MBA" : league === "pcaa" ? "MCAA" : league === "pbgl" ? "MBGL" : league.toUpperCase();
+    const salaryText = amt > 0 ? `\n**Salary:** $${amt.toLocaleString()}` : "";
     await sendWebhook(
       getWebhookUrl(league, "transaction"),
-      `✍️ **[${leagueSlug}] Signing Request — Pending Admin Approval**\n**Player:** ${playerName}\n**Team:** ${teamName}\n**Salary:** $${amt.toLocaleString()}`
+      `✍️ **[${leagueLabel}] Signing Request — Pending Admin Approval**\n**Player:** ${playerName}\n**Team:** ${teamName}${salaryText}`
     );
 
     return res.status(200).json(contract);
