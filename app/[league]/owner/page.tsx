@@ -532,6 +532,7 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
   teamId: string; league: string; leagueSlug: string; contracts: Contract[]; ownerSeason: string | null; onRefresh: () => void;
 }) {
   const isMcaa = leagueSlug === "mcaa";
+  const hideCap = leagueSlug === "mcaa" || leagueSlug === "mbgl";
   const TOTAL_CAP = 25000;
   const [available, setAvailable] = useState<SigningPlayer[]>([]);
   const [pendingSignings, setPendingSignings] = useState<Contract[]>([]);
@@ -573,7 +574,7 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
     if (!r.ok) {
       setErr(d.error);
     } else {
-      setSuccessMsg(`Signing request submitted for ${selectedInfo?.mc_username ?? "player"} at ${fmt(selectedInfo?.min_price ?? 0)} — waiting for admin approval.`);
+      setSuccessMsg(`Signing request submitted for ${selectedInfo?.mc_username ?? "player"}${!hideCap ? ` at ${fmt(selectedInfo?.min_price ?? 0)}` : ""} — waiting for admin approval.`);
       setSelectedPlayer("");
       loadData(); onRefresh();
     }
@@ -581,7 +582,7 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
 
   return (
     <div>
-      {!isMcaa && (
+      {!hideCap && (
         <div style={{ ...innerCard, marginBottom: 16, display: "flex", gap: 20, flexWrap: "wrap" as const }}>
           <div><span style={{ color: "#555", fontSize: 12 }}>Cap remaining: </span><span style={{ color: "#22d3ee", fontWeight: 700 }}>{fmt(capRemaining)}</span></div>
         </div>
@@ -603,17 +604,17 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
           ) : (
             <select style={input} value={selectedPlayer} onChange={(e) => setSelectedPlayer(e.target.value)}>
               <option value="">— Select player —</option>
-              {available.map((p) => <option key={p.mc_uuid} value={p.mc_uuid}>{p.mc_username} — {fmt(p.min_price)}</option>)}
+              {available.map((p) => <option key={p.mc_uuid} value={p.mc_uuid}>{p.mc_username}{!hideCap ? ` — ${fmt(p.min_price)}` : ""}</option>)}
             </select>
           )}
         </div>
-        {selectedInfo && !isMcaa && (
+        {selectedInfo && !hideCap && (
           <div style={{ ...innerCard, marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ color: "#555", fontSize: 13 }}>Signing salary (auction minimum)</span>
             <span style={{ color: "#22d3ee", fontWeight: 700, fontSize: 18 }}>{fmt(selectedInfo.min_price)}</span>
           </div>
         )}
-        {selectedInfo && !isMcaa && capUsed + selectedInfo.min_price > TOTAL_CAP && (
+        {selectedInfo && !hideCap && capUsed + selectedInfo.min_price > TOTAL_CAP && (
           <div style={{ color: "#fca5a5", background: "#450a0a", border: "1px solid #7f1d1d", borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 13 }}>
             ⚠ Exceeds cap: {fmt(capUsed)} + {fmt(selectedInfo.min_price)} = {fmt(capUsed + selectedInfo.min_price)} / {fmt(TOTAL_CAP)}
           </div>
@@ -622,7 +623,7 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
         {successMsg && <div style={{ color: "#86efac", background: "#052e16", border: "1px solid #166534", borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 13 }}>{successMsg}</div>}
         <button
           onClick={signPlayer}
-          disabled={signing || !selectedPlayer || (!isMcaa && selectedInfo ? capUsed + selectedInfo.min_price > TOTAL_CAP : false)}
+          disabled={signing || !selectedPlayer || (!hideCap && selectedInfo ? capUsed + selectedInfo.min_price > TOTAL_CAP : false)}
           style={{ ...btn("primary"), opacity: (signing || !selectedPlayer) ? 0.5 : 1 }}
         >
           {signing ? "Submitting…" : "Submit Signing Request"}
@@ -637,7 +638,7 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
               <div key={c.id} style={{ ...innerCard, display: "flex", alignItems: "center", gap: 12 }}>
                 <img src={`https://minotar.net/avatar/${c.players.mc_username}/32`} style={{ width: 32, height: 32, borderRadius: 6, border: "1px solid #222" }} onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/32"; }} alt="" />
                 <span style={{ color: "#fff", fontWeight: 600, flex: 1 }}>{c.players.mc_username}</span>
-                <span style={{ color: "#22d3ee", fontWeight: 700 }}>{fmt(c.amount)}</span>
+                {!hideCap && <span style={{ color: "#22d3ee", fontWeight: 700 }}>{fmt(c.amount)}</span>}
                 <span style={{ color: "#fbbf24", background: "#1c1200", border: "1px solid #78350f", borderRadius: 6, fontSize: 11, padding: "2px 8px", fontWeight: 600 }}>pending approval</span>
               </div>
             ))}
@@ -653,8 +654,8 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
               <div key={c.id} style={{ ...innerCard, display: "flex", alignItems: "center", gap: 12 }}>
                 <img src={`https://minotar.net/avatar/${c.players.mc_username}/32`} style={{ width: 32, height: 32, borderRadius: 6, border: "1px solid #222" }} onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/32"; }} alt="" />
                 <span style={{ color: "#aaa", flex: 1 }}>{c.players.mc_username}</span>
-                <span style={{ color: "#22d3ee", fontWeight: 700 }}>{fmt(c.amount)}</span>
-                {c.is_two_season && <span style={{ color: "#a855f7", fontSize: 11 }}>2yr</span>}
+                {!hideCap && <span style={{ color: "#22d3ee", fontWeight: 700 }}>{fmt(c.amount)}</span>}
+                {!hideCap && c.is_two_season && <span style={{ color: "#a855f7", fontSize: 11 }}>2yr</span>}
               </div>
             ))}
           </div>
