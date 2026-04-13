@@ -2,7 +2,6 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { supabase } from "../../../lib/supabase";
 import { requireOwner } from "../../../lib/ownerAuth";
 import { resolveLeague } from "../../../lib/leagueMapping";
-import { sendWebhook, getWebhookUrl } from "../../../lib/discordWebhook";
 
 const MAX_COACHES = 4;
 
@@ -67,13 +66,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     .single();
 
   if (error) return res.status(500).json({ error: error.message });
-
-  const teamName = (contract as any).teams?.name ?? "Unknown Team";
-  const leagueDisplay = leagueSlug.toUpperCase();
-  await sendWebhook(
-    getWebhookUrl(dbLeague, "transaction"),
-    `🎓 **[${leagueDisplay}] Coach Signing Request — Pending Admin Approval**\n**Coach:** ${player.mc_username}\n**Team:** ${teamName}`
-  );
 
   return res.status(200).json(contract);
 }

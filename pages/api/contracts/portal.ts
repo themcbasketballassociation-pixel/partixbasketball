@@ -2,7 +2,6 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { supabase } from "../../../lib/supabase";
 import { requireOwner } from "../../../lib/ownerAuth";
 import { resolveLeague } from "../../../lib/leagueMapping";
-import { sendWebhook, getWebhookUrl } from "../../../lib/discordWebhook";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
@@ -31,14 +30,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     .eq("id", contract_id);
 
   if (updateError) return res.status(500).json({ error: updateError.message });
-
-  const playerName = (contract.players as any)?.mc_username ?? contract.mc_uuid;
-  const teamName = (contract.teams as any)?.name ?? "Unknown Team";
-  const league = leagueSlug.toUpperCase();
-  await sendWebhook(
-    getWebhookUrl(dbLeague, "portal"),
-    `🚪 **[${league}] Transfer Portal Request — Pending Admin Approval**\n**Player:** ${playerName}\n**From:** ${teamName}`
-  );
 
   return res.status(200).json({ success: true, message: "Portal request submitted — awaiting admin approval." });
 }
