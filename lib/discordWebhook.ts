@@ -35,23 +35,19 @@ export async function sendWebhookEmbed(url: string | undefined, embed: Record<st
 /**
  * Returns the correct webhook URL for a given league and action type.
  *
- * Env vars:
- *   DISCORD_WEBHOOK_MBA_BIDS          — MBA bid/auction activity
- *   DISCORD_WEBHOOK_MBA_TRANSACTIONS  — MBA signings, cuts, trades
- *   DISCORD_WEBHOOK_MBGL_TRANSACTIONS — MBGL transactions
- *   DISCORD_WEBHOOK_MCAA_TRANSACTIONS — MCAA signings & cuts
- *   DISCORD_WEBHOOK_MCAA_PORTAL       — MCAA transfer portal requests
+ * Env vars (set in Vercel):
+ *   DISCORD_WEBHOOK_MBA_BIDS — MBA bid/auction activity
+ *   DISCORD_WEBHOOK_PBA      — MBA signings, cuts, trades, portal
+ *   DISCORD_WEBHOOK_PBGL     — MBGL transactions
+ *   DISCORD_WEBHOOK_PCAA     — MCAA signings, cuts, portal
  */
 export function getWebhookUrl(
   league: string, // db league slug (pba/pcaa/pbgl)
   action: "bid" | "transaction" | "portal"
 ): string | undefined {
-  const slug = league === "pba" ? "mba" : league === "pcaa" ? "mcaa" : league === "pbgl" ? "mbgl" : league;
-
-  if (slug === "mba" && action === "bid")         return process.env.DISCORD_WEBHOOK_MBA_BIDS;
-  if (slug === "mba" && action === "transaction") return process.env.DISCORD_WEBHOOK_MBA_TRANSACTIONS;
-  if (slug === "mbgl")                            return process.env.DISCORD_WEBHOOK_MBGL_TRANSACTIONS;
-  if (slug === "mcaa" && action === "portal")     return process.env.DISCORD_WEBHOOK_MCAA_PORTAL;
-  if (slug === "mcaa")                            return process.env.DISCORD_WEBHOOK_MCAA_TRANSACTIONS;
+  if (league === "pba" && action === "bid") return process.env.DISCORD_WEBHOOK_MBA_BIDS;
+  if (league === "pba")  return process.env.DISCORD_WEBHOOK_PBA;
+  if (league === "pbgl") return process.env.DISCORD_WEBHOOK_PBGL;
+  if (league === "pcaa") return process.env.DISCORD_WEBHOOK_PCAA;
   return undefined;
 }
