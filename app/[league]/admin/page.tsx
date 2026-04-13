@@ -1171,7 +1171,7 @@ function ScheduleTab({ league, season }: { league: string; season: string }) {
     const r = await fetch("/api/games", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ league, scheduled_at: newDate, home_team_id: newHome, away_team_id: newAway, season }),
+      body: JSON.stringify({ league, scheduled_at: new Date(newDate).toISOString(), home_team_id: newHome, away_team_id: newAway, season }),
     });
     const data = await r.json();
     if (!r.ok) { setErr(data.error ?? "Failed to add game"); return; }
@@ -1285,7 +1285,7 @@ function ScheduleTab({ league, season }: { league: string; season: string }) {
       const r = await fetch("/api/games", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ league, scheduled_at: g.date, home_team_id: g.homeTeam!.id, away_team_id: g.awayTeam!.id, season }),
+        body: JSON.stringify({ league, scheduled_at: new Date(g.date).toISOString(), home_team_id: g.homeTeam!.id, away_team_id: g.awayTeam!.id, season }),
       });
       if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Import failed"); setImporting(false); return; }
     }
@@ -1293,6 +1293,7 @@ function ScheduleTab({ league, season }: { league: string; season: string }) {
     refresh();
   };
 
+  const isPlayoffSeason = season.toLowerCase().includes("playoff");
   const grouped = games.reduce<Record<string, Game[]>>((acc, g) => {
     const d = new Date(g.scheduled_at);
     const dow = d.getDay();
@@ -1414,11 +1415,9 @@ function ScheduleTab({ league, season }: { league: string; season: string }) {
           <p className="text-slate-600 text-sm">No games yet.</p>
         ) : (
           <div className="space-y-5">
-            {weekKeys.map((wk, wi) => (
-              <div key={wk}>
-                <div className="text-xs font-semibold text-zinc-500 uppercase tracking-widest mb-2">Week {wi + 1}</div>
-                <div className="space-y-2">
-                  {grouped[wk].sort((a,b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()).map((g) => (
+            {isPlayoffSeason ? (
+              <div className="space-y-2">
+                {[...games].sort((a,b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()).map((g) => (
                     <div key={g.id} className="rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 hover:border-slate-700 transition">
                       <div className="flex items-center justify-between gap-3 flex-wrap">
                         <div className="flex items-center gap-3 flex-wrap">
@@ -1468,9 +1467,66 @@ function ScheduleTab({ league, season }: { league: string; season: string }) {
                       )}
                     </div>
                   ))}
-                </div>
               </div>
-            ))}
+            ) : (
+              weekKeys.map((wk, wi) => (
+                <div key={wk}>
+                  <div className="text-xs font-semibold text-zinc-500 uppercase tracking-widest mb-2">Week {wi + 1}</div>
+                  <div className="space-y-2">
+                    {grouped[wk].sort((a,b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()).map((g) => (
+                      <div key={g.id} className="rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 hover:border-slate-700 transition">
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <span className="font-semibold text-white">{g.home_team?.name ?? "?"} vs {g.away_team?.name ?? "?"}</span>
+                            <span className="text-slate-500 text-xs">{new Date(g.scheduled_at).toLocaleString(undefined, {weekday:"short",month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})}</span>
+                            {g.status === "completed" && <span className="font-bold text-green-400">{g.home_score} – {g.away_score}</span>}
+                            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${g.status === "completed" ? "bg-green-900 text-green-300" : "bg-yellow-900 text-yellow-300"}`}>{g.status === "completed" ? "Final" : "Scheduled"}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button className={btnSecondary} onClick={() => {
+                              const opening = completingId !== g.id;
+                              setCompletingId(opening ? g.id : null);
+                              if (opening && g.status === "completed") {
+                                setHomeScore(String(g.home_score ?? ""));
+                                setAwayScore(String(g.away_score ?? ""));
+                              } else if (opening) {
+                                setHomeScore(""); setAwayScore("");
+                              }
+                              setErr("");
+                            }}>
+                              {completingId === g.id ? "Cancel" : g.status === "completed" ? "Edit Score" : "Enter Score"}
+                            </button>
+                            {g.status === "completed" && (
+                              <button className={btnSecondary} onClick={async () => {
+                                if (!confirm("Revert this game back to Scheduled? Scores will be cleared.")) return;
+                                const r = await fetch(`/api/games/${g.id}`, {
+                                  method: "PUT",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ status: "scheduled", home_score: null, away_score: null }),
+                                });
+                                if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Revert failed"); return; }
+                                setCompletingId(null); setHomeScore(""); setAwayScore(""); refresh();
+                              }}>
+                                Revert
+                              </button>
+                            )}
+                            <button className={btnDanger} onClick={() => deleteGame(g.id)}>Delete</button>
+                          </div>
+                        </div>
+                        {completingId === g.id && (
+                          <div className="mt-3 flex gap-2 items-center flex-wrap">
+                            <input className="rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-white focus:border-zinc-500 focus:outline-none w-28" type="number" placeholder={`${g.home_team?.abbreviation} score`} value={homeScore} onChange={(e) => setHomeScore(e.target.value)} />
+                            <span className="text-slate-400">–</span>
+                            <input className="rounded border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-white focus:border-zinc-500 focus:outline-none w-28" type="number" placeholder={`${g.away_team?.abbreviation} score`} value={awayScore} onChange={(e) => setAwayScore(e.target.value)} />
+                            <button className={btnPrimary} onClick={() => markCompleted(g.id)}>Save</button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         )}
       </div>
@@ -3153,7 +3209,7 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
 
   const updateMatchup = async (m: BracketMatchup, patch: object) => {
     setSaving(m.id); setErr("");
-    const merged = { league, season, round_name:m.round_name, round_order:m.round_order, matchup_index:m.matchup_index, team1_id:m.team1_id, team2_id:m.team2_id, team1_score:m.team1_score, team2_score:m.team2_score, winner_id:m.winner_id, ...patch } as Record<string,unknown>;
+    const merged = { league, season, round_name:m.round_name, round_order:m.round_order, matchup_index:m.matchup_index, team1_id:m.team1_id ?? (m.team1 as any)?.id ?? null, team2_id:m.team2_id ?? (m.team2 as any)?.id ?? null, team1_score:m.team1_score, team2_score:m.team2_score, winner_id:m.winner_id, ...patch } as Record<string,unknown>;
     await upsert(merged);
 
     // Auto-advance winner to next round
@@ -3162,14 +3218,14 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
       // Determine which "track" this matchup belongs to and find the next round matchup
       const findNext = (roundsList: {name:string;order:number;matchups:BracketMatchup[]}[], dir: "LR"|"RL") => {
         for (let ri=0; ri<roundsList.length; ri++) {
-          const idx = roundsList[ri].matchups.findIndex(x=>x.id===m.id);
-          if (idx === -1) continue;
+          const found = roundsList[ri].matchups.find(x=>x.id===m.id);
+          if (!found) continue;
           const nextRound = roundsList[ri+1];
           if (!nextRound) return null;
-          const nextIdx = Math.floor(idx/2);
-          const nextMatchup = nextRound.matchups[nextIdx];
+          const nextIdx = Math.floor(m.matchup_index/2);
+          const nextMatchup = nextRound.matchups.find(x=>x.matchup_index===nextIdx);
           if (!nextMatchup) return null;
-          const slot = idx%2===0 ? "team1_id" : "team2_id";
+          const slot = m.matchup_index%2===0 ? "team1_id" : "team2_id";
           return { nextMatchup, slot };
         }
         return null;
@@ -3188,8 +3244,8 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
       if (found) {
         const { nextMatchup, slot } = found;
         await upsert({ league, season, round_name:nextMatchup.round_name, round_order:nextMatchup.round_order, matchup_index:nextMatchup.matchup_index,
-          team1_id: slot==="team1_id" ? winnerId : nextMatchup.team1_id,
-          team2_id: slot==="team2_id" ? winnerId : nextMatchup.team2_id,
+          team1_id: slot==="team1_id" ? winnerId : (nextMatchup.team1_id ?? (nextMatchup.team1 as any)?.id ?? null),
+          team2_id: slot==="team2_id" ? winnerId : (nextMatchup.team2_id ?? (nextMatchup.team2 as any)?.id ?? null),
           team1_score:nextMatchup.team1_score, team2_score:nextMatchup.team2_score, winner_id:nextMatchup.winner_id });
       }
     }

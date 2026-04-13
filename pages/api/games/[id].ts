@@ -6,6 +6,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { id } = req.query;
   if (!id || typeof id !== "string") return res.status(400).json({ error: "Missing id" });
 
+  if (req.method === "GET") {
+    const { data, error } = await supabase
+      .from("games")
+      .select("*, home_team:home_team_id(id,name,abbreviation,logo_url), away_team:away_team_id(id,name,abbreviation,logo_url)")
+      .eq("id", id)
+      .single();
+    if (error) return res.status(404).json({ error: error.message });
+    return res.status(200).json(data);
+  }
+
   if (req.method === "PUT") {
     const admin = await requireAdmin(req, res);
     if (!admin) return;

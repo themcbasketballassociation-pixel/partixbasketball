@@ -79,7 +79,7 @@ function sumCol(stats: GameStat[], key: string): string {
   }
 }
 
-function TeamTable({ team, stats, side }: { team: Team; stats: GameStat[]; side: "home" | "away" }) {
+function ModalTeamTable({ team, stats, side }: { team: Team; stats: GameStat[]; side: "home" | "away" }) {
   const sorted = [...stats].sort((a, b) => (b.points ?? 0) - (a.points ?? 0));
   const isRight = side === "away";
 
@@ -87,56 +87,56 @@ function TeamTable({ team, stats, side }: { team: Team; stats: GameStat[]; side:
     <div style={{ flex: 1, minWidth: 0 }}>
       {/* Team label */}
       <div style={{
-        display: "flex", alignItems: "center", gap: 10,
-        padding: "10px 14px",
-        background: "#111", borderBottom: "1px solid #1e1e1e",
+        display: "flex", alignItems: "center", gap: 12,
+        padding: "14px 20px",
+        background: "#0d0d0d", borderBottom: "1px solid #1e1e1e",
         justifyContent: isRight ? "flex-end" : "flex-start",
         flexDirection: isRight ? "row-reverse" : "row",
       }}>
         {team.logo_url
-          ? <img src={team.logo_url} alt="" style={{ width: 28, height: 28, objectFit: "contain", flexShrink: 0 }} />
-          : <div style={{ width: 28, height: 28, borderRadius: 6, background: "#222", border: "1px solid #333", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#555", fontWeight: 700 }}>{team.abbreviation}</div>
+          ? <img src={team.logo_url} alt="" style={{ width: 36, height: 36, objectFit: "contain", flexShrink: 0 }} />
+          : <div style={{ width: 36, height: 36, borderRadius: 8, background: "#222", border: "1px solid #333", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: "#555", fontWeight: 700 }}>{team.abbreviation}</div>
         }
-        <span style={{ fontWeight: 700, color: "#fff", fontSize: "0.875rem" }}>{team.name}</span>
+        <span style={{ fontWeight: 800, color: "#fff", fontSize: "1.1rem" }}>{team.name}</span>
       </div>
 
       {stats.length === 0 ? (
-        <p style={{ padding: "14px 16px", color: "#444", fontSize: "0.8rem" }}>No stats entered.</p>
+        <p style={{ padding: "20px", color: "#444", fontSize: "0.9rem" }}>No stats entered.</p>
       ) : (
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", fontSize: "0.8rem", borderCollapse: "collapse" }}>
+          <table style={{ width: "100%", fontSize: "0.9rem", borderCollapse: "collapse" }}>
             <thead>
-              <tr style={{ background: "#0d0d0d", borderBottom: "1px solid #1e1e1e" }}>
-                <th style={{ padding: "8px 10px", textAlign: isRight ? "right" : "left", color: "#555", fontSize: "0.65rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", whiteSpace: "nowrap" }}>Player</th>
+              <tr style={{ background: "#0a0a0a", borderBottom: "1px solid #1e1e1e" }}>
+                <th style={{ padding: "10px 14px", textAlign: isRight ? "right" : "left", color: "#555", fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", whiteSpace: "nowrap" }}>Player</th>
                 {COLS.map((c) => (
-                  <th key={c.key} style={{ padding: "8px 8px", textAlign: "center", color: "#555", fontSize: "0.65rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>{c.label}</th>
+                  <th key={c.key} style={{ padding: "10px 10px", textAlign: "center", color: "#555", fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>{c.label}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {sorted.map((s, si) => (
-                <tr key={s.id} style={{ borderTop: si > 0 ? "1px solid #1a1a1a" : undefined, background: si % 2 === 0 ? "transparent" : "rgba(255,255,255,0.015)" }}>
-                  <td style={{ padding: "8px 10px", whiteSpace: "nowrap" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: isRight ? "flex-end" : "flex-start", flexDirection: isRight ? "row-reverse" : "row" }}>
+                <tr key={s.id} style={{ borderTop: si > 0 ? "1px solid #1a1a1a" : undefined, background: si % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)" }}>
+                  <td style={{ padding: "10px 14px", whiteSpace: "nowrap" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: isRight ? "flex-end" : "flex-start", flexDirection: isRight ? "row-reverse" : "row" }}>
                       <img
-                        src={`https://minotar.net/avatar/${s.players?.mc_username ?? s.mc_uuid}/20`}
+                        src={`https://minotar.net/avatar/${s.players?.mc_username ?? s.mc_uuid}/24`}
                         alt=""
-                        style={{ width: 20, height: 20, borderRadius: 4, flexShrink: 0, imageRendering: "pixelated" }}
+                        style={{ width: 24, height: 24, borderRadius: 4, flexShrink: 0, imageRendering: "pixelated" }}
                         onError={(e) => {
                           const img = e.currentTarget;
                           if (!img.src.includes("crafatar")) {
-                            img.src = `https://crafatar.com/avatars/${s.mc_uuid}?size=20&default=MHF_Steve&overlay`;
+                            img.src = `https://crafatar.com/avatars/${s.mc_uuid}?size=24&default=MHF_Steve&overlay`;
                           }
                         }}
                       />
-                      <span style={{ fontWeight: 600, color: "#e2e8f0", fontSize: "0.8rem" }}>{s.players?.mc_username ?? s.mc_uuid}</span>
+                      <span style={{ fontWeight: 600, color: "#e2e8f0", fontSize: "0.9rem" }}>{s.players?.mc_username ?? s.mc_uuid}</span>
                     </div>
                   </td>
                   {COLS.map((c) => {
                     const val = c.render(s);
                     const isPts = c.key === "pts";
                     return (
-                      <td key={c.key} style={{ padding: "8px 8px", textAlign: "center", color: isPts ? "#fff" : "#888", fontWeight: isPts ? 700 : 400 }}>
+                      <td key={c.key} style={{ padding: "10px 10px", textAlign: "center", color: isPts ? "#fff" : "#888", fontWeight: isPts ? 700 : 400, fontSize: "0.9rem" }}>
                         {val}
                       </td>
                     );
@@ -144,12 +144,11 @@ function TeamTable({ team, stats, side }: { team: Team; stats: GameStat[]; side:
                 </tr>
               ))}
             </tbody>
-            {/* Totals row */}
             <tfoot>
               <tr style={{ borderTop: "2px solid #1e1e1e", background: "#0d0d0d" }}>
-                <td style={{ padding: "8px 10px", color: "#555", fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", textAlign: isRight ? "right" : "left" }}>Totals</td>
+                <td style={{ padding: "10px 14px", color: "#555", fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", textAlign: isRight ? "right" : "left" }}>Totals</td>
                 {COLS.map((c) => (
-                  <td key={c.key} style={{ padding: "8px 8px", textAlign: "center", color: "#bbb", fontWeight: 600, fontSize: "0.8rem" }}>
+                  <td key={c.key} style={{ padding: "10px 10px", textAlign: "center", color: "#bbb", fontWeight: 600, fontSize: "0.9rem" }}>
                     {sumCol(sorted, c.key)}
                   </td>
                 ))}
@@ -162,6 +161,36 @@ function TeamTable({ team, stats, side }: { team: Team; stats: GameStat[]; side:
   );
 }
 
+function splitStats(stats: GameStat[], game: Game, allPlayerTeams: PlayerTeam[], season: string) {
+  const homeId = game.home_team?.id;
+  const awayId = game.away_team?.id;
+  const homeAbbr = game.home_team?.abbreviation?.toUpperCase();
+  const awayAbbr = game.away_team?.abbreviation?.toUpperCase();
+  const baseSeason = season.replace(/ Playoffs$/i, "");
+
+  const seasonRecords = allPlayerTeams.filter(
+    (pt) => pt.season === baseSeason || pt.season === season
+  );
+  const pool = seasonRecords.length > 0 ? seasonRecords : allPlayerTeams;
+
+  let homeStats = stats.filter((s) => pool.some((pt) => pt.mc_uuid === s.mc_uuid && pt.team_id === homeId));
+  let awayStats = stats.filter((s) => pool.some((pt) => pt.mc_uuid === s.mc_uuid && pt.team_id === awayId));
+  let matchedCount = homeStats.length + awayStats.length;
+
+  if (matchedCount < Math.ceil(stats.length / 2) && (homeAbbr || awayAbbr)) {
+    homeStats = stats.filter((s) =>
+      allPlayerTeams.some((pt) => pt.mc_uuid === s.mc_uuid && pt.teams?.abbreviation?.toUpperCase() === homeAbbr)
+    );
+    awayStats = stats.filter((s) =>
+      allPlayerTeams.some((pt) => pt.mc_uuid === s.mc_uuid && pt.teams?.abbreviation?.toUpperCase() === awayAbbr)
+    );
+    matchedCount = homeStats.length + awayStats.length;
+  }
+
+  const allFallback = stats.length > 0 && matchedCount < Math.ceil(stats.length / 2) ? stats : null;
+  return { homeStats, awayStats, allFallback };
+}
+
 export default function BoxScoresPage({ params }: { params?: Promise<{ league?: string }> }) {
   const resolved = React.use(params ?? Promise.resolve({})) as { league?: string };
   const slug = resolved.league ?? "";
@@ -169,19 +198,17 @@ export default function BoxScoresPage({ params }: { params?: Promise<{ league?: 
 
   const [games, setGames] = React.useState<Game[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const [expanded, setExpanded] = React.useState<string | null>(() => {
-    if (typeof window !== "undefined") {
-      return new URLSearchParams(window.location.search).get("game");
-    }
-    return null;
-  });
   const [statsCache, setStatsCache] = React.useState<Record<string, GameStat[]>>({});
-  // Raw list of all player_team records for the league — used to look up by team_id per game
   const [allPlayerTeams, setAllPlayerTeams] = React.useState<PlayerTeam[]>([]);
   const [regularSeasons, setRegularSeasons] = React.useState<string[]>([]);
   const [playoffSeasons, setPlayoffSeasons] = React.useState<string[]>([]);
   const [season, setSeason] = React.useState<string>("");
   const [tab, setTab] = React.useState<"regular" | "playoffs">("regular");
+
+  // Full-screen modal state
+  const [modalGame, setModalGame] = React.useState<Game | null>(null);
+  const [modalStats, setModalStats] = React.useState<GameStat[]>([]);
+  const [modalLoading, setModalLoading] = React.useState(false);
 
   React.useEffect(() => {
     if (!slug) return;
@@ -206,8 +233,6 @@ export default function BoxScoresPage({ params }: { params?: Promise<{ league?: 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
-  // Fetch ALL player_team records for the league (all seasons) so we can match
-  // any player to any team_id that appears as home/away in a game
   React.useEffect(() => {
     if (!slug) return;
     fetch(`/api/teams/players?league=${slug}`)
@@ -229,195 +254,261 @@ export default function BoxScoresPage({ params }: { params?: Promise<{ league?: 
           : [];
         setGames(completed.reverse());
         setLoading(false);
-        // Pre-load stats for the game specified in the URL ?game= param
-        const urlGameId = typeof window !== "undefined"
-          ? new URLSearchParams(window.location.search).get("game")
-          : null;
-        if (urlGameId) {
-          setStatsCache((prev) => {
-            if (prev[urlGameId]) return prev; // already cached
-            fetch(`/api/game-stats?game_id=${urlGameId}`)
-              .then((r) => r.json())
-              .then((stats) => {
-                setStatsCache((p) => ({ ...p, [urlGameId]: Array.isArray(stats) ? stats : [] }));
-              }).catch(() => {});
-            return prev;
-          });
-        }
       })
       .catch(() => setLoading(false));
   }, [slug, season]);
 
-  const toggleGame = async (gameId: string) => {
-    if (expanded === gameId) { setExpanded(null); return; }
-    setExpanded(gameId);
-    if (!statsCache[gameId]) {
-      const data = await fetch(`/api/game-stats?game_id=${gameId}`).then((r) => r.json());
-      setStatsCache((prev) => ({ ...prev, [gameId]: Array.isArray(data) ? data : [] }));
-    }
+  // On mount, open game from ?game= URL param
+  React.useEffect(() => {
+    if (!slug) return;
+    const urlGameId = typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("game")
+      : null;
+    if (!urlGameId) return;
+    openModal(urlGameId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug]);
+
+  const openModal = async (game: Game | string) => {
+    const gameId = typeof game === "string" ? game : game.id;
+    setModalLoading(true);
+    setModalGame(typeof game === "string" ? null : game);
+    setModalStats([]);
+
+    const [gameData, statsData] = await Promise.all([
+      typeof game === "string"
+        ? fetch(`/api/games/${gameId}`).then((r) => r.json()).catch(() => null)
+        : Promise.resolve(game),
+      statsCache[gameId]
+        ? Promise.resolve(statsCache[gameId])
+        : fetch(`/api/game-stats?game_id=${gameId}`).then((r) => r.json()).then((d) => Array.isArray(d) ? d : []).catch(() => []),
+    ]);
+
+    setModalGame(gameData);
+    setModalStats(statsData);
+    setStatsCache((prev) => ({ ...prev, [gameId]: statsData }));
+    setModalLoading(false);
   };
 
+  const closeModal = () => { setModalGame(null); setModalStats([]); setModalLoading(false); };
+
+  // Close modal on Escape key
+  React.useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") closeModal(); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const modalIsOpen = modalLoading || modalGame !== null;
+
   return (
-    <div style={{ borderRadius: "1rem", border: "1px solid #1e1e1e", background: "#111", overflow: "hidden" }}>
-      {/* Page header */}
-      <div style={{ padding: "20px 24px", borderBottom: "1px solid #1e1e1e", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-        <div>
-          <h2 style={{ fontSize: "1.5rem", fontWeight: 700, color: "#fff", margin: 0 }}>Box Scores</h2>
-          <p style={{ color: "#888", fontSize: "0.875rem", margin: "2px 0 0" }}>{leagueDisplay}</p>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          {/* Regular / Playoffs toggle */}
-          <div style={{ display: "flex", borderRadius: 8, overflow: "hidden", border: "1px solid #2a2a2a" }}>
-            {(["regular", "playoffs"] as const).map((t) => (
-              <button key={t} onClick={() => setTab(t)}
-                style={{ padding: "6px 16px", fontSize: "0.78rem", fontWeight: 700, cursor: "pointer", border: "none",
-                  borderRight: t === "regular" ? "1px solid #2a2a2a" : "none",
-                  background: tab === t ? "#2563eb" : "#161616",
-                  color: tab === t ? "#fff" : "#666" }}>
-                {t === "regular" ? "Regular Season" : "🏆 Playoffs"}
-              </button>
-            ))}
+    <>
+      {/* ── Full-screen modal ── */}
+      {modalIsOpen && (
+        <div
+          style={{
+            position: "fixed", inset: 0, zIndex: 9999,
+            background: "rgba(0,0,0,0.92)",
+            display: "flex", flexDirection: "column",
+            overflowY: "auto",
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}
+        >
+          {/* Modal close bar */}
+          <div style={{ position: "sticky", top: 0, zIndex: 1, background: "#0a0a0a", borderBottom: "1px solid #1e1e1e", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 24px", flexShrink: 0 }}>
+            <span style={{ color: "#555", fontSize: "0.8rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>Box Score</span>
+            <button
+              onClick={closeModal}
+              style={{ background: "#1a1a1a", border: "1px solid #2a2a2a", color: "#aaa", borderRadius: 8, padding: "6px 16px", cursor: "pointer", fontSize: "0.85rem", fontWeight: 600 }}
+            >
+              ✕ Close
+            </button>
           </div>
-          {/* Season dropdown for whichever tab is active */}
-          {(tab === "regular" ? regularSeasons : playoffSeasons).length > 0 && (
-            <select value={season} onChange={(e) => setSeason(e.target.value)}
-              style={{ background: "#111", border: "1px solid #1e1e1e", color: "#fff", borderRadius: "0.75rem", padding: "6px 12px", fontSize: "0.875rem", outline: "none", cursor: "pointer" }}>
-              {(tab === "regular" ? regularSeasons : playoffSeasons).map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-          )}
+
+          {modalLoading ? (
+            <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#555", fontSize: "1.1rem" }}>
+              Loading box score…
+            </div>
+          ) : modalGame ? (
+            <div style={{ flex: 1, maxWidth: 1400, width: "100%", margin: "0 auto", padding: "0 0 40px" }}>
+              {/* Score header */}
+              <div style={{
+                display: "grid", gridTemplateColumns: "1fr auto 1fr",
+                alignItems: "center", padding: "32px 40px", gap: 24,
+              }}>
+                {/* Home */}
+                <div style={{ display: "flex", alignItems: "center", gap: 16, justifyContent: "flex-end" }}>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontWeight: 800, color: (modalGame.home_score ?? 0) >= (modalGame.away_score ?? 0) ? "#fff" : "#666", fontSize: "1.5rem", lineHeight: 1.1 }}>{modalGame.home_team?.name}</div>
+                    <div style={{ fontSize: "0.8rem", color: "#555", marginTop: 3 }}>{modalGame.home_team?.abbreviation} · HOME</div>
+                  </div>
+                  {modalGame.home_team?.logo_url
+                    ? <img src={modalGame.home_team.logo_url} alt="" style={{ width: 72, height: 72, objectFit: "contain", flexShrink: 0, opacity: (modalGame.home_score ?? 0) >= (modalGame.away_score ?? 0) ? 1 : 0.4 }} />
+                    : <div style={{ width: 72, height: 72, borderRadius: 12, background: "#1a1a1a", border: "1px solid #2a2a2a", display: "flex", alignItems: "center", justifyContent: "center", color: "#555", fontSize: 14, fontWeight: 700 }}>{modalGame.home_team?.abbreviation}</div>
+                  }
+                </div>
+
+                {/* Score */}
+                <div style={{ textAlign: "center", minWidth: 160 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16 }}>
+                    <span style={{ fontSize: "3.5rem", fontWeight: 900, color: (modalGame.home_score ?? 0) > (modalGame.away_score ?? 0) ? "#fff" : "#555", fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>{modalGame.home_score}</span>
+                    <span style={{ fontSize: "1.5rem", color: "#333", fontWeight: 700 }}>–</span>
+                    <span style={{ fontSize: "3.5rem", fontWeight: 900, color: (modalGame.away_score ?? 0) > (modalGame.home_score ?? 0) ? "#fff" : "#555", fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>{modalGame.away_score}</span>
+                  </div>
+                  <div style={{ marginTop: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+                    <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#4ade80", background: "rgba(74,222,128,0.1)", borderRadius: 999, padding: "3px 10px" }}>FINAL</span>
+                    <span style={{ fontSize: "0.75rem", color: "#444" }}>
+                      {new Date(modalGame.scheduled_at).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Away */}
+                <div style={{ display: "flex", alignItems: "center", gap: 16, justifyContent: "flex-start" }}>
+                  {modalGame.away_team?.logo_url
+                    ? <img src={modalGame.away_team.logo_url} alt="" style={{ width: 72, height: 72, objectFit: "contain", flexShrink: 0, opacity: (modalGame.away_score ?? 0) >= (modalGame.home_score ?? 0) ? 1 : 0.4 }} />
+                    : <div style={{ width: 72, height: 72, borderRadius: 12, background: "#1a1a1a", border: "1px solid #2a2a2a", display: "flex", alignItems: "center", justifyContent: "center", color: "#555", fontSize: 14, fontWeight: 700 }}>{modalGame.away_team?.abbreviation}</div>
+                  }
+                  <div style={{ textAlign: "left" }}>
+                    <div style={{ fontWeight: 800, color: (modalGame.away_score ?? 0) >= (modalGame.home_score ?? 0) ? "#fff" : "#666", fontSize: "1.5rem", lineHeight: 1.1 }}>{modalGame.away_team?.name}</div>
+                    <div style={{ fontSize: "0.8rem", color: "#555", marginTop: 3 }}>{modalGame.away_team?.abbreviation} · AWAY</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Stat tables */}
+              <div style={{ borderTop: "1px solid #1e1e1e" }}>
+                {modalStats.length === 0 ? (
+                  <p style={{ padding: "32px", color: "#444", fontSize: "1rem", textAlign: "center" }}>No box score entered for this game yet.</p>
+                ) : (() => {
+                  const { homeStats, awayStats, allFallback } = splitStats(modalStats, modalGame, allPlayerTeams, season);
+                  return allFallback ? (
+                    <ModalTeamTable team={modalGame.home_team} stats={allFallback} side="home" />
+                  ) : (
+                    <div style={{ display: "flex", gap: 0 }}>
+                      <div style={{ flex: 1, minWidth: 0, borderRight: "2px solid #0a0a0a" }}>
+                        <ModalTeamTable team={modalGame.home_team} stats={homeStats} side="home" />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <ModalTeamTable team={modalGame.away_team} stats={awayStats} side="away" />
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          ) : null}
         </div>
-      </div>
+      )}
 
-      {loading ? (
-        <div style={{ padding: 40, textAlign: "center", color: "#555" }}>Loading...</div>
-      ) : games.length === 0 ? (
-        <div style={{ padding: 40, textAlign: "center", color: "#555" }}>
-          {tab === "playoffs" ? "No playoff box scores yet." : "No completed games yet."}
+      {/* ── Main page ── */}
+      <div style={{ borderRadius: "1rem", border: "1px solid #1e1e1e", background: "#111", overflow: "hidden" }}>
+        {/* Page header */}
+        <div style={{ padding: "20px 24px", borderBottom: "1px solid #1e1e1e", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+          <div>
+            <h2 style={{ fontSize: "1.5rem", fontWeight: 700, color: "#fff", margin: 0 }}>Box Scores</h2>
+            <p style={{ color: "#888", fontSize: "0.875rem", margin: "2px 0 0" }}>{leagueDisplay}</p>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            {/* Regular / Playoffs toggle */}
+            <div style={{ display: "flex", borderRadius: 8, overflow: "hidden", border: "1px solid #2a2a2a" }}>
+              {(["regular", "playoffs"] as const).map((t) => (
+                <button key={t} onClick={() => setTab(t)}
+                  style={{ padding: "6px 16px", fontSize: "0.78rem", fontWeight: 700, cursor: "pointer", border: "none",
+                    borderRight: t === "regular" ? "1px solid #2a2a2a" : "none",
+                    background: tab === t ? "#2563eb" : "#161616",
+                    color: tab === t ? "#fff" : "#666" }}>
+                  {t === "regular" ? "Regular Season" : "🏆 Playoffs"}
+                </button>
+              ))}
+            </div>
+            {/* Season dropdown */}
+            {(tab === "regular" ? regularSeasons : playoffSeasons).length > 0 && (
+              <select value={season} onChange={(e) => setSeason(e.target.value)}
+                style={{ background: "#111", border: "1px solid #1e1e1e", color: "#fff", borderRadius: "0.75rem", padding: "6px 12px", fontSize: "0.875rem", outline: "none", cursor: "pointer" }}>
+                {(tab === "regular" ? regularSeasons : playoffSeasons).map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            )}
+          </div>
         </div>
-      ) : (
-        <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
-          {games.map((g) => {
-            const stats = statsCache[g.id] ?? [];
-            const isOpen = expanded === g.id;
-            const homeWon = (g.home_score ?? 0) > (g.away_score ?? 0);
-            const awayWon = (g.away_score ?? 0) > (g.home_score ?? 0);
 
-            // Split stats by team using a two-pass approach:
-            // Pass 1: exact team_id match (works when game and player_teams share the same UUIDs)
-            // Pass 2: team abbreviation match (fallback for when teams were re-created with new UUIDs)
-            const homeId = g.home_team?.id;
-            const awayId = g.away_team?.id;
-            const homeAbbr = g.home_team?.abbreviation?.toUpperCase();
-            const awayAbbr = g.away_team?.abbreviation?.toUpperCase();
-            const baseSeason = season.replace(/ Playoffs$/i, "");
+        {loading ? (
+          <div style={{ padding: 40, textAlign: "center", color: "#555" }}>Loading...</div>
+        ) : games.length === 0 ? (
+          <div style={{ padding: 40, textAlign: "center", color: "#555" }}>
+            {tab === "playoffs" ? "No playoff box scores yet." : "No completed games yet."}
+          </div>
+        ) : (
+          <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 10 }}>
+            {games.map((g) => {
+              const homeWon = (g.home_score ?? 0) > (g.away_score ?? 0);
+              const awayWon = (g.away_score ?? 0) > (g.home_score ?? 0);
 
-            // Prefer records from the current (or base) season so historical assignments don't bleed in
-            const seasonRecords = allPlayerTeams.filter(
-              (pt) => pt.season === baseSeason || pt.season === season
-            );
-            const pool = seasonRecords.length > 0 ? seasonRecords : allPlayerTeams;
-
-            let homeStats = stats.filter((s) => pool.some((pt) => pt.mc_uuid === s.mc_uuid && pt.team_id === homeId));
-            let awayStats = stats.filter((s) => pool.some((pt) => pt.mc_uuid === s.mc_uuid && pt.team_id === awayId));
-            let matchedCount = homeStats.length + awayStats.length;
-
-            // Fallback: if UUIDs didn't match (teams were re-created), try matching by abbreviation
-            if (matchedCount < Math.ceil(stats.length / 2) && (homeAbbr || awayAbbr)) {
-              const allPool = allPlayerTeams; // use all records for abbr fallback
-              homeStats = stats.filter((s) =>
-                allPool.some((pt) => pt.mc_uuid === s.mc_uuid && pt.teams?.abbreviation?.toUpperCase() === homeAbbr)
-              );
-              awayStats = stats.filter((s) =>
-                allPool.some((pt) => pt.mc_uuid === s.mc_uuid && pt.teams?.abbreviation?.toUpperCase() === awayAbbr)
-              );
-              matchedCount = homeStats.length + awayStats.length;
-            }
-
-            // If still not enough, show all stats in a single table rather than nothing
-            const allStats = stats.length > 0 && matchedCount < Math.ceil(stats.length / 2) ? stats : null;
-
-            return (
-              <div key={g.id} style={{ borderRadius: "0.875rem", border: "1px solid #1e1e1e", background: "#161616", overflow: "hidden" }}>
-
-                {/* ── Score header (clickable) ── */}
+              return (
                 <button
-                  onClick={() => toggleGame(g.id)}
-                  style={{ width: "100%", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                  key={g.id}
+                  onClick={() => openModal(g)}
+                  style={{
+                    width: "100%", background: "none", border: "1px solid #1e1e1e", cursor: "pointer", padding: 0,
+                    borderRadius: "0.875rem", overflow: "hidden", transition: "border-color 0.15s",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.borderColor = "#333")}
+                  onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#1e1e1e")}
                 >
                   <div style={{
                     display: "grid",
                     gridTemplateColumns: "1fr auto 1fr",
                     alignItems: "center",
-                    padding: "18px 24px",
-                    gap: 16,
+                    padding: "16px 20px",
+                    gap: 12,
+                    background: "#161616",
                   }}>
                     {/* Home team */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 12, justifyContent: "flex-end" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, justifyContent: "flex-end" }}>
                       <div style={{ textAlign: "right" }}>
-                        <div style={{ fontWeight: 700, color: homeWon ? "#fff" : "#777", fontSize: "1rem", lineHeight: 1.2 }}>{g.home_team?.name}</div>
-                        <div style={{ fontSize: "0.7rem", color: "#555", marginTop: 2 }}>{g.home_team?.abbreviation} · HOME</div>
+                        <div style={{ fontWeight: 700, color: homeWon ? "#fff" : "#666", fontSize: "0.95rem", lineHeight: 1.2 }}>{g.home_team?.name}</div>
+                        <div style={{ fontSize: "0.65rem", color: "#444", marginTop: 1 }}>{g.home_team?.abbreviation} · HOME</div>
                       </div>
                       {g.home_team?.logo_url
-                        ? <img src={g.home_team.logo_url} alt="" style={{ width: 48, height: 48, objectFit: "contain", flexShrink: 0, opacity: homeWon ? 1 : 0.4 }} />
-                        : <div style={{ width: 48, height: 48, borderRadius: 8, background: "#222", border: "1px solid #333", display: "flex", alignItems: "center", justifyContent: "center", color: "#555", fontSize: 11, fontWeight: 700 }}>{g.home_team?.abbreviation}</div>
+                        ? <img src={g.home_team.logo_url} alt="" style={{ width: 40, height: 40, objectFit: "contain", flexShrink: 0, opacity: homeWon ? 1 : 0.4 }} />
+                        : <div style={{ width: 40, height: 40, borderRadius: 6, background: "#222", border: "1px solid #333", display: "flex", alignItems: "center", justifyContent: "center", color: "#555", fontSize: 10, fontWeight: 700 }}>{g.home_team?.abbreviation}</div>
                       }
                     </div>
 
                     {/* Score */}
-                    <div style={{ textAlign: "center", minWidth: 120 }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12 }}>
-                        <span style={{ fontSize: "2rem", fontWeight: 900, color: homeWon ? "#fff" : "#666", fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>{g.home_score}</span>
-                        <span style={{ fontSize: "1.1rem", color: "#333", fontWeight: 700 }}>–</span>
-                        <span style={{ fontSize: "2rem", fontWeight: 900, color: awayWon ? "#fff" : "#666", fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>{g.away_score}</span>
+                    <div style={{ textAlign: "center", minWidth: 100 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+                        <span style={{ fontSize: "1.75rem", fontWeight: 900, color: homeWon ? "#fff" : "#555", fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>{g.home_score}</span>
+                        <span style={{ fontSize: "1rem", color: "#333", fontWeight: 700 }}>–</span>
+                        <span style={{ fontSize: "1.75rem", fontWeight: 900, color: awayWon ? "#fff" : "#555", fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>{g.away_score}</span>
                       </div>
-                      <div style={{ marginTop: 4, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-                        <span style={{ fontSize: "0.65rem", fontWeight: 700, color: "#4ade80", background: "rgba(74,222,128,0.1)", borderRadius: 999, padding: "2px 8px" }}>FINAL</span>
-                        <span style={{ fontSize: "0.65rem", color: "#444" }}>
+                      <div style={{ marginTop: 3, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                        <span style={{ fontSize: "0.6rem", fontWeight: 700, color: "#4ade80", background: "rgba(74,222,128,0.1)", borderRadius: 999, padding: "2px 7px" }}>FINAL</span>
+                        <span style={{ fontSize: "0.6rem", color: "#444" }}>
                           {new Date(g.scheduled_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                         </span>
                       </div>
                     </div>
 
                     {/* Away team */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 12, justifyContent: "flex-start" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, justifyContent: "flex-start" }}>
                       {g.away_team?.logo_url
-                        ? <img src={g.away_team.logo_url} alt="" style={{ width: 48, height: 48, objectFit: "contain", flexShrink: 0, opacity: awayWon ? 1 : 0.4 }} />
-                        : <div style={{ width: 48, height: 48, borderRadius: 8, background: "#222", border: "1px solid #333", display: "flex", alignItems: "center", justifyContent: "center", color: "#555", fontSize: 11, fontWeight: 700 }}>{g.away_team?.abbreviation}</div>
+                        ? <img src={g.away_team.logo_url} alt="" style={{ width: 40, height: 40, objectFit: "contain", flexShrink: 0, opacity: awayWon ? 1 : 0.4 }} />
+                        : <div style={{ width: 40, height: 40, borderRadius: 6, background: "#222", border: "1px solid #333", display: "flex", alignItems: "center", justifyContent: "center", color: "#555", fontSize: 10, fontWeight: 700 }}>{g.away_team?.abbreviation}</div>
                       }
                       <div style={{ textAlign: "left" }}>
-                        <div style={{ fontWeight: 700, color: awayWon ? "#fff" : "#777", fontSize: "1rem", lineHeight: 1.2 }}>{g.away_team?.name}</div>
-                        <div style={{ fontSize: "0.7rem", color: "#555", marginTop: 2 }}>{g.away_team?.abbreviation} · AWAY</div>
+                        <div style={{ fontWeight: 700, color: awayWon ? "#fff" : "#666", fontSize: "0.95rem", lineHeight: 1.2 }}>{g.away_team?.name}</div>
+                        <div style={{ fontSize: "0.65rem", color: "#444", marginTop: 1 }}>{g.away_team?.abbreviation} · AWAY</div>
                       </div>
                     </div>
                   </div>
                 </button>
-
-                {/* ── Box score tables ── */}
-                {isOpen && (
-                  <div style={{ borderTop: "1px solid #1e1e1e" }}>
-                    {stats.length === 0 ? (
-                      <p style={{ padding: "16px 20px", color: "#444", fontSize: "0.875rem", textAlign: "center" }}>No box score entered for this game yet.</p>
-                    ) : allStats ? (
-                      /* Fallback: single table if we can't split */
-                      <TeamTable team={g.home_team} stats={allStats} side="home" />
-                    ) : (
-                      /* Side-by-side tables */
-                      <div style={{ display: "flex", gap: 0 }}>
-                        <div style={{ flex: 1, minWidth: 0, borderRight: "2px solid #0d0d0d" }}>
-                          <TeamTable team={g.home_team} stats={homeStats} side="home" />
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <TeamTable team={g.away_team} stats={awayStats} side="away" />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </>
   );
 }
