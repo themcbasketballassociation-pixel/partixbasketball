@@ -18,7 +18,7 @@ type StatRow = {
   team?: { id: string; name: string; abbreviation: string; logo_url?: string | null } | null;
 };
 
-type SortKey = "gp" | "ppg" | "rpg" | "apg" | "spg" | "bpg" | "fg_pct" | "mpg" | "topg" | "tppg" | "pass_attempts_pg" | "possession_time_pg";
+type SortKey = "gp" | "ppg" | "rpg" | "apg" | "spg" | "bpg" | "fg_pct" | "three_pt_pct" | "mpg" | "topg" | "tppg" | "pass_attempts_pg" | "possession_time_pg";
 type StatType = "regular" | "playoffs" | "total";
 
 type TeamStatRow = {
@@ -46,6 +46,7 @@ const COLS: { key: SortKey | "_rank" | "_player"; label: string; always?: boolea
   { key: "topg",              label: "TOPG",    always: true },
   { key: "tppg",              label: "3PG",     always: true },
   { key: "fg_pct",            label: "FG%",     always: true },
+  { key: "three_pt_pct",      label: "3FG%",    always: true },
   { key: "mpg",               label: "MPG",     always: false },
   { key: "pass_attempts_pg",  label: "PAPG",    always: true },
   { key: "possession_time_pg",label: "POSS",    always: true },
@@ -272,6 +273,7 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
                     <td className={`px-4 py-4 text-center text-base ${tdHighlight("topg") || "text-slate-300"}`}>{fmt(s.topg)}</td>
                     <td className={`px-4 py-4 text-center text-base ${tdHighlight("tppg") || "text-slate-300"}`}>{s.tppg != null ? fmt(s.tppg) : <span className="text-slate-600">N/A</span>}</td>
                     <td className={`px-4 py-4 text-center text-base ${tdHighlight("fg_pct") || "text-slate-300"}`}>{s.fg_pct != null ? `${s.fg_pct.toFixed(1)}%` : "—"}</td>
+                    <td className={`px-4 py-4 text-center text-base ${tdHighlight("three_pt_pct") || "text-slate-300"}`}>{(s as any).three_pt_pct != null ? `${(s as any).three_pt_pct.toFixed(1)}%` : "—"}</td>
                     {showMpg && <td className={`px-4 py-4 text-center text-base ${tdHighlight("mpg") || "text-slate-300"}`}>{fmt(s.mpg)}</td>}
                     <td className={`px-4 py-4 text-center text-base ${tdHighlight("pass_attempts_pg") || "text-slate-300"}`}>{s.pass_attempts_pg != null ? fmt(s.pass_attempts_pg) : <span className="text-slate-600">N/A</span>}</td>
                     <td className={`px-4 py-4 text-center text-base ${tdHighlight("possession_time_pg") || "text-slate-300"}`}>{s.possession_time_pg != null ? `${s.possession_time_pg}s` : <span className="text-slate-600">N/A</span>}</td>
