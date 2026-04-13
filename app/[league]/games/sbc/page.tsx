@@ -52,21 +52,25 @@ function pickDaily(dayNum: number, players: Player[], statsMap: Record<string, S
   const pool = withStats.length >= 3 ? withStats : players;
   if (pool.length < 3) return pool;
 
-  // Sort by composite score so we can pick players with similar stats
   const score = (p: Player) => {
     const s = statsMap[p.mc_uuid];
     if (!s) return 0;
     return (s.ppg ?? 0) + 0.5 * (s.rpg ?? 0) + 0.5 * (s.apg ?? 0);
   };
-  const sorted = [...pool].sort((a, b) => score(a) - score(b));
+  // Sort descending so index 0 = best player
+  const sorted = [...pool].sort((a, b) => score(b) - score(a));
+
+  // Only draw from the top 40% (minimum 6 players) to avoid low-stat scrubs
+  const topCount = Math.max(6, Math.ceil(sorted.length * 0.4));
+  const topTier = sorted.slice(0, Math.min(topCount, sorted.length));
 
   const rng = seededRng((SEASON_SEED + dayNum) * 97 + 13);
-  // Pick a window of 6 consecutive (by score) players, then randomly take 3
-  // This ensures all 3 players have similar stat lines, making choices non-obvious
-  const windowSize = Math.min(6, sorted.length);
-  const maxStart = sorted.length - windowSize;
+  // Within the top tier, pick a window of 5 consecutive players then randomly take 3
+  // This keeps all 3 close in ability, making the choice genuinely controversial
+  const windowSize = Math.min(5, topTier.length);
+  const maxStart = topTier.length - windowSize;
   const start = Math.floor(rng() * (maxStart + 1));
-  const window = sorted.slice(start, start + windowSize);
+  const window = topTier.slice(start, start + windowSize);
   return shuffled(window, rng).slice(0, 3);
 }
 
