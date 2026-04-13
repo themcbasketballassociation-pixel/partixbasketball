@@ -6,7 +6,9 @@ import { resolveLeague } from "../../../lib/leagueMapping";
 
 /** Extract numeric value from "Season N" for sorting */
 function seasonNum(s: string | null): number {
-  return parseInt((s ?? "0").match(/\d+/)?.[0] ?? "0");
+  if (!s) return 0;
+  const m = s.match(/\d+/);
+  return m ? parseInt(m[0]) : 0;
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -19,25 +21,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!discordId) return res.status(401).json({ error: "Unauthorized" });
 
   const { league: leagueRaw } = req.query;
-  const league = resolveLeague(leagueRaw);
+  const leagueSlug = Array.isArray(leagueRaw) ? leagueRaw[0] : (leagueRaw ?? "");
+  const leagueDb = resolveLeague(leagueRaw);
 
-  // Get all owner records for this Discord user in this league
-  let query = supabase
+  // Query matching both the DB identifier and the raw slug to handle any storage inconsistency
+  const leagueValues = [...new Set([leagueDb, leagueSlug])].filter(Boolean);
+
+  const { data, error } = await supabase
     .from("team_owners")
     .select("id, discord_id, league, season, teams(id, name, abbreviation, color2, division, logo_url)")
-    .eq("discord_id", discordId);
-  if (league) query = query.eq("league", league as string);
+    .eq("discord_id", discordId)
+    .in("league", leagueValues);
 
-  const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
-
   if (!data || data.length === 0) return res.status(200).json([]);
 
-  // Find the most recent season by numeric value
+  // Return the record(s) from the most recent season
   const sorted = [...data].sort((a, b) => seasonNum(b.season) - seasonNum(a.season));
   const latestSeason = sorted[0].season;
-
-  // Only return records from the most recent season
   const latestRecords = sorted.filter(r => r.season === latestSeason);
   return res.status(200).json(latestRecords);
 }
