@@ -10,7 +10,7 @@ const leagueNames: Record<string, string> = {
 type StatRow = {
   mc_uuid: string; mc_username: string; rank: number; gp: number;
   ppg: number | null; rpg: number | null; apg: number | null;
-  spg: number | null; bpg: number | null; fg_pct: number | null;
+  spg: number | null; bpg: number | null; fg_pct: number | null; three_pt_pct: number | null;
   mpg: number | null; topg: number | null;
   tppg: number | null;
   pass_attempts_pg: number | null;
@@ -273,7 +273,7 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
                     <td className={`px-4 py-4 text-center text-base ${tdHighlight("topg") || "text-slate-300"}`}>{fmt(s.topg)}</td>
                     <td className={`px-4 py-4 text-center text-base ${tdHighlight("tppg") || "text-slate-300"}`}>{s.tppg != null ? fmt(s.tppg) : <span className="text-slate-600">N/A</span>}</td>
                     <td className={`px-4 py-4 text-center text-base ${tdHighlight("fg_pct") || "text-slate-300"}`}>{s.fg_pct != null ? `${s.fg_pct.toFixed(1)}%` : "—"}</td>
-                    <td className={`px-4 py-4 text-center text-base ${tdHighlight("three_pt_pct") || "text-slate-300"}`}>{(s as any).three_pt_pct != null ? `${(s as any).three_pt_pct.toFixed(1)}%` : "—"}</td>
+                    <td className={`px-4 py-4 text-center text-base ${tdHighlight("three_pt_pct") || "text-slate-300"}`}>{s.three_pt_pct != null ? `${s.three_pt_pct.toFixed(1)}%` : "—"}</td>
                     {showMpg && <td className={`px-4 py-4 text-center text-base ${tdHighlight("mpg") || "text-slate-300"}`}>{fmt(s.mpg)}</td>}
                     <td className={`px-4 py-4 text-center text-base ${tdHighlight("pass_attempts_pg") || "text-slate-300"}`}>{s.pass_attempts_pg != null ? fmt(s.pass_attempts_pg) : <span className="text-slate-600">N/A</span>}</td>
                     <td className={`px-4 py-4 text-center text-base ${tdHighlight("possession_time_pg") || "text-slate-300"}`}>{s.possession_time_pg != null ? `${s.possession_time_pg}s` : <span className="text-slate-600">N/A</span>}</td>
