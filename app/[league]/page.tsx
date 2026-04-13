@@ -117,21 +117,25 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
       .then((data) => {
         if (Array.isArray(data)) {
           const completed = data.filter((g: Game) => (g.status === "final" || g.status === "completed") && g.home_score !== null);
-          setRecentGames(completed.slice(-5).reverse());
+          setRecentGames(completed.slice(-3).reverse());
         }
       })
       .catch(() => {});
 
-    // Fetch most recent season that actually has stats
+    // Fetch most recent season that actually has stats (playoffs count as more recent than base season)
     (async () => {
       try {
         const r = await fetch(`/api/stats/seasons?league=${slug}`);
         const data: { season: string; gp?: number | null }[] = await r.json();
         if (!Array.isArray(data)) return;
-        const reg = [...new Set(
-          data.map((d) => d.season).filter((s) => s && !s.toLowerCase().includes("playoff"))
-        )].sort((a, b) => b.localeCompare(a));
-        for (const s of reg) {
+        const seasonKey = (s: string) => {
+          const m = s.match(/Season\s+(\d+)/i);
+          const num = m ? parseInt(m[1]) : 0;
+          return num + (s.toLowerCase().includes("playoff") ? 0.5 : 0);
+        };
+        const all = [...new Set(data.map((d) => d.season).filter(Boolean))]
+          .sort((a, b) => seasonKey(b) - seasonKey(a));
+        for (const s of all) {
           const sr = await fetch(`/api/stats?league=${slug}&season=${encodeURIComponent(s)}`);
           const sd = await sr.json();
           if (Array.isArray(sd) && sd.length > 0) {
