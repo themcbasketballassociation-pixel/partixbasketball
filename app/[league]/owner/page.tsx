@@ -503,6 +503,7 @@ type SigningPlayer = { mc_uuid: string; mc_username: string; min_price: number }
 function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
   teamId: string; league: string; leagueSlug: string; contracts: Contract[]; ownerSeason: string | null; onRefresh: () => void;
 }) {
+  const isMcaa = leagueSlug === "mcaa";
   const TOTAL_CAP = 25000;
   const [available, setAvailable] = useState<SigningPlayer[]>([]);
   const [pendingSignings, setPendingSignings] = useState<Contract[]>([]);
@@ -556,17 +557,19 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
         <div><span style={{ color: "#555", fontSize: 12 }}>Cap remaining: </span><span style={{ color: "#22d3ee", fontWeight: 700 }}>{fmt(capRemaining)}</span></div>
       </div>
       <div style={{ background: "#0d1117", border: "1px solid #1a2030", borderRadius: 8, padding: "8px 12px", marginBottom: 16, fontSize: 12, color: "#555" }}>
-        Post-auction signings only · Players signed at their auction minimum price · No 2-season contracts · Requires admin approval
+        {isMcaa
+          ? "Sign available players · Players signed at their listed price · Requires admin approval"
+          : "Post-auction signings only · Players signed at their auction minimum price · No 2-season contracts · Requires admin approval"}
       </div>
 
       <div style={{ ...innerCard, marginBottom: 20 }}>
         <div style={{ color: "#aaa", fontWeight: 700, marginBottom: 14 }}>Request a Signing</div>
         <div style={{ marginBottom: 12 }}>
-          <label style={{ color: "#555", fontSize: 12, display: "block", marginBottom: 4 }}>Player (went undrafted in auction)</label>
+          <label style={{ color: "#555", fontSize: 12, display: "block", marginBottom: 4 }}>{isMcaa ? "Available player" : "Player (went undrafted in auction)"}</label>
           {loading ? (
             <div style={{ color: "#444", fontSize: 13 }}>Loading…</div>
           ) : available.length === 0 ? (
-            <div style={{ color: "#555", fontSize: 13 }}>No players available for signing yet. Players appear here after the auction closes without a bid.</div>
+            <div style={{ color: "#555", fontSize: 13 }}>{isMcaa ? "No players available for signing yet." : "No players available for signing yet. Players appear here after the auction closes without a bid."}</div>
           ) : (
             <select style={input} value={selectedPlayer} onChange={(e) => setSelectedPlayer(e.target.value)}>
               <option value="">— Select player —</option>
@@ -631,6 +634,120 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
   );
 }
 
+// ── CutTab ─────────────────────────────────────────────────────────────────────
+function CutTab({ teamId, leagueSlug, contracts, onRefresh }: {
+  teamId: string; leagueSlug: string; contracts: Contract[]; onRefresh: () => void;
+}) {
+  const [selectedId, setSelectedId] = useState("");
+  const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const activeContracts = contracts.filter((c) => c.status === "active");
+
+  const submit = async () => {
+    if (!selectedId) return setMsg({ type: "err", text: "Select a player" });
+    setMsg(null); setSubmitting(true);
+    const r = await fetch("/api/contracts/cut", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contract_id: selectedId, league: leagueSlug }),
+    });
+    const d = await r.json();
+    setSubmitting(false);
+    if (!r.ok) return setMsg({ type: "err", text: d.error });
+    setMsg({ type: "ok", text: d.message });
+    setSelectedId("");
+    onRefresh();
+  };
+
+  return (
+    <div>
+      <div style={{ background: "#0d1117", border: "1px solid #1a2030", borderRadius: 8, padding: "8px 12px", marginBottom: 16, fontSize: 12, color: "#555" }}>
+        Request to cut a player from your roster. Requires admin approval before taking effect.
+      </div>
+      <div style={{ ...innerCard, marginBottom: 20 }}>
+        <div style={{ color: "#aaa", fontWeight: 700, marginBottom: 14 }}>Cut a Player</div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ color: "#555", fontSize: 12, display: "block", marginBottom: 4 }}>Select player to cut</label>
+          {activeContracts.length === 0 ? (
+            <div style={{ color: "#555", fontSize: 13 }}>No active contracts on your roster.</div>
+          ) : (
+            <select style={input} value={selectedId} onChange={(e) => setSelectedId(e.target.value)}>
+              <option value="">— Select player —</option>
+              {activeContracts.map((c) => <option key={c.id} value={c.id}>{c.players.mc_username} ({fmt(c.amount)})</option>)}
+            </select>
+          )}
+        </div>
+        {msg && (
+          <div style={{ color: msg.type === "err" ? "#fca5a5" : "#86efac", background: msg.type === "err" ? "#450a0a" : "#052e16", border: `1px solid ${msg.type === "err" ? "#7f1d1d" : "#166534"}`, borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 13 }}>
+            {msg.text}
+          </div>
+        )}
+        <button onClick={submit} disabled={submitting || !selectedId} style={{ ...btn("danger"), opacity: (submitting || !selectedId) ? 0.5 : 1 }}>
+          {submitting ? "Submitting…" : "Request Cut"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── PortalTab ──────────────────────────────────────────────────────────────────
+function PortalTab({ teamId, leagueSlug, contracts, onRefresh }: {
+  teamId: string; leagueSlug: string; contracts: Contract[]; onRefresh: () => void;
+}) {
+  const [selectedId, setSelectedId] = useState("");
+  const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const activeContracts = contracts.filter((c) => c.status === "active");
+
+  const submit = async () => {
+    if (!selectedId) return setMsg({ type: "err", text: "Select a player" });
+    setMsg(null); setSubmitting(true);
+    const r = await fetch("/api/contracts/portal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contract_id: selectedId, league: leagueSlug }),
+    });
+    const d = await r.json();
+    setSubmitting(false);
+    if (!r.ok) return setMsg({ type: "err", text: d.error });
+    setMsg({ type: "ok", text: d.message });
+    setSelectedId("");
+    onRefresh();
+  };
+
+  return (
+    <div>
+      <div style={{ background: "#0d1117", border: "1px solid #1a2030", borderRadius: 8, padding: "8px 12px", marginBottom: 16, fontSize: 12, color: "#555" }}>
+        Submit a transfer portal request for a player. Once approved, they will enter the portal and become available to other teams.
+      </div>
+      <div style={{ ...innerCard, marginBottom: 20 }}>
+        <div style={{ color: "#aaa", fontWeight: 700, marginBottom: 14 }}>Enter Transfer Portal</div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ color: "#555", fontSize: 12, display: "block", marginBottom: 4 }}>Select player to portal</label>
+          {activeContracts.length === 0 ? (
+            <div style={{ color: "#555", fontSize: 13 }}>No active contracts on your roster.</div>
+          ) : (
+            <select style={input} value={selectedId} onChange={(e) => setSelectedId(e.target.value)}>
+              <option value="">— Select player —</option>
+              {activeContracts.map((c) => <option key={c.id} value={c.id}>{c.players.mc_username} ({fmt(c.amount)})</option>)}
+            </select>
+          )}
+        </div>
+        {msg && (
+          <div style={{ color: msg.type === "err" ? "#fca5a5" : "#86efac", background: msg.type === "err" ? "#450a0a" : "#052e16", border: `1px solid ${msg.type === "err" ? "#7f1d1d" : "#166534"}`, borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 13 }}>
+            {msg.text}
+          </div>
+        )}
+        <button onClick={submit} disabled={submitting || !selectedId} style={{ ...btn("primary"), opacity: (submitting || !selectedId) ? 0.5 : 1 }}>
+          {submitting ? "Submitting…" : "Submit Portal Request"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────────
 export default function OwnerPage() {
   const { data: session, status } = useSession();
@@ -644,7 +761,7 @@ export default function OwnerPage() {
   const [allTeams, setAllTeams] = useState<Team[]>([]);
   const [seasonTeamIds, setSeasonTeamIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"roster" | "bid" | "trades" | "signings">("roster");
+  const [tab, setTab] = useState<"roster" | "bid" | "trades" | "signings" | "cut" | "portal">("roster");
   const [isBoardMember, setIsBoardMember] = useState(false);
 
   const loadAll = useCallback(async () => {
@@ -693,6 +810,16 @@ export default function OwnerPage() {
   }, [status, leagueSlug]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+
+  // MBGL has no owner portal
+  if (leagueSlug === "mbgl") {
+    return (
+      <div style={{ maxWidth: 480, margin: "60px auto", background: "#111", border: "1px solid #222", borderRadius: 16, padding: 40, textAlign: "center" as const }}>
+        <div style={{ color: "#fff", fontWeight: 700, fontSize: 22, marginBottom: 8 }}>Not Available</div>
+        <div style={{ color: "#555", fontSize: 14 }}>The team owner portal is not available for the MBGL.</div>
+      </div>
+    );
+  }
 
   if (status === "loading" || loading)
     return <div style={{ color: "#444", textAlign: "center", padding: 60 }}>Loading…</div>;
@@ -753,10 +880,13 @@ export default function OwnerPage() {
 
         {/* Tabs */}
         <div style={{ display: "flex", borderBottom: "1px solid #1a1a1a" }}>
-          {([["roster", "My Roster"], ["signings", "Signings"], ["bid", `Live Auctions (${auctions.filter((a) => a.status === "active").length})`], ["trades", "Trades"]] as const).map(([t, label]) => (
+          {(leagueSlug === "mcaa"
+            ? [["roster", "My Roster"], ["signings", "Signings"], ["cut", "Cut Player"], ["portal", "Transfer Portal"]] as const
+            : [["roster", "My Roster"], ["signings", "Signings"], ["bid", `Live Auctions (${auctions.filter((a) => a.status === "active").length})`], ["trades", "Trades"]] as const
+          ).map(([t, label]) => (
             <button
               key={t}
-              onClick={() => setTab(t)}
+              onClick={() => setTab(t as typeof tab)}
               style={{
                 padding: "12px 20px", fontSize: 13, fontWeight: 600, cursor: "pointer", border: "none",
                 background: "none", borderBottom: `2px solid ${tab === t ? "#3b82f6" : "transparent"}`,
@@ -773,6 +903,8 @@ export default function OwnerPage() {
           {tab === "signings" && <SigningsTab teamId={team.id} league={ownerRecord.league} leagueSlug={leagueSlug} contracts={contracts} ownerSeason={ownerRecord.season ?? null} onRefresh={loadAll} />}
           {tab === "bid" && <BidTab auctions={auctions} teamId={team.id} contracts={contracts} onRefresh={loadAll} />}
           {tab === "trades" && <TradeTab teamId={team.id} league={ownerRecord.league} leagueSlug={leagueSlug} contracts={contracts} allTeams={allTeams} seasonTeamIds={seasonTeamIds} onRefresh={loadAll} />}
+          {tab === "cut" && <CutTab teamId={team.id} leagueSlug={leagueSlug} contracts={contracts} onRefresh={loadAll} />}
+          {tab === "portal" && <PortalTab teamId={team.id} leagueSlug={leagueSlug} contracts={contracts} onRefresh={loadAll} />}
         </div>
       </div>
     </div>
