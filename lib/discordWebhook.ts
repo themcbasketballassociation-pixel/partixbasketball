@@ -1,5 +1,5 @@
 /**
- * Sends a message to a Discord webhook URL.
+ * Sends a plain-text message to a Discord webhook URL.
  * Silently no-ops if the URL is not configured.
  */
 export async function sendWebhook(url: string | undefined, content: string): Promise<void> {
@@ -9,6 +9,23 @@ export async function sendWebhook(url: string | undefined, content: string): Pro
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content }),
+    });
+  } catch {
+    // Don't break the API response if the webhook fails
+  }
+}
+
+/**
+ * Sends a rich Discord embed to a webhook URL.
+ * Silently no-ops if the URL is not configured.
+ */
+export async function sendWebhookEmbed(url: string | undefined, embed: Record<string, unknown>): Promise<void> {
+  if (!url) return;
+  try {
+    await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ embeds: [embed] }),
     });
   } catch {
     // Don't break the API response if the webhook fails

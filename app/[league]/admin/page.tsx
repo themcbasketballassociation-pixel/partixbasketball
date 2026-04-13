@@ -5604,7 +5604,13 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
       {/* Sub-tabs (only shown when group has multiple items) */}
       {mainTab !== "Backup" && TAB_GROUPS[mainTab as keyof typeof TAB_GROUPS]?.length > 1 && (
         <div className="flex gap-1 px-5 py-2 bg-slate-900/60 border-b border-slate-800/50 overflow-x-auto">
-          {TAB_GROUPS[mainTab as keyof typeof TAB_GROUPS].map((sub) => (
+          {(TAB_GROUPS[mainTab as keyof typeof TAB_GROUPS] as readonly string[])
+            .filter((sub) => {
+              if ((league === "mcaa" || league === "mbgl") && sub === "Auction") return false;
+              if (league === "mcaa" && sub === "Trades") return false;
+              return true;
+            })
+            .map((sub) => (
             <button
               key={sub}
               onClick={() => setActiveTab(sub as Tab)}

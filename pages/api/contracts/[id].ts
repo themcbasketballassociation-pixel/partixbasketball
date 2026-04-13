@@ -1,6 +1,81 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { supabase } from "../../../lib/supabase";
 import { requireAdmin } from "../../../lib/adminAuth";
+import { sendWebhookEmbed, getWebhookUrl } from "../../../lib/discordWebhook";
+
+const LEAGUE_LABELS: Record<string, string> = { pba: "MBA", pcaa: "MCAA", pbgl: "MBGL" };
+const LEAGUE_COLORS: Record<string, number>  = { pba: 0xC8102E, pcaa: 0x003087, pbgl: 0xBB3430 };
+const LEAGUE_LOGOS:  Record<string, string>  = { pba: "/logos/mba.webp", pcaa: "/logos/mcaa.webp", pbgl: "/logos/MBGL.png" };
+
+const BASE_URL = process.env.NEXTAUTH_URL ?? "https://partixbasketball.com";
+
+function leagueLogoUrl(league: string) {
+  return `${BASE_URL}${LEAGUE_LOGOS[league] ?? ""}`;
+}
+
+async function fireApprovalWebhook(contract: {
+  league: string;
+  status: string;
+  phase: number;
+  amount: number;
+  season: string | null;
+  players: { mc_uuid: string; mc_username: string } | null;
+  teams: { id: string; name: string; abbreviation: string; logo_url?: string | null } | null;
+}) {
+  const league = contract.league;
+  const player = contract.players;
+  const team = contract.teams;
+  if (!player || !team) return;
+
+  const label = LEAGUE_LABELS[league] ?? league.toUpperCase();
+  const color = LEAGUE_COLORS[league] ?? 0x5865F2;
+  const logoUrl = leagueLogoUrl(league);
+  const playerFace = `https://crafatar.com/avatars/${player.mc_uuid}?size=128&default=MHF_Steve&overlay`;
+  const teamLogoUrl = (team as any).logo_url ?? undefined;
+  const showSalary = league !== "pcaa" && league !== "pbgl";
+
+  const { status, phase, amount, season } = contract;
+
+  let webhookUrl: string | undefined;
+  let title: string;
+  let description: string;
+  let embedColor = color;
+
+  if (status === "active") {
+    webhookUrl = getWebhookUrl(league, "transaction");
+    const isCoach = phase === 0;
+    title = isCoach ? "🎓 Coach Signed" : "✍️ Player Signed";
+    const salaryLine = showSalary && amount > 0 ? `\n**Salary:** $${amount.toLocaleString()}` : "";
+    const seasonLine = season ? `\n**Season:** ${season}` : "";
+    description = `**${player.mc_username}** has signed with **${team.name}**${salaryLine}${seasonLine}`;
+  } else if (status === "cut") {
+    webhookUrl = getWebhookUrl(league, "transaction");
+    title = "✂️ Player Cut";
+    embedColor = 0xdc2626;
+    description = `**${player.mc_username}** has been released by **${team.name}**`;
+  } else if (status === "in_portal") {
+    webhookUrl = getWebhookUrl(league, "portal");
+    title = "🚪 Transfer Portal";
+    embedColor = 0xf59e0b;
+    description = `**${player.mc_username}** has entered the transfer portal from **${team.name}**`;
+  } else {
+    return; // no webhook for other statuses
+  }
+
+  const embed: Record<string, unknown> = {
+    color: embedColor,
+    author: teamLogoUrl
+      ? { name: team.name, icon_url: teamLogoUrl }
+      : { name: team.name },
+    title,
+    description,
+    thumbnail: { url: playerFace },
+    footer: { text: label, icon_url: logoUrl },
+    timestamp: new Date().toISOString(),
+  };
+
+  await sendWebhookEmbed(webhookUrl, embed);
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { id } = req.query;
@@ -17,9 +92,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .from("contracts")
       .update(updates)
       .eq("id", id)
-      .select("*, players(mc_uuid, mc_username), teams(id, name, abbreviation)")
+      .select("*, players(mc_uuid, mc_username), teams(id, name, abbreviation, logo_url)")
       .single();
     if (error) return res.status(500).json({ error: error.message });
+
+    // Fire Discord webhook for approvals
+    if (status && ["active", "cut", "in_portal"].includes(status)) {
+      await fireApprovalWebhook(data as any);
+    }
+
     return res.status(200).json(data);
   }
 
