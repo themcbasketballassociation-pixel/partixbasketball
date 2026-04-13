@@ -538,6 +538,7 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
   const [pendingSignings, setPendingSignings] = useState<Contract[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPlayer, setSelectedPlayer] = useState("");
+  const [signingRole, setSigningRole] = useState<"player" | "coach">("player");
   const [err, setErr] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
   const [signing, setSigning] = useState(false);
@@ -564,17 +565,21 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
   const signPlayer = async () => {
     if (!selectedPlayer) return setErr("Select a player");
     setErr(""); setSuccessMsg(""); setSigning(true);
-    const r = await fetch("/api/contracts/sign", {
+    const isCoach = isMcaa && signingRole === "coach";
+    const r = await fetch(isCoach ? "/api/contracts/coach" : "/api/contracts/sign", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ league: leagueSlug, mc_uuid: selectedPlayer }),
+      body: JSON.stringify(isCoach
+        ? { league: leagueSlug, mc_username: selectedInfo?.mc_username }
+        : { league: leagueSlug, mc_uuid: selectedPlayer }),
     });
     const d = await r.json();
     setSigning(false);
     if (!r.ok) {
       setErr(d.error);
     } else {
-      setSuccessMsg(`Signing request submitted for ${selectedInfo?.mc_username ?? "player"}${!hideCap ? ` at ${fmt(selectedInfo?.min_price ?? 0)}` : ""} — waiting for admin approval.`);
+      const roleLabel = isCoach ? "coach" : "player";
+      setSuccessMsg(`${isCoach ? "Coach" : "Signing"} request submitted for ${selectedInfo?.mc_username ?? "player"}${!hideCap && !isCoach ? ` at ${fmt(selectedInfo?.min_price ?? 0)}` : ""} as ${roleLabel} — waiting for admin approval.`);
       setSelectedPlayer("");
       loadData(); onRefresh();
     }
@@ -608,13 +613,34 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
             </select>
           )}
         </div>
-        {selectedInfo && !hideCap && (
+        {isMcaa && (
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ color: "#555", fontSize: 12, display: "block", marginBottom: 6 }}>Signing as</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              {(["player", "coach"] as const).map((role) => (
+                <button
+                  key={role}
+                  onClick={() => setSigningRole(role)}
+                  style={{
+                    padding: "6px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "1px solid",
+                    borderColor: signingRole === role ? "#3b82f6" : "#222",
+                    background: signingRole === role ? "#1e3a5f" : "#0d1117",
+                    color: signingRole === role ? "#93c5fd" : "#555",
+                  }}
+                >
+                  {role === "player" ? "🏀 Player" : "🎓 Coach"}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {selectedInfo && !hideCap && signingRole === "player" && (
           <div style={{ ...innerCard, marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ color: "#555", fontSize: 13 }}>Signing salary (auction minimum)</span>
             <span style={{ color: "#22d3ee", fontWeight: 700, fontSize: 18 }}>{fmt(selectedInfo.min_price)}</span>
           </div>
         )}
-        {selectedInfo && !hideCap && capUsed + selectedInfo.min_price > TOTAL_CAP && (
+        {selectedInfo && !hideCap && signingRole === "player" && capUsed + selectedInfo.min_price > TOTAL_CAP && (
           <div style={{ color: "#fca5a5", background: "#450a0a", border: "1px solid #7f1d1d", borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 13 }}>
             ⚠ Exceeds cap: {fmt(capUsed)} + {fmt(selectedInfo.min_price)} = {fmt(capUsed + selectedInfo.min_price)} / {fmt(TOTAL_CAP)}
           </div>
@@ -623,10 +649,10 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
         {successMsg && <div style={{ color: "#86efac", background: "#052e16", border: "1px solid #166534", borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 13 }}>{successMsg}</div>}
         <button
           onClick={signPlayer}
-          disabled={signing || !selectedPlayer || (!hideCap && selectedInfo ? capUsed + selectedInfo.min_price > TOTAL_CAP : false)}
+          disabled={signing || !selectedPlayer || (!hideCap && signingRole === "player" && selectedInfo ? capUsed + selectedInfo.min_price > TOTAL_CAP : false)}
           style={{ ...btn("primary"), opacity: (signing || !selectedPlayer) ? 0.5 : 1 }}
         >
-          {signing ? "Submitting…" : "Submit Signing Request"}
+          {signing ? "Submitting…" : isMcaa && signingRole === "coach" ? "Submit Coach Request" : "Submit Signing Request"}
         </button>
       </div>
 
