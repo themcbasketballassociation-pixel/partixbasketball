@@ -30,7 +30,7 @@ async function fireApprovalWebhook(contract: {
   const label = LEAGUE_LABELS[league] ?? league.toUpperCase();
   const color = LEAGUE_COLORS[league] ?? 0x5865F2;
   const logoUrl = leagueLogoUrl(league);
-  const playerFace = `https://crafatar.com/avatars/${player.mc_uuid}?size=128&default=MHF_Steve&overlay`;
+  const playerFace = `https://minotar.net/avatar/${player.mc_username}/128.png`;
   const teamLogoUrl = (team as any).logo_url ?? undefined;
   const showSalary = league !== "pcaa" && league !== "pbgl";
 
