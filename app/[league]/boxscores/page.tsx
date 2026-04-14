@@ -49,7 +49,7 @@ const COLS: { key: string; label: string; render: (s: GameStat) => string }[] = 
   { key: "tov", label: "TO",  render: (s) => na(s.turnovers) },
   { key: "fg",  label: "FG",  render: (s) => fmtFg(s.fg_made, s.fg_attempted) },
   { key: "3fg", label: "3FG", render: (s) => fmtFg(s.three_pt_made, s.three_pt_attempted) },
-  { key: "pt",  label: "PT",  render: (s) => fmtMins(s.possession_time) },
+  { key: "pt",  label: "PT",  render: (s) => s.possession_time === null ? "—" : String(s.possession_time) },
 ];
 
 function sumCol(stats: GameStat[], key: string): string {
@@ -77,84 +77,86 @@ function sumCol(stats: GameStat[], key: string): string {
       const a = stats.reduce((acc, s) => acc + (s.three_pt_attempted ?? 0), 0);
       return `${m}/${a}`;
     }
-    case "pt": {
-      const total = stats.reduce((acc, s) => acc + (s.possession_time ?? 0), 0);
-      return fmtMins(total);
-    }
+    case "pt": return String(stats.reduce((acc, s) => acc + (s.possession_time ?? 0), 0));
     default: return "—";
   }
 }
 
-function ModalTeamTable({ team, stats, side }: { team: Team; stats: GameStat[]; side: "home" | "away" }) {
+function ModalTeamTable({ team, stats }: { team: Team; stats: GameStat[] }) {
   const sorted = [...stats].sort((a, b) => (b.points ?? 0) - (a.points ?? 0));
-  const isRight = side === "away";
 
   return (
-    <div style={{ flex: 1, minWidth: 0 }}>
-      {/* Team label */}
-      <div style={{
-        display: "flex", alignItems: "center", gap: 12,
-        padding: "14px 20px",
-        background: "#0d0d0d", borderBottom: "1px solid #1e1e1e",
-        justifyContent: isRight ? "flex-end" : "flex-start",
-        flexDirection: isRight ? "row-reverse" : "row",
-      }}>
+    <div style={{ marginBottom: 2 }}>
+      {/* Team header bar */}
+      <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 24px", background: "#131313", borderBottom: "2px solid #1e1e1e" }}>
         {team.logo_url
-          ? <img src={team.logo_url} alt="" style={{ width: 36, height: 36, objectFit: "contain", flexShrink: 0 }} />
-          : <div style={{ width: 36, height: 36, borderRadius: 8, background: "#222", border: "1px solid #333", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: "#555", fontWeight: 700 }}>{team.abbreviation}</div>
+          ? <img src={team.logo_url} alt="" style={{ width: 40, height: 40, objectFit: "contain", flexShrink: 0 }} />
+          : <div style={{ width: 40, height: 40, borderRadius: 8, background: "#222", border: "1px solid #333", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#555", fontWeight: 700 }}>{team.abbreviation}</div>
         }
-        <span style={{ fontWeight: 800, color: "#fff", fontSize: "1.1rem" }}>{team.name}</span>
+        <div>
+          <div style={{ fontWeight: 800, color: "#fff", fontSize: "1.05rem", letterSpacing: "-0.01em" }}>{team.name}</div>
+          <div style={{ color: "#444", fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 1 }}>{team.abbreviation}</div>
+        </div>
       </div>
 
       {stats.length === 0 ? (
-        <p style={{ padding: "20px", color: "#444", fontSize: "0.9rem" }}>No stats entered.</p>
+        <p style={{ padding: "20px 24px", color: "#444", fontSize: "0.85rem" }}>No stats entered.</p>
       ) : (
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", fontSize: "0.9rem", borderCollapse: "collapse" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.88rem" }}>
             <thead>
-              <tr style={{ background: "#0a0a0a", borderBottom: "1px solid #1e1e1e" }}>
-                <th style={{ padding: "10px 14px", textAlign: isRight ? "right" : "left", color: "#555", fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", whiteSpace: "nowrap" }}>Player</th>
+              <tr style={{ background: "#0d0d0d" }}>
+                <th style={{ padding: "9px 24px", textAlign: "left", color: "#3b82f6", fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.09em", whiteSpace: "nowrap", borderBottom: "1px solid #1e1e1e" }}>Player</th>
                 {COLS.map((c) => (
-                  <th key={c.key} style={{ padding: "10px 10px", textAlign: "center", color: "#555", fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>{c.label}</th>
+                  <th key={c.key} style={{ padding: "9px 12px", textAlign: "center", color: "#444", fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.09em", borderBottom: "1px solid #1e1e1e" }}>{c.label}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {sorted.map((s, si) => (
-                <tr key={s.id} style={{ borderTop: si > 0 ? "1px solid #1a1a1a" : undefined, background: si % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)" }}>
-                  <td style={{ padding: "10px 14px", whiteSpace: "nowrap" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: isRight ? "flex-end" : "flex-start", flexDirection: isRight ? "row-reverse" : "row" }}>
-                      <img
-                        src={`https://minotar.net/avatar/${s.players?.mc_username ?? s.mc_uuid}/24`}
-                        alt=""
-                        style={{ width: 24, height: 24, borderRadius: 4, flexShrink: 0, imageRendering: "pixelated" }}
-                        onError={(e) => {
-                          const img = e.currentTarget;
-                          if (!img.src.includes("crafatar")) {
-                            img.src = `https://crafatar.com/avatars/${s.mc_uuid}?size=24&default=MHF_Steve&overlay`;
-                          }
-                        }}
-                      />
-                      <span style={{ fontWeight: 600, color: "#e2e8f0", fontSize: "0.9rem" }}>{s.players?.mc_username ?? s.mc_uuid}</span>
-                    </div>
-                  </td>
-                  {COLS.map((c) => {
-                    const val = c.render(s);
-                    const isPts = c.key === "pts";
-                    return (
-                      <td key={c.key} style={{ padding: "10px 10px", textAlign: "center", color: isPts ? "#fff" : "#888", fontWeight: isPts ? 700 : 400, fontSize: "0.9rem" }}>
-                        {val}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
+              {sorted.map((s, si) => {
+                const pts = s.points ?? 0;
+                const isTopScorer = si === 0 && pts > 0;
+                return (
+                  <tr key={s.id} style={{ background: si % 2 === 0 ? "#111" : "#0f0f0f", borderBottom: "1px solid #191919" }}>
+                    <td style={{ padding: "10px 24px", whiteSpace: "nowrap" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <img
+                          src={`https://minotar.net/avatar/${s.players?.mc_username ?? s.mc_uuid}/28`}
+                          alt=""
+                          style={{ width: 28, height: 28, borderRadius: 5, flexShrink: 0, imageRendering: "pixelated", border: "1px solid #222" }}
+                          onError={(e) => { (e.currentTarget as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/28"; }}
+                        />
+                        <span style={{ fontWeight: isTopScorer ? 700 : 500, color: isTopScorer ? "#fff" : "#ccc", fontSize: "0.9rem" }}>
+                          {s.players?.mc_username ?? s.mc_uuid}
+                        </span>
+                        {isTopScorer && <span style={{ fontSize: "0.6rem", background: "#1d3461", color: "#60a5fa", border: "1px solid #1e40af", borderRadius: 4, padding: "1px 6px", fontWeight: 700 }}>TOP</span>}
+                      </div>
+                    </td>
+                    {COLS.map((c) => {
+                      const val = c.render(s);
+                      const isPts = c.key === "pts";
+                      const isFg = c.key === "fg" || c.key === "3fg";
+                      return (
+                        <td key={c.key} style={{
+                          padding: "10px 12px", textAlign: "center",
+                          color: isPts ? "#f1f5f9" : isFg ? "#94a3b8" : "#64748b",
+                          fontWeight: isPts ? 700 : 400,
+                          fontSize: isPts ? "0.95rem" : "0.85rem",
+                          fontVariantNumeric: "tabular-nums",
+                        }}>
+                          {val}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
             </tbody>
             <tfoot>
-              <tr style={{ borderTop: "2px solid #1e1e1e", background: "#0d0d0d" }}>
-                <td style={{ padding: "10px 14px", color: "#555", fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", textAlign: isRight ? "right" : "left" }}>Totals</td>
+              <tr style={{ background: "#0d0d0d", borderTop: "2px solid #2a2a2a" }}>
+                <td style={{ padding: "10px 24px", color: "#555", fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>Totals</td>
                 {COLS.map((c) => (
-                  <td key={c.key} style={{ padding: "10px 10px", textAlign: "center", color: "#bbb", fontWeight: 600, fontSize: "0.9rem" }}>
+                  <td key={c.key} style={{ padding: "10px 12px", textAlign: "center", color: "#94a3b8", fontWeight: 600, fontSize: "0.88rem", fontVariantNumeric: "tabular-nums" }}>
                     {sumCol(sorted, c.key)}
                   </td>
                 ))}
@@ -396,21 +398,17 @@ export default function BoxScoresPage({ params }: { params?: Promise<{ league?: 
               </div>
 
               {/* Stat tables */}
-              <div style={{ borderTop: "1px solid #1e1e1e" }}>
+              <div style={{ borderTop: "1px solid #1e1e1e", padding: "0 0 32px" }}>
                 {modalStats.length === 0 ? (
                   <p style={{ padding: "32px", color: "#444", fontSize: "1rem", textAlign: "center" }}>No box score entered for this game yet.</p>
                 ) : (() => {
                   const { homeStats, awayStats, allFallback } = splitStats(modalStats, modalGame, allPlayerTeams, season);
                   return allFallback ? (
-                    <ModalTeamTable team={modalGame.home_team} stats={allFallback} side="home" />
+                    <ModalTeamTable team={modalGame.home_team} stats={allFallback} />
                   ) : (
-                    <div style={{ display: "flex", gap: 0 }}>
-                      <div style={{ flex: 1, minWidth: 0, borderRight: "2px solid #0a0a0a" }}>
-                        <ModalTeamTable team={modalGame.home_team} stats={homeStats} side="home" />
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <ModalTeamTable team={modalGame.away_team} stats={awayStats} side="away" />
-                      </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: "16px 0 0" }}>
+                      <ModalTeamTable team={modalGame.home_team} stats={homeStats} />
+                      <ModalTeamTable team={modalGame.away_team} stats={awayStats} />
                     </div>
                   );
                 })()}
@@ -543,15 +541,11 @@ export default function BoxScoresPage({ params }: { params?: Promise<{ league?: 
                       ) : (() => {
                         const { homeStats, awayStats, allFallback } = splitStats(inlineStats, g, allPlayerTeams, season);
                         return allFallback ? (
-                          <ModalTeamTable team={g.home_team} stats={allFallback} side="home" />
+                          <ModalTeamTable team={g.home_team} stats={allFallback} />
                         ) : (
-                          <div style={{ display: "flex", gap: 0 }}>
-                            <div style={{ flex: 1, minWidth: 0, borderRight: "2px solid #0a0a0a" }}>
-                              <ModalTeamTable team={g.home_team} stats={homeStats} side="home" />
-                            </div>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <ModalTeamTable team={g.away_team} stats={awayStats} side="away" />
-                            </div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: "12px 0 0" }}>
+                            <ModalTeamTable team={g.home_team} stats={homeStats} />
+                            <ModalTeamTable team={g.away_team} stats={awayStats} />
                           </div>
                         );
                       })()}
