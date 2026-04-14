@@ -27,15 +27,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!admin) return;
     const { league: leagueRaw, mc_uuid, team_id, amount, is_two_season, season, phase } = req.body;
     const league = resolveLeague(leagueRaw);
-    if (!league || !mc_uuid || !team_id || amount == null)
-      return res.status(400).json({ error: "league, mc_uuid, team_id, amount required" });
+    if (!league || !mc_uuid || !team_id)
+      return res.status(400).json({ error: "league, mc_uuid, team_id required" });
+    // MCAA and MBGL have no salary cap — always store amount as 0
+    const finalAmount = (league === "pcaa" || league === "pbgl") ? 0 : Number(amount ?? 0);
     const { data, error } = await supabase
       .from("contracts")
       .insert([{
         league,
         mc_uuid,
         team_id,
-        amount: Number(amount),
+        amount: finalAmount,
         is_two_season: is_two_season ?? false,
         season: season ?? null,
         phase: phase ?? 1,
@@ -45,10 +47,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .single();
     if (error) return res.status(500).json({ error: error.message });
 
-    // Sync player_teams: add player to this team
+    // Sync player_teams: add player to this team (include season so roster page finds them)
     await supabase
       .from("player_teams")
-      .upsert([{ mc_uuid, team_id, league }], { onConflict: "mc_uuid,league" });
+      .upsert([{ mc_uuid, team_id, league, season: season ?? null }], { onConflict: "mc_uuid,league" });
 
     return res.status(200).json(data);
   }

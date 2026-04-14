@@ -48,17 +48,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const taken = new Set((takenContracts ?? []).map((c: any) => c.mc_uuid));
 
     if (isMcaa) {
-      // MCAA: any player in the league without an active/pending contract is available
-      // This includes players in the transfer portal (in_portal status)
-      const { data: playerTeams } = await supabase
-        .from("player_teams")
-        .select("mc_uuid, players(mc_uuid, mc_username)")
-        .eq("league", league);
-      const available = (playerTeams ?? [])
-        .filter((pt: any) => !taken.has(pt.mc_uuid))
-        .map((pt: any) => ({
-          mc_uuid: pt.mc_uuid,
-          mc_username: (pt.players as any)?.mc_username ?? pt.mc_uuid,
+      // MCAA: any player in the players table without an active/pending contract is available
+      // We query players directly (not player_teams) so newly added players show up immediately
+      const { data: allPlayers } = await supabase
+        .from("players")
+        .select("mc_uuid, mc_username")
+        .order("mc_username", { ascending: true });
+      const available = (allPlayers ?? [])
+        .filter((p: any) => !taken.has(p.mc_uuid))
+        .map((p: any) => ({
+          mc_uuid: p.mc_uuid,
+          mc_username: p.mc_username ?? p.mc_uuid,
           min_price: 0,
         }));
       return res.status(200).json(available);
