@@ -66,6 +66,7 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
   const [sortAsc, setSortAsc] = React.useState(false);
   const [page, setPage] = React.useState(0);
 
+  const [viewMode, setViewMode] = React.useState<"player" | "team">("player");
   const [teamStats, setTeamStats] = React.useState<TeamStatRow[]>([]);
   const [teamSortKey, setTeamSortKey] = React.useState<TeamSortKey>("ppg");
   const [teamSortAsc, setTeamSortAsc] = React.useState(false);
@@ -192,6 +193,17 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
           <p className="text-slate-400 text-sm mt-0.5">{leagueDisplay}</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Player / Team toggle */}
+          <div className="flex rounded-lg border border-slate-700 overflow-hidden text-xs">
+            {(["player", "team"] as const).map((v) => (
+              <button key={v} onClick={() => setViewMode(v)}
+                className={`px-4 py-1.5 font-semibold capitalize transition ${
+                  viewMode === v ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700"
+                }`}>
+                {v === "player" ? "👤 Players" : "🏀 Teams"}
+              </button>
+            ))}
+          </div>
           {/* Stat type toggle */}
           <div className="flex rounded-lg border border-slate-700 overflow-hidden text-xs">
             {(["regular", "playoffs", "total"] as StatType[]).map((t) => (
@@ -218,7 +230,7 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
         </div>
       </div>
 
-      {loading ? (
+      {viewMode === "player" && (loading ? (
         <div className="p-10 text-center text-slate-500">Loading stats...</div>
       ) : stats.length === 0 ? (
         <div className="p-10 text-center text-slate-500">
@@ -311,22 +323,20 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
             </div>
           )}
         </>
-      )}
+      ))}
+
       {/* ── Team Stats ── */}
-      {true && (
-        <div className="mt-8 rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
+      {viewMode === "team" && (
+        <div>
           <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between flex-wrap gap-3">
-            <div>
-              <h3 className="text-lg font-bold text-white">Team Stats</h3>
-              <p className="text-slate-500 text-xs mt-0.5">
-                {season === "all"
-                  ? statType === "playoffs" ? "All Time · Playoffs" : statType === "total" ? "All Time · Regular + Playoffs" : "All Time · Regular Season"
-                  : statType === "playoffs" ? `${season} Playoffs`
-                  : statType === "total" ? `${season} · Regular + Playoffs`
-                  : season
-                } · Per Game
-              </p>
-            </div>
+            <p className="text-slate-500 text-xs">
+              {season === "all"
+                ? statType === "playoffs" ? "All Time · Playoffs" : statType === "total" ? "All Time · Regular + Playoffs" : "All Time · Regular Season"
+                : statType === "playoffs" ? `${season} Playoffs`
+                : statType === "total" ? `${season} · Regular + Playoffs`
+                : season
+              } · Per Game
+            </p>
             <div className="flex rounded-lg border border-slate-700 overflow-hidden text-xs">
               {(["for", "against"] as const).map((v) => (
                 <button key={v} onClick={() => setTeamView(v)}
@@ -340,7 +350,7 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
           </div>
 
           {teamStats.length === 0 ? (
-            <div className="p-8 text-center text-slate-500 text-sm">No team stats yet for {season}.</div>
+            <div className="p-8 text-center text-slate-500 text-sm">No team stats yet for {season === "all" ? "all time" : season}.</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
@@ -439,3 +449,4 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
     </div>
   );
 }
+
