@@ -1137,10 +1137,32 @@ type ParsedGame = { week: number; day: string; time: string; home: string; away:
 
 // ─── Tab: Schedule ────────────────────────────────────────────────────────────
 
+// Allowed game time slots in ET (24h HH:MM → display label)
+const ET_TIME_SLOTS: { value: string; label: string }[] = [
+  { value: "19:45", label: "7:45 PM ET" },
+  { value: "20:30", label: "8:30 PM ET" },
+  { value: "21:15", label: "9:15 PM ET" },
+  { value: "22:00", label: "10:00 PM ET" },
+];
+
+// Convert a date string (YYYY-MM-DD) + ET time (HH:MM 24h) → UTC ISO string
+function etToUtcIso(dateStr: string, etHHMM: string): string {
+  // Use noon UTC as reference to detect ET offset (EDT vs EST) for that date
+  const ref = new Date(`${dateStr}T12:00:00Z`);
+  const etNoonHour = parseInt(
+    new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "2-digit", hour12: false }).format(ref)
+  );
+  const offsetHours = 12 - etNoonHour; // e.g. 5 for EST, 4 for EDT
+  const [h, m] = etHHMM.split(":").map(Number);
+  const [y, mo, d] = dateStr.split("-").map(Number);
+  return new Date(Date.UTC(y, mo - 1, d, h + offsetHours, m)).toISOString();
+}
+
 function ScheduleTab({ league, season }: { league: string; season: string }) {
   const [games, setGames] = useState<Game[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
-  const [newDate, setNewDate] = useState("");
+  const [newDateStr, setNewDateStr] = useState("");
+  const [newTimeSlot, setNewTimeSlot] = useState("");
   const [newHome, setNewHome] = useState("");
   const [newAway, setNewAway] = useState("");
   const [completingId, setCompletingId] = useState<string | null>(null);
@@ -1166,16 +1188,25 @@ function ScheduleTab({ league, season }: { league: string; season: string }) {
   useEffect(() => { refresh(); }, [refresh]);
 
   const addGame = async () => {
-    if (!newDate || !newHome || !newAway) { setErr("All fields are required."); return; }
+    if (!newDateStr || !newTimeSlot || !newHome || !newAway) { setErr("All fields are required."); return; }
+    if (newHome === newAway) { setErr("Home and away teams must be different."); return; }
+    const scheduledIso = etToUtcIso(newDateStr, newTimeSlot);
+    // Conflict check: no two games at the same ET date+time
+    const conflict = games.some(g => {
+      const gDate = new Date(g.scheduled_at).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+      const gTime = new Date(g.scheduled_at).toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hour12: false });
+      return gDate === newDateStr && gTime === newTimeSlot;
+    });
+    if (conflict) { setErr(`A game is already scheduled at ${ET_TIME_SLOTS.find(s => s.value === newTimeSlot)?.label} on ${newDateStr}. Pick a different time.`); return; }
     setErr("");
     const r = await fetch("/api/games", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ league, scheduled_at: new Date(newDate).toISOString(), home_team_id: newHome, away_team_id: newAway, season }),
+      body: JSON.stringify({ league, scheduled_at: scheduledIso, home_team_id: newHome, away_team_id: newAway, season }),
     });
     const data = await r.json();
     if (!r.ok) { setErr(data.error ?? "Failed to add game"); return; }
-    setNewDate(""); setNewHome(""); setNewAway(""); refresh();
+    setNewDateStr(""); setNewTimeSlot(""); setNewHome(""); setNewAway(""); refresh();
   };
 
   const markCompleted = async (id: string) => {
@@ -1202,45 +1233,34 @@ function ScheduleTab({ league, season }: { league: string; season: string }) {
   const randomizeTimes = async () => {
     const scheduled = games.filter((g) => g.status !== "completed");
     if (!scheduled.length) { setErr("No scheduled games to randomize."); return; }
-    const timeSlots: Record<number, string[]> = {
-      4: ["20:30", "21:15", "22:00"],
-      5: ["20:30", "21:15", "22:00"],
-      0: ["19:30", "20:30", "21:15", "22:00"],
-    };
-    // Group by date string (YYYY-MM-DD) so each date gets its own shuffled slot pool
+    // All days use the same 4 allowed ET time slots
+    const allSlots = ET_TIME_SLOTS.map(s => s.value); // ["19:45","20:30","21:15","22:00"]
+    // Group by ET date string (YYYY-MM-DD) so each date gets its own shuffled slot pool
     const byDate = scheduled.reduce<Record<string, typeof scheduled>>((acc, g) => {
-      const dateKey = new Date(g.scheduled_at).toISOString().slice(0, 10);
+      const dateKey = new Date(g.scheduled_at).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
       if (!acc[dateKey]) acc[dateKey] = [];
       acc[dateKey].push(g);
       return acc;
     }, {});
     // Validate slot capacity before doing anything
     for (const [dateKey, dayGames] of Object.entries(byDate)) {
-      const dow = new Date(dateKey + "T12:00:00").getDay();
-      const slots = timeSlots[dow];
-      if (!slots) continue;
-      if (dayGames.length > slots.length) {
-        setErr(`${dateKey} has ${dayGames.length} games but only ${slots.length} time slots available.`);
+      if (dayGames.length > allSlots.length) {
+        setErr(`${dateKey} has ${dayGames.length} games but only ${allSlots.length} time slots available (7:45, 8:30, 9:15, 10:00 PM ET).`);
         return;
       }
     }
     if (!confirm(`Randomize times for ${scheduled.length} scheduled game(s)?`)) return;
     setRandomizingTimes(true); setErr("");
     for (const [dateKey, dayGames] of Object.entries(byDate)) {
-      const dow = new Date(dateKey + "T12:00:00").getDay();
-      const slots = timeSlots[dow];
-      if (!slots) continue;
-      // Shuffle slots and assign one per game — no two games share a time
-      const shuffled = [...slots].sort(() => Math.random() - 0.5);
+      // Shuffle the 4 slots and assign one per game
+      const shuffled = [...allSlots].sort(() => Math.random() - 0.5);
       for (let i = 0; i < dayGames.length; i++) {
         const g = dayGames[i];
-        const [h, m] = shuffled[i].split(":").map(Number);
-        const updated = new Date(g.scheduled_at);
-        updated.setHours(h, m, 0, 0);
+        const updatedIso = etToUtcIso(dateKey, shuffled[i]);
         const r = await fetch(`/api/games/${g.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ scheduled_at: updated.toISOString() }),
+          body: JSON.stringify({ scheduled_at: updatedIso }),
         });
         if (!r.ok) { const data = await r.json(); setErr(data.error ?? "Randomize times failed"); setRandomizingTimes(false); return; }
       }
@@ -1373,10 +1393,38 @@ function ScheduleTab({ league, season }: { league: string; season: string }) {
       {/* Single game */}
       <div className={card}>
         <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Add Single Game</h3>
-        <div className="flex gap-2 flex-wrap items-end">
-          <div className="flex-1 min-w-[180px]">
-            <label className="block text-xs text-slate-500 mb-1">Date & Time</label>
-            <input type="datetime-local" className={input} value={newDate} onChange={(e) => { setNewDate(e.target.value); setErr(""); }} />
+        <div className="flex gap-3 flex-wrap items-end">
+          <div className="flex-1 min-w-[160px]">
+            <label className="block text-xs text-slate-500 mb-1">Date (ET)</label>
+            <input type="date" className={input} value={newDateStr} onChange={(e) => { setNewDateStr(e.target.value); setErr(""); }} />
+          </div>
+          <div className="flex-1 min-w-[260px]">
+            <label className="block text-xs text-slate-500 mb-1">Time Slot (ET)</label>
+            <div className="flex gap-1 flex-wrap">
+              {ET_TIME_SLOTS.map(s => {
+                const taken = !!newDateStr && games.some(g => {
+                  const gDate = new Date(g.scheduled_at).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+                  const gTime = new Date(g.scheduled_at).toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hour12: false });
+                  return gDate === newDateStr && gTime === s.value;
+                });
+                return (
+                  <button
+                    key={s.value}
+                    onClick={() => { if (!taken) { setNewTimeSlot(s.value); setErr(""); } }}
+                    disabled={taken}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold border transition ${
+                      newTimeSlot === s.value
+                        ? "bg-blue-700 border-blue-500 text-white"
+                        : taken
+                        ? "bg-slate-900 border-slate-800 text-slate-600 cursor-not-allowed line-through"
+                        : "bg-slate-900 border-slate-700 text-slate-300 hover:border-blue-500 hover:text-white"
+                    }`}
+                  >
+                    {s.label}{taken ? " ✗" : ""}
+                  </button>
+                );
+              })}
+            </div>
           </div>
           <div className="flex-1 min-w-[140px]">
             <label className="block text-xs text-slate-500 mb-1">Home Team</label>
@@ -1392,7 +1440,7 @@ function ScheduleTab({ league, season }: { league: string; season: string }) {
               {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </div>
-          <button className={`${btnPrimary} self-end`} onClick={addGame}>Schedule</button>
+          <button className={`${btnPrimary} self-end`} onClick={addGame} disabled={!newDateStr || !newTimeSlot || !newHome || !newAway}>Schedule</button>
         </div>
       </div>
 
