@@ -19,6 +19,7 @@ type GameStat = {
   assists: number | null; steals: number | null; blocks: number | null; turnovers: number | null;
   minutes_played: number | null; fg_made: number | null; fg_attempted: number | null;
   three_pt_made: number | null; three_pt_attempted: number | null;
+  possession_time: number | null;
   players: { mc_uuid: string; mc_username: string };
 };
 type PlayerTeam = {
@@ -48,6 +49,7 @@ const COLS: { key: string; label: string; render: (s: GameStat) => string }[] = 
   { key: "tov", label: "TO",  render: (s) => na(s.turnovers) },
   { key: "fg",  label: "FG",  render: (s) => fmtFg(s.fg_made, s.fg_attempted) },
   { key: "3fg", label: "3FG", render: (s) => fmtFg(s.three_pt_made, s.three_pt_attempted) },
+  { key: "pt",  label: "PT",  render: (s) => fmtMins(s.possession_time) },
 ];
 
 function sumCol(stats: GameStat[], key: string): string {
@@ -74,6 +76,10 @@ function sumCol(stats: GameStat[], key: string): string {
       const m = stats.reduce((acc, s) => acc + (s.three_pt_made ?? 0), 0);
       const a = stats.reduce((acc, s) => acc + (s.three_pt_attempted ?? 0), 0);
       return `${m}/${a}`;
+    }
+    case "pt": {
+      const total = stats.reduce((acc, s) => acc + (s.possession_time ?? 0), 0);
+      return fmtMins(total);
     }
     default: return "—";
   }
