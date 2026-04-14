@@ -115,6 +115,7 @@ function TeamDetailModal({ team, league, seasons, defaultSeason, onClose }: {
 
   // Cap usage
   const capUsed = contracts.reduce((sum, c) => sum + c.amount, 0);
+  const showCap = league !== "mcaa" && league !== "mbgl";
 
   // Team stats for selected season (filtered to roster)
   const rosterUuids = React.useMemo(() => new Set(seasonRoster.map(pt => pt.mc_uuid)), [seasonRoster]);
@@ -205,7 +206,7 @@ function TeamDetailModal({ team, league, seasons, defaultSeason, onClose }: {
 
             {/* ── Roster & Salary Cap ───────────────────────────────────────── */}
             <section>
-              <SectionHeader title="Roster & Salary Cap" />
+              <SectionHeader title={showCap ? "Roster & Salary Cap" : "Roster"} />
               {contracts.length === 0 && seasonRoster.length === 0 ? (
                 <Empty text="No roster data for this season." />
               ) : (
@@ -228,18 +229,18 @@ function TeamDetailModal({ team, league, seasons, defaultSeason, onClose }: {
                             onError={e => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/24"; }}
                           />
                           <span style={{ flex: 1, color: "#ddd", fontSize: "0.875rem", fontWeight: 500 }}>{username}</span>
-                          {isContract && c.is_two_season && (
+                          {showCap && isContract && c.is_two_season && (
                             <span style={{ fontSize: "0.68rem", color: "#818cf8", border: "1px solid #4338ca", borderRadius: 4, padding: "1px 5px" }}>2-yr</span>
                           )}
-                          {isContract
+                          {showCap && (isContract
                             ? <span style={{ color: "#aaa", fontSize: "0.875rem", fontFamily: "monospace", fontWeight: 600 }}>${c.amount.toLocaleString()}</span>
                             : <span style={{ color: "#555", fontSize: "0.78rem", fontStyle: "italic" }}>No contract</span>
-                          }
+                          )}
                         </div>
                       );
                     })}
                   </div>
-                  <CapBar capUsed={capUsed} />
+                  {showCap && <CapBar capUsed={capUsed} />}
                 </>
               )}
             </section>
