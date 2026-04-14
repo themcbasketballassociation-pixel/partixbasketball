@@ -77,21 +77,39 @@ function CapBar({ contracts, retentions }: { contracts: Contract[]; retentions: 
 }
 
 // ── Roster ────────────────────────────────────────────────────────────────────
-function RosterView({ contracts, retentions }: { contracts: Contract[]; retentions: CapRetention[] }) {
+function RosterView({ contracts, retentions, leagueSlug }: { contracts: Contract[]; retentions: CapRetention[]; leagueSlug: string }) {
+  const showCap = leagueSlug !== "mcaa" && leagueSlug !== "mbgl";
+  const players = contracts.filter(c => c.phase !== 0);
+  const coaches = contracts.filter(c => c.phase === 0);
   return (
     <div>
-      <CapBar contracts={contracts} retentions={retentions} />
+      {showCap && <CapBar contracts={contracts} retentions={retentions} />}
       {contracts.length === 0
         ? <div style={{ color: "#444", textAlign: "center", padding: "24px 0" }}>No active contracts.</div>
-        : contracts.map(c => (
-          <div key={c.id} style={{ ...st.innerCard, display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-            <img src={`https://minotar.net/avatar/${c.players.mc_username}/32`} style={{ width: 32, height: 32, borderRadius: 6, border: "1px solid #222" }} onError={e => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/32"; }} alt="" />
-            <span style={{ color: "#fff", fontWeight: 600, flex: 1 }}>{c.players.mc_username}</span>
-            <span style={{ color: "#555", fontSize: 12 }}>Phase {c.phase}{c.season ? ` · S${c.season}` : ""}</span>
-            <span style={{ color: "#22d3ee", fontWeight: 700, fontSize: 17 }}>{fmt(c.amount)}</span>
-            {c.is_two_season && <span style={{ color: "#a855f7", fontSize: 11, background: "#1a0a2e", border: "1px solid #4c1d95", borderRadius: 4, padding: "1px 5px" }}>2yr</span>}
-          </div>
-        ))
+        : (
+          <>
+            {players.map(c => (
+              <div key={c.id} style={{ ...st.innerCard, display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                <img src={`https://minotar.net/avatar/${c.players.mc_username}/32`} style={{ width: 32, height: 32, borderRadius: 6, border: "1px solid #222" }} onError={e => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/32"; }} alt="" />
+                <span style={{ color: "#fff", fontWeight: 600, flex: 1 }}>{c.players.mc_username}</span>
+                {showCap && <span style={{ color: "#22d3ee", fontWeight: 700, fontSize: 17 }}>{fmt(c.amount)}</span>}
+                {showCap && c.is_two_season && <span style={{ color: "#a855f7", fontSize: 11, background: "#1a0a2e", border: "1px solid #4c1d95", borderRadius: 4, padding: "1px 5px" }}>2yr</span>}
+              </div>
+            ))}
+            {coaches.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ color: "#555", fontSize: 11, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.06em", marginBottom: 8 }}>Coaches</div>
+                {coaches.map(c => (
+                  <div key={c.id} style={{ ...st.innerCard, display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                    <img src={`https://minotar.net/avatar/${c.players.mc_username}/32`} style={{ width: 32, height: 32, borderRadius: 6, border: "1px solid #222" }} onError={e => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/32"; }} alt="" />
+                    <span style={{ color: "#fff", fontWeight: 600, flex: 1 }}>{c.players.mc_username}</span>
+                    <span style={{ color: "#a78bfa", background: "#1e1b4b", border: "1px solid #4c1d95", borderRadius: 6, fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>Coach</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )
       }
     </div>
   );
@@ -611,7 +629,7 @@ function CutView({ teamId, leagueSlug, contracts, onRefresh }: {
             ? <div style={{ color: "#555", fontSize: 13 }}>No active contracts on your roster.</div>
             : <select style={st.input} value={selectedId} onChange={e => setSelectedId(e.target.value)}>
                 <option value="">— Select player —</option>
-                {activeContracts.map(c => <option key={c.id} value={c.id}>{c.players.mc_username}{c.amount > 0 ? ` (${fmt(c.amount)})` : ""}</option>)}
+                {activeContracts.map(c => <option key={c.id} value={c.id}>{c.players.mc_username}{(leagueSlug !== "mcaa" && leagueSlug !== "mbgl" && c.amount > 0) ? ` (${fmt(c.amount)})` : ""}</option>)}
               </select>
           }
         </div>
@@ -824,7 +842,7 @@ export default function OwnerPortalView({ teamRecord, leagueSlug, onBack }: {
         ))}
       </div>
 
-      {tab === "roster" && <RosterView contracts={contracts} retentions={retentions} />}
+      {tab === "roster" && <RosterView contracts={contracts} retentions={retentions} leagueSlug={leagueSlug} />}
       {tab === "signings" && <SigningsView teamId={team.id} leagueSlug={leagueSlug} contracts={contracts} onRefresh={load} />}
       {tab === "bid" && <BidView auctions={auctions} teamId={team.id} contracts={contracts} onRefresh={load} />}
       {tab === "trades" && (
