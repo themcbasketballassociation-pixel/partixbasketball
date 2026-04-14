@@ -625,14 +625,27 @@ function CutView({ teamId, leagueSlug, contracts, onRefresh }: {
 }
 
 // ── Portal ────────────────────────────────────────────────────────────────────
+type PortalPlayer = { id: string; mc_uuid: string; season: string | null; players: { mc_uuid: string; mc_username: string }; teams: { name: string; abbreviation: string } };
+
 function PortalView({ teamId, leagueSlug, contracts, onRefresh }: {
   teamId: string; leagueSlug: string; contracts: Contract[]; onRefresh: () => void;
 }) {
   const [selectedId, setSelectedId] = useState("");
   const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [portalPlayers, setPortalPlayers] = useState<PortalPlayer[]>([]);
+  const [claimingId, setClaimingId] = useState<string | null>(null);
+  const [claimMsg, setClaimMsg] = useState<Record<string, { type: "ok" | "err"; text: string }>>({});
 
   const activeContracts = contracts.filter(c => c.status === "active");
+
+  const loadPortal = useCallback(async () => {
+    const r = await fetch(`/api/contracts?league=${leagueSlug}&status=in_portal`);
+    const d = await r.json();
+    setPortalPlayers(Array.isArray(d) ? d : []);
+  }, [leagueSlug]);
+
+  useEffect(() => { loadPortal(); }, [loadPortal]);
 
   const submit = async () => {
     if (!selectedId) return setMsg({ type: "err", text: "Select a player" });
@@ -646,16 +659,75 @@ function PortalView({ teamId, leagueSlug, contracts, onRefresh }: {
     setSubmitting(false);
     if (!r.ok) return setMsg({ type: "err", text: d.error });
     setMsg({ type: "ok", text: d.message ?? "Portal request submitted — awaiting admin approval." });
-    setSelectedId(""); onRefresh();
+    setSelectedId(""); onRefresh(); loadPortal();
+  };
+
+  const claimPlayer = async (mc_uuid: string, username: string) => {
+    setClaimingId(mc_uuid);
+    const r = await fetch("/api/contracts/sign", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ league: leagueSlug, mc_uuid }),
+    });
+    const d = await r.json();
+    setClaimingId(null);
+    if (!r.ok) {
+      setClaimMsg(m => ({ ...m, [mc_uuid]: { type: "err", text: d.error } }));
+    } else {
+      setClaimMsg(m => ({ ...m, [mc_uuid]: { type: "ok", text: `Claim submitted for ${username} — awaiting admin approval.` } }));
+      loadPortal(); onRefresh();
+    }
   };
 
   return (
     <div>
-      <div style={{ background: "#0d1117", border: "1px solid #1a2030", borderRadius: 8, padding: "8px 12px", marginBottom: 16, fontSize: 12, color: "#555" }}>
-        Submit a transfer portal request for a player. Once approved, they will enter the portal and become available to other teams.
-      </div>
+      {/* ── Portal Pool ── */}
       <div style={{ ...st.innerCard, marginBottom: 20 }}>
-        <div style={{ color: "#aaa", fontWeight: 700, marginBottom: 12 }}>Enter Transfer Portal</div>
+        <div style={{ color: "#aaa", fontWeight: 700, marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
+          🚪 Players in Transfer Portal
+          <span style={{ fontSize: 11, color: "#555", fontWeight: 400 }}>· Claiming requires admin approval</span>
+        </div>
+        {portalPlayers.length === 0 ? (
+          <div style={{ color: "#555", fontSize: 13 }}>No players currently in the portal.</div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {portalPlayers.map(p => {
+              const cm = claimMsg[p.players.mc_uuid];
+              return (
+                <div key={p.id}>
+                  <div style={{ ...st.innerCard, display: "flex", alignItems: "center", gap: 12 }}>
+                    <img src={`https://minotar.net/avatar/${p.players.mc_username}/36`} style={{ width: 36, height: 36, borderRadius: 6, border: "1px solid #222", imageRendering: "pixelated" as const }} onError={e => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/36"; }} alt="" />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ color: "#fff", fontWeight: 700, fontSize: 14 }}>{p.players.mc_username}</div>
+                      <div style={{ color: "#555", fontSize: 11 }}>From: {p.teams?.name ?? "Unknown"}{p.season ? ` · ${p.season}` : ""}</div>
+                    </div>
+                    <span style={{ fontSize: 11, color: "#f59e0b", background: "#1c1200", border: "1px solid #78350f", borderRadius: 6, padding: "2px 8px", fontWeight: 600 }}>In Portal</span>
+                    <button
+                      onClick={() => claimPlayer(p.players.mc_uuid, p.players.mc_username)}
+                      disabled={claimingId === p.players.mc_uuid}
+                      style={{ ...ownerBtn("primary"), fontSize: 12, padding: "6px 14px", opacity: claimingId === p.players.mc_uuid ? 0.5 : 1 }}
+                    >
+                      {claimingId === p.players.mc_uuid ? "Claiming…" : "Claim"}
+                    </button>
+                  </div>
+                  {cm && (
+                    <div style={{ color: cm.type === "err" ? "#fca5a5" : "#86efac", background: cm.type === "err" ? "#450a0a" : "#052e16", border: `1px solid ${cm.type === "err" ? "#7f1d1d" : "#166534"}`, borderRadius: 6, padding: "6px 10px", marginTop: 4, fontSize: 12 }}>
+                      {cm.text}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── Send to Portal ── */}
+      <div style={{ ...st.innerCard, marginBottom: 20 }}>
+        <div style={{ color: "#aaa", fontWeight: 700, marginBottom: 12 }}>Send Player to Portal</div>
+        <div style={{ background: "#0d1117", border: "1px solid #1a2030", borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 12, color: "#555" }}>
+          Once approved, the player enters the portal and can be claimed by any team.
+        </div>
         <div style={{ marginBottom: 10 }}>
           <div style={{ color: "#555", fontSize: 12, marginBottom: 4 }}>Select player to portal</div>
           {activeContracts.length === 0
