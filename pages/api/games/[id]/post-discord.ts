@@ -110,20 +110,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   // ── Embed ─────────────────────────────────────────────────────────────────
+  const winnerLogo = (homeWon ? home.logo_url : away.logo_url) ?? leagueLogoUrl;
+  const fields: Record<string, unknown>[] = [
+    { name: "Type", value: game.season ?? "—", inline: false },
+    { name: "Game Ended", value: gameDate, inline: false },
+    { name: "Box Score", value: `[View Box Score](${boxscoreUrl})`, inline: false },
+  ];
+  if (potgField) fields.push(potgField);
+
   const embed: Record<string, unknown> = {
     color: LEAGUE_COLORS[league] ?? 0x5865F2,
     author: {
-      name: `${home.abbreviation}  ${homeScore}  —  ${awayScore}  ${away.abbreviation}`,
-      icon_url: home.logo_url ?? undefined,
-      url: boxscoreUrl,
+      name: LEAGUE_LABELS[league] ?? league.toUpperCase(),
+      icon_url: leagueLogoUrl,
     },
-    thumbnail: { url: leagueLogoUrl },
-    description: `🟢  **FINAL**  ·  ${gameDate}\n[📋 View full box score ↗](${boxscoreUrl})`,
-    fields: potgField ? [potgField] : [],
-    footer: {
-      text: LEAGUE_LABELS[league] ?? league.toUpperCase(),
-      icon_url: (homeWon ? home.logo_url : away.logo_url) ?? undefined,
-    },
+    description: `**${away.name}  ${awayScore} — ${homeScore}  ${home.name}**`,
+    thumbnail: { url: winnerLogo },
+    fields,
     timestamp: new Date().toISOString(),
   };
 
