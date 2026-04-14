@@ -333,8 +333,8 @@ function TeamDetailModal({ team, league, seasons, defaultSeason, onClose }: {
                               const myScore = isHome ? g.home_score : g.away_score;
                               const oppScore = isHome ? g.away_score : g.home_score;
                               const d = new Date(g.scheduled_at);
-                              const date = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/New_York" });
-                              const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" });
+                              const date = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Etc/GMT+5" });
+                              const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Etc/GMT+5" });
                               let result = "";
                               let resultColor = "#aaa";
                               if (g.status === "final" && myScore != null && oppScore != null) {

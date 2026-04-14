@@ -1137,25 +1137,20 @@ type ParsedGame = { week: number; day: string; time: string; home: string; away:
 
 // ─── Tab: Schedule ────────────────────────────────────────────────────────────
 
-// Allowed game time slots in ET (24h HH:MM → display label)
+// Allowed game time slots in EST (24h HH:MM → display label)
 const ET_TIME_SLOTS: { value: string; label: string }[] = [
-  { value: "19:45", label: "7:45 PM ET" },
-  { value: "20:30", label: "8:30 PM ET" },
-  { value: "21:15", label: "9:15 PM ET" },
-  { value: "22:00", label: "10:00 PM ET" },
+  { value: "19:45", label: "7:45 PM EST" },
+  { value: "20:30", label: "8:30 PM EST" },
+  { value: "21:15", label: "9:15 PM EST" },
+  { value: "22:00", label: "10:00 PM EST" },
 ];
 
-// Convert a date string (YYYY-MM-DD) + ET time (HH:MM 24h) → UTC ISO string
-function etToUtcIso(dateStr: string, etHHMM: string): string {
-  // Use noon UTC as reference to detect ET offset (EDT vs EST) for that date
-  const ref = new Date(`${dateStr}T12:00:00Z`);
-  const etNoonHour = parseInt(
-    new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "2-digit", hour12: false }).format(ref)
-  );
-  const offsetHours = 12 - etNoonHour; // e.g. 5 for EST, 4 for EDT
-  const [h, m] = etHHMM.split(":").map(Number);
+// Convert a date string (YYYY-MM-DD) + EST time (HH:MM 24h) → UTC ISO string
+// Always uses fixed UTC-5 (EST) — no DST adjustment
+function etToUtcIso(dateStr: string, estHHMM: string): string {
+  const [h, m] = estHHMM.split(":").map(Number);
   const [y, mo, d] = dateStr.split("-").map(Number);
-  return new Date(Date.UTC(y, mo - 1, d, h + offsetHours, m)).toISOString();
+  return new Date(Date.UTC(y, mo - 1, d, h + 5, m)).toISOString();
 }
 
 function ScheduleTab({ league, season }: { league: string; season: string }) {
@@ -1193,8 +1188,8 @@ function ScheduleTab({ league, season }: { league: string; season: string }) {
     const scheduledIso = etToUtcIso(newDateStr, newTimeSlot);
     // Conflict check: no two games at the same ET date+time
     const conflict = games.some(g => {
-      const gDate = new Date(g.scheduled_at).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
-      const gTime = new Date(g.scheduled_at).toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hour12: false });
+      const gDate = new Date(g.scheduled_at).toLocaleDateString("en-CA", { timeZone: "Etc/GMT+5" });
+      const gTime = new Date(g.scheduled_at).toLocaleTimeString("en-US", { timeZone: "Etc/GMT+5", hour: "2-digit", minute: "2-digit", hour12: false });
       return gDate === newDateStr && gTime === newTimeSlot;
     });
     if (conflict) { setErr(`A game is already scheduled at ${ET_TIME_SLOTS.find(s => s.value === newTimeSlot)?.label} on ${newDateStr}. Pick a different time.`); return; }
@@ -1237,7 +1232,7 @@ function ScheduleTab({ league, season }: { league: string; season: string }) {
     const allSlots = ET_TIME_SLOTS.map(s => s.value); // ["19:45","20:30","21:15","22:00"]
     // Group by ET date string (YYYY-MM-DD) so each date gets its own shuffled slot pool
     const byDate = scheduled.reduce<Record<string, typeof scheduled>>((acc, g) => {
-      const dateKey = new Date(g.scheduled_at).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+      const dateKey = new Date(g.scheduled_at).toLocaleDateString("en-CA", { timeZone: "Etc/GMT+5" });
       if (!acc[dateKey]) acc[dateKey] = [];
       acc[dateKey].push(g);
       return acc;
@@ -1403,8 +1398,8 @@ function ScheduleTab({ league, season }: { league: string; season: string }) {
             <div className="flex gap-1 flex-wrap">
               {ET_TIME_SLOTS.map(s => {
                 const taken = !!newDateStr && games.some(g => {
-                  const gDate = new Date(g.scheduled_at).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
-                  const gTime = new Date(g.scheduled_at).toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hour12: false });
+                  const gDate = new Date(g.scheduled_at).toLocaleDateString("en-CA", { timeZone: "Etc/GMT+5" });
+                  const gTime = new Date(g.scheduled_at).toLocaleTimeString("en-US", { timeZone: "Etc/GMT+5", hour: "2-digit", minute: "2-digit", hour12: false });
                   return gDate === newDateStr && gTime === s.value;
                 });
                 return (

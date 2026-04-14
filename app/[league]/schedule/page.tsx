@@ -25,7 +25,7 @@ type BracketMatchup = {
 
 function getWeekKey(scheduledAt: string): string {
   // Always compute in ET so week grouping is identical for all users
-  const etDateStr = new Date(scheduledAt).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  const etDateStr = new Date(scheduledAt).toLocaleDateString("en-CA", { timeZone: "Etc/GMT+5" });
   const d = new Date(etDateStr + "T12:00:00"); // noon avoids DST edge cases
   const dow = d.getDay();
   const daysToThursday = dow >= 4 ? dow - 4 : dow + 3;
@@ -332,7 +332,7 @@ export default function SchedulePage({ params }: { params?: Promise<{ league?: s
           {weekKeys.map((weekKey, wi) => {
             const weekGames = grouped[weekKey].sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime());
             const byDay = weekGames.reduce<Record<string, Game[]>>((acc, g) => {
-              const dayLabel = new Date(g.scheduled_at).toLocaleDateString("en-US", { weekday: "long", timeZone: "America/New_York" });
+              const dayLabel = new Date(g.scheduled_at).toLocaleDateString("en-US", { weekday: "long", timeZone: "Etc/GMT+5" });
               if (!acc[dayLabel]) acc[dayLabel] = [];
               acc[dayLabel].push(g);
               return acc;
@@ -341,7 +341,7 @@ export default function SchedulePage({ params }: { params?: Promise<{ league?: s
               <div key={weekKey} style={{ borderRadius: "0.75rem", border: "1px solid #1e1e1e", background: "#161616", overflow: "hidden" }}>
                 <div style={{ padding: "10px 20px", borderBottom: "1px solid #1e1e1e", background: "#111", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <span style={{ fontWeight: 700, color: "#fff", fontSize: "0.875rem", letterSpacing: "0.05em" }}>WEEK {wi + 1}</span>
-                  <span style={{ color: "#555", fontSize: "0.75rem" }}>{new Date(weekKey + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", timeZone: "America/New_York" })} week</span>
+                  <span style={{ color: "#555", fontSize: "0.75rem" }}>{new Date(weekKey + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", timeZone: "Etc/GMT+5" })} week</span>
                 </div>
                 {Object.keys(byDay).map((day) => (
                   <div key={day}>
@@ -352,7 +352,7 @@ export default function SchedulePage({ params }: { params?: Promise<{ league?: s
                       {byDay[day].map((g, gi) => (
                         <div key={g.id} style={{ padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, borderTop: gi > 0 ? "1px solid #1e1e1e" : undefined }}>
                           <span style={{ color: "#555", fontSize: "0.875rem", width: 80, flexShrink: 0 }}>
-                            {new Date(g.scheduled_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })} ET
+                            {new Date(g.scheduled_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "Etc/GMT+5" })} EST
                           </span>
                           <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1 }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end", minWidth: 130 }}>

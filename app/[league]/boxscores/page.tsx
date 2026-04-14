@@ -379,7 +379,7 @@ export default function BoxScoresPage({ params }: { params?: Promise<{ league?: 
                   <div style={{ marginTop: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
                     <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#4ade80", background: "rgba(74,222,128,0.1)", borderRadius: 999, padding: "3px 10px" }}>FINAL</span>
                     <span style={{ fontSize: "0.75rem", color: "#444" }}>
-                      {new Date(modalGame.scheduled_at).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "America/New_York" })}
+                      {new Date(modalGame.scheduled_at).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "Etc/GMT+5" })}
                     </span>
                   </div>
                 </div>
@@ -500,7 +500,7 @@ export default function BoxScoresPage({ params }: { params?: Promise<{ league?: 
                       <div style={{ marginTop: 3, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
                         <span style={{ fontSize: "0.6rem", fontWeight: 700, color: "#4ade80", background: "rgba(74,222,128,0.1)", borderRadius: 999, padding: "2px 7px" }}>FINAL</span>
                         <span style={{ fontSize: "0.6rem", color: "#444" }}>
-                          {new Date(g.scheduled_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/New_York" })}
+                          {new Date(g.scheduled_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Etc/GMT+5" })}
                         </span>
                       </div>
                     </div>
