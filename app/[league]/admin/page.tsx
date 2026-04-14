@@ -5264,21 +5264,28 @@ function PortalAdminTab({ league }: { league: string }) {
   type ContractRow = { id: string; mc_uuid: string; amount: number; season: string | null; status: string; players: { mc_uuid: string; mc_username: string }; teams: { id: string; name: string; abbreviation: string } };
 
   const [rows, setRows] = useState<ContractRow[]>([]);
+  const [claimRows, setClaimRows] = useState<ContractRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionMsg, setActionMsg] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
-    const r = await fetch(`/api/contracts?league=${league}&status=portal_requested`);
-    const d = await r.json();
-    setRows(Array.isArray(d) ? d : []);
+    const [r1, r2] = await Promise.all([
+      fetch(`/api/contracts?league=${league}&status=portal_requested`),
+      fetch(`/api/contracts?league=${league}&status=portal_claim`),
+    ]);
+    const [d1, d2] = await Promise.all([r1.json(), r2.json()]);
+    setRows(Array.isArray(d1) ? d1 : []);
+    setClaimRows(Array.isArray(d2) ? d2 : []);
     setLoading(false);
   }, [league]);
 
   useEffect(() => { load(); }, [load]);
 
-  const decide = async (id: string, action: "approve" | "reject") => {
-    const newStatus = action === "approve" ? "in_portal" : "active";
+  const decide = async (id: string, action: "approve" | "reject", type: "portal" | "claim" = "portal") => {
+    const newStatus = action === "approve"
+      ? (type === "claim" ? "active" : "in_portal")
+      : (type === "portal" ? "active" : "rejected");
     const r = await fetch(`/api/contracts/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -5288,7 +5295,7 @@ function PortalAdminTab({ league }: { league: string }) {
     if (!r.ok) {
       setActionMsg((m) => ({ ...m, [id]: d.error }));
     } else {
-      setActionMsg((m) => ({ ...m, [id]: action === "approve" ? "✓ Player entered portal" : "✗ Rejected — contract restored" }));
+      setActionMsg((m) => ({ ...m, [id]: action === "approve" ? (type === "claim" ? "✓ Claim approved — player signed" : "✓ Player entered portal") : (type === "claim" ? "✗ Claim rejected" : "✗ Rejected — contract restored") }));
       load();
     }
   };
@@ -5319,8 +5326,39 @@ function PortalAdminTab({ league }: { league: string }) {
                   <div className="text-slate-500 text-xs">From: {s.teams?.name ?? "Unknown team"}{s.season ? ` · ${s.season}` : ""}</div>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => decide(s.id, "approve")} className="rounded-lg px-3 py-1.5 text-sm font-semibold bg-green-900 hover:bg-green-800 text-green-300 border border-green-700 transition">Approve</button>
-                  <button onClick={() => decide(s.id, "reject")} className="rounded-lg px-3 py-1.5 text-sm font-semibold bg-red-950 hover:bg-red-900 text-red-300 border border-red-800 transition">Reject</button>
+                  <button onClick={() => decide(s.id, "approve", "portal")} className="rounded-lg px-3 py-1.5 text-sm font-semibold bg-green-900 hover:bg-green-800 text-green-300 border border-green-700 transition">Approve</button>
+                  <button onClick={() => decide(s.id, "reject", "portal")} className="rounded-lg px-3 py-1.5 text-sm font-semibold bg-red-950 hover:bg-red-900 text-red-300 border border-red-800 transition">Reject</button>
+                </div>
+              </div>
+              {actionMsg[s.id] && (
+                <div className={`mt-2 text-xs px-3 py-1.5 rounded-lg border ${actionMsg[s.id].startsWith("✓") ? "text-green-400 bg-green-950 border-green-800" : "text-red-400 bg-red-950 border-red-800"}`}>
+                  {actionMsg[s.id]}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* --- Portal claim requests section --- */}
+      <div className="flex items-center justify-between mb-4 mt-8">
+        <div className="text-sm font-semibold text-slate-300">🏀 Pending Portal Claim Requests</div>
+      </div>
+      {loading ? null : claimRows.length === 0 ? (
+        <div className="text-slate-600 text-sm text-center py-8">No pending portal claim requests.</div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {claimRows.map((s) => (
+            <div key={s.id} className={card}>
+              <div className="flex items-center gap-3">
+                <img src={`https://minotar.net/avatar/${s.players.mc_username}/40`} className="w-10 h-10 rounded-lg border border-slate-700" onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/40"; }} alt="" />
+                <div className="flex-1">
+                  <div className="text-white font-bold">{s.players.mc_username}</div>
+                  <div className="text-slate-500 text-xs">Claimed by: {s.teams?.name ?? "Unknown team"}{s.season ? ` · ${s.season}` : ""}</div>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => decide(s.id, "approve", "claim")} className="rounded-lg px-3 py-1.5 text-sm font-semibold bg-green-900 hover:bg-green-800 text-green-300 border border-green-700 transition">Approve</button>
+                  <button onClick={() => decide(s.id, "reject", "claim")} className="rounded-lg px-3 py-1.5 text-sm font-semibold bg-red-950 hover:bg-red-900 text-red-300 border border-red-800 transition">Reject</button>
                 </div>
               </div>
               {actionMsg[s.id] && (

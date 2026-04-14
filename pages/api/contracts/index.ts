@@ -44,6 +44,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .select("*, players(mc_uuid, mc_username), teams(id, name, abbreviation)")
       .single();
     if (error) return res.status(500).json({ error: error.message });
+
+    // Sync player_teams: add player to this team
+    await supabase
+      .from("player_teams")
+      .upsert([{ mc_uuid, team_id, league }], { onConflict: "mc_uuid,league" });
+
     return res.status(200).json(data);
   }
 

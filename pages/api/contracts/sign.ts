@@ -44,7 +44,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .from("contracts")
       .select("mc_uuid")
       .eq("league", league)
-      .in("status", ["active", "pending_approval"]);
+      .in("status", ["active", "pending_approval", "portal_claim"]);
     const taken = new Set((takenContracts ?? []).map((c: any) => c.mc_uuid));
 
     if (isMcaa) {
@@ -90,9 +90,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .select("id")
       .eq("mc_uuid", mc_uuid)
       .eq("league", league)
-      .in("status", ["active", "pending_approval"])
+      .in("status", ["active", "pending_approval", "portal_claim"])
       .maybeSingle();
     if (existingContract) return res.status(400).json({ error: "Player already has an active or pending contract" });
+
+    // Check if player is currently in the portal (makes this a portal claim, not a signing)
+    const { data: portalContract } = await supabase
+      .from("contracts")
+      .select("id")
+      .eq("mc_uuid", mc_uuid)
+      .eq("league", league)
+      .eq("status", "in_portal")
+      .maybeSingle();
+    const isPortalClaim = !!portalContract;
 
     let amt = 0;
 
@@ -120,16 +130,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(400).json({ error: `Exceeds cap: ${capUsed.toLocaleString()} + ${amt.toLocaleString()} > ${TOTAL_CAP.toLocaleString()}` });
     }
 
-    // If signing a portal player, release their old portal contract
-    if (isMcaa) {
-      await supabase
-        .from("contracts")
-        .update({ status: "cut" })
-        .eq("mc_uuid", mc_uuid)
-        .eq("league", league)
-        .in("status", ["in_portal", "portal_requested"]);
-    }
-
     const { data: contract, error } = await supabase
       .from("contracts")
       .insert([{
@@ -140,7 +140,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         is_two_season: false,
         season: ownerRecord.season ?? null,
         phase: 1,
-        status: "pending_approval",
+        // Portal claims get their own status so they stay in the portal tab (not signings)
+        status: isPortalClaim ? "portal_claim" : "pending_approval",
       }])
       .select("*, players(mc_uuid, mc_username), teams(id, name, abbreviation)")
       .single();

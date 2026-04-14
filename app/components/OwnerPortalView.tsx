@@ -85,7 +85,7 @@ function RosterView({ contracts, retentions, leagueSlug }: { contracts: Contract
     <div>
       {showCap && <CapBar contracts={contracts} retentions={retentions} />}
       {contracts.length === 0
-        ? <div style={{ color: "#444", textAlign: "center", padding: "24px 0" }}>No active contracts.</div>
+        ? <div style={{ color: "#444", textAlign: "center", padding: "24px 0" }}>{showCap ? "No active contracts." : "No players assigned."}</div>
         : (
           <>
             {players.map(c => (
@@ -652,16 +652,21 @@ function PortalView({ teamId, leagueSlug, contracts, onRefresh }: {
   const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [portalPlayers, setPortalPlayers] = useState<PortalPlayer[]>([]);
+  const [pendingClaims, setPendingClaims] = useState<PortalPlayer[]>([]);
   const [claimingId, setClaimingId] = useState<string | null>(null);
   const [claimMsg, setClaimMsg] = useState<Record<string, { type: "ok" | "err"; text: string }>>({});
 
   const activeContracts = contracts.filter(c => c.status === "active");
 
   const loadPortal = useCallback(async () => {
-    const r = await fetch(`/api/contracts?league=${leagueSlug}&status=in_portal`);
-    const d = await r.json();
-    setPortalPlayers(Array.isArray(d) ? d : []);
-  }, [leagueSlug]);
+    const [r1, r2] = await Promise.all([
+      fetch(`/api/contracts?league=${leagueSlug}&status=in_portal`),
+      fetch(`/api/contracts?league=${leagueSlug}&team_id=${teamId}&status=portal_claim`),
+    ]);
+    const [d1, d2] = await Promise.all([r1.json(), r2.json()]);
+    setPortalPlayers(Array.isArray(d1) ? d1 : []);
+    setPendingClaims(Array.isArray(d2) ? d2 : []);
+  }, [leagueSlug, teamId]);
 
   useEffect(() => { loadPortal(); }, [loadPortal]);
 
@@ -739,6 +744,28 @@ function PortalView({ teamId, leagueSlug, contracts, onRefresh }: {
           </div>
         )}
       </div>
+
+      {/* ── My Pending Claims ── */}
+      {pendingClaims.length > 0 && (
+        <div style={{ ...st.innerCard, marginBottom: 20 }}>
+          <div style={{ color: "#aaa", fontWeight: 700, marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
+            ⏳ Your Pending Portal Claims
+            <span style={{ fontSize: 11, color: "#555", fontWeight: 400 }}>· Awaiting admin approval</span>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {pendingClaims.map(p => (
+              <div key={p.id} style={{ ...st.innerCard, display: "flex", alignItems: "center", gap: 12 }}>
+                <img src={`https://minotar.net/avatar/${p.players.mc_username}/36`} style={{ width: 36, height: 36, borderRadius: 6, border: "1px solid #222", imageRendering: "pixelated" as const }} onError={e => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/36"; }} alt="" />
+                <div style={{ flex: 1 }}>
+                  <div style={{ color: "#fff", fontWeight: 700, fontSize: 14 }}>{p.players.mc_username}</div>
+                  <div style={{ color: "#555", fontSize: 11 }}>From portal{p.season ? ` · ${p.season}` : ""}</div>
+                </div>
+                <span style={{ fontSize: 11, color: "#f59e0b", background: "#1c1200", border: "1px solid #78350f", borderRadius: 6, padding: "2px 8px", fontWeight: 600 }}>Claim Pending</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Send to Portal ── */}
       <div style={{ ...st.innerCard, marginBottom: 20 }}>

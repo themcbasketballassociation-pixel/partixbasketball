@@ -84,6 +84,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const admin = await requireAdmin(req, res);
     if (!admin) return;
     const { status, team_id, amount } = req.body;
+
+    // Fetch existing contract before updating so we know old status
+    const { data: existing } = await supabase
+      .from("contracts")
+      .select("status, mc_uuid, team_id, league")
+      .eq("id", id as string)
+      .single();
+
     const updates: Record<string, unknown> = {};
     if (status !== undefined) updates.status = status;
     if (team_id !== undefined) updates.team_id = team_id;
@@ -95,6 +103,40 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .select("*, players(mc_uuid, mc_username), teams(id, name, abbreviation, logo_url)")
       .single();
     if (error) return res.status(500).json({ error: error.message });
+
+    // ── Sync player_teams ──────────────────────────────────────────────────────
+    if (status === "active" && data) {
+      const mc_uuid = (data as any).mc_uuid;
+      const contractLeague = (data as any).league;
+      const newTeamId = (data as any).team_id;
+
+      // Add (or move) player to the new team in player_teams
+      await supabase
+        .from("player_teams")
+        .upsert([{ mc_uuid, team_id: newTeamId, league: contractLeague }], { onConflict: "mc_uuid,league" });
+
+      // If this was a portal claim, close the original in_portal contract
+      if (existing?.status === "portal_claim") {
+        await supabase
+          .from("contracts")
+          .update({ status: "cut" })
+          .eq("mc_uuid", mc_uuid)
+          .eq("league", contractLeague)
+          .eq("status", "in_portal");
+      }
+    }
+
+    if ((status === "cut" || status === "in_portal") && data) {
+      const mc_uuid = (data as any).mc_uuid;
+      const contractLeague = (data as any).league;
+      // Remove player from their team in player_teams
+      await supabase
+        .from("player_teams")
+        .delete()
+        .eq("mc_uuid", mc_uuid)
+        .eq("league", contractLeague);
+    }
+    // ──────────────────────────────────────────────────────────────────────────
 
     // Fire Discord webhook for approvals
     if (status && ["active", "cut", "in_portal"].includes(status)) {
