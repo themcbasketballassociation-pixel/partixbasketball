@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useSession, signIn } from "next-auth/react";
 
-const EPOCH_MS   = new Date("2026-04-13T14:00:00Z").getTime();
+const EPOCH_MS   = new Date("2026-04-14T15:00:00Z").getTime(); // Day 1 = April 14 2026 10 AM EST
 const SEASON_SEED = Math.floor(EPOCH_MS / 86400000);
 function getDayNum() {
   return Math.max(1, Math.floor((Date.now() - EPOCH_MS) / 86400000) + 1);
@@ -47,6 +47,16 @@ const BAR_COLORS: Record<"start" | "bench" | "cut", string> = {
 
 // ── Pick 3 players for the day ────────────────────────────────────────────────
 
+// Deterministically pick 3 from topTier for a given day seed, no exclusions
+function pickFromTier(topTier: Player[], daySeed: number): Player[] {
+  const rng = seededRng(daySeed);
+  const windowSize = Math.min(5, topTier.length);
+  const maxStart = topTier.length - windowSize;
+  const start = Math.floor(rng() * (maxStart + 1));
+  const window = topTier.slice(start, start + windowSize);
+  return shuffled(window, rng).slice(0, 3);
+}
+
 function pickDaily(dayNum: number, players: Player[], statsMap: Record<string, StatRow>): Player[] {
   const withStats = players.filter(p => statsMap[p.mc_uuid]);
   const pool = withStats.length >= 3 ? withStats : players;
@@ -57,21 +67,30 @@ function pickDaily(dayNum: number, players: Player[], statsMap: Record<string, S
     if (!s) return 0;
     return (s.ppg ?? 0) + 0.5 * (s.rpg ?? 0) + 0.5 * (s.apg ?? 0);
   };
-  // Sort descending so index 0 = best player
   const sorted = [...pool].sort((a, b) => score(b) - score(a));
-
-  // Only draw from the top 40% (minimum 6 players) to avoid low-stat scrubs
   const topCount = Math.max(6, Math.ceil(sorted.length * 0.4));
   const topTier = sorted.slice(0, Math.min(topCount, sorted.length));
 
-  const rng = seededRng((SEASON_SEED + dayNum) * 97 + 13);
-  // Within the top tier, pick a window of 5 consecutive players then randomly take 3
-  // This keeps all 3 close in ability, making the choice genuinely controversial
-  const windowSize = Math.min(5, topTier.length);
-  const maxStart = topTier.length - windowSize;
-  const start = Math.floor(rng() * (maxStart + 1));
-  const window = topTier.slice(start, start + windowSize);
-  return shuffled(window, rng).slice(0, 3);
+  const daySeed = (SEASON_SEED + dayNum) * 97 + 13;
+
+  // Get yesterday's picks to exclude them from today
+  const prevUuids = new Set<string>();
+  if (dayNum > 1) {
+    const prevSeed = (SEASON_SEED + dayNum - 1) * 97 + 13;
+    for (const p of pickFromTier(topTier, prevSeed)) prevUuids.add(p.mc_uuid);
+  }
+
+  // Also exclude the day before yesterday to avoid near-repeat patterns
+  if (dayNum > 2) {
+    const prev2Seed = (SEASON_SEED + dayNum - 2) * 97 + 13;
+    for (const p of pickFromTier(topTier, prev2Seed)) prevUuids.add(p.mc_uuid);
+  }
+
+  // Filter out recently-used players; fall back to full tier if too few remain
+  const eligible = topTier.filter(p => !prevUuids.has(p.mc_uuid));
+  const pickTier = eligible.length >= 3 ? eligible : topTier;
+
+  return pickFromTier(pickTier, daySeed);
 }
 
 // ── Result bar ────────────────────────────────────────────────────────────────
