@@ -41,6 +41,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await supabase.from("team_records").delete().eq("team_id", id);
     await supabase.from("team_owners").delete().eq("team_id", id);
     // Null out auction winning_team_id references, delete bids
+    await supabase.from("contracts").delete().eq("team_id", id);
     await supabase.from("auction_bids").delete().eq("team_id", id);
     await supabase.from("auctions").update({ winning_team_id: null }).eq("winning_team_id", id);
 
