@@ -214,7 +214,7 @@ export default function AccoladesPage({ params }: { params?: Promise<{ league?: 
               <div key={s}>
                 <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">{s}</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {filtered.filter((a) => a.season === s).map((a) => (
+                  {filtered.filter((a) => a.season === s).sort((a, b) => a.type.localeCompare(b.type)).map((a) => (
                     <div key={a.id} className="rounded-xl border border-slate-700 bg-slate-950 px-5 py-4 hover:border-slate-600 transition">
                       <div className="flex items-center gap-3 mb-3">
                         <img
