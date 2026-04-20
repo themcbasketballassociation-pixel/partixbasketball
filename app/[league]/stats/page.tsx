@@ -9,7 +9,8 @@ const leagueNames: Record<string, string> = {
 
 type StatRow = {
   mc_uuid: string; mc_username: string; rank: number; gp: number;
-  ppg: number | null; rpg: number | null; apg: number | null;
+  ppg: number | null; rpg: number | null; orpg: number | null; drpg: number | null;
+  apg: number | null;
   spg: number | null; bpg: number | null; fg_pct: number | null; three_pt_pct: number | null;
   mpg: number | null; topg: number | null;
   tppg: number | null;
@@ -18,7 +19,7 @@ type StatRow = {
   team?: { id: string; name: string; abbreviation: string; logo_url?: string | null } | null;
 };
 
-type SortKey = "gp" | "ppg" | "rpg" | "apg" | "spg" | "bpg" | "fg_pct" | "three_pt_pct" | "mpg" | "topg" | "tppg" | "pass_attempts_pg" | "possession_time_pg";
+type SortKey = "gp" | "ppg" | "rpg" | "orpg" | "drpg" | "apg" | "spg" | "bpg" | "fg_pct" | "three_pt_pct" | "mpg" | "topg" | "tppg" | "pass_attempts_pg" | "possession_time_pg";
 type StatType = "regular" | "playoffs" | "total";
 
 type TeamStatRow = {
@@ -40,6 +41,8 @@ const COLS: { key: SortKey | "_rank" | "_player"; label: string; always?: boolea
   { key: "gp",                label: "GP",      always: true },
   { key: "ppg",               label: "PPG",     always: true },
   { key: "rpg",               label: "RPG",     always: true },
+  { key: "orpg",              label: "ORPG",    always: true },
+  { key: "drpg",              label: "DRPG",    always: true },
   { key: "apg",               label: "APG",     always: true },
   { key: "spg",               label: "SPG",     always: true },
   { key: "bpg",               label: "BPG",     always: true },
@@ -279,6 +282,8 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
                     <td className={`px-4 py-4 text-center text-slate-400 text-base ${tdHighlight("gp")}`}>{s.gp}</td>
                     <td className={`px-4 py-4 text-center text-base ${tdHighlight("ppg") || "text-slate-200"}`}>{fmt(s.ppg)}</td>
                     <td className={`px-4 py-4 text-center text-base ${tdHighlight("rpg") || "text-slate-300"}`}>{fmt(s.rpg)}</td>
+                    <td className={`px-4 py-4 text-center text-base ${tdHighlight("orpg") || "text-slate-300"}`}>{s.orpg != null ? fmt(s.orpg) : <span className="text-slate-600">—</span>}</td>
+                    <td className={`px-4 py-4 text-center text-base ${tdHighlight("drpg") || "text-slate-300"}`}>{s.drpg != null ? fmt(s.drpg) : <span className="text-slate-600">—</span>}</td>
                     <td className={`px-4 py-4 text-center text-base ${tdHighlight("apg") || "text-slate-300"}`}>{fmt(s.apg)}</td>
                     <td className={`px-4 py-4 text-center text-base ${tdHighlight("spg") || "text-slate-300"}`}>{fmt(s.spg)}</td>
                     <td className={`px-4 py-4 text-center text-base ${tdHighlight("bpg") || "text-slate-300"}`}>{fmt(s.bpg)}</td>
