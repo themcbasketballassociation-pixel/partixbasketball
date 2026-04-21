@@ -228,20 +228,28 @@ function generateGroups(
   }
 
   // ── Greedily pick 4 non-overlapping groups — max 1 per category type ───────
+  // poolBlacklist: any player who qualifies for a chosen group is banned from ALL other groups,
+  // so no tile can logically fit more than one category.
   const shuffledCandidates = shuffled(candidates, rng);
   const selected: Group[] = [];
-  const usedUuids = new Set<string>();
+  const poolBlacklist = new Set<string>();
   const usedTypes = new Set<CandType>();
   const colors: GroupColor[] = shuffled(["yellow", "green", "blue", "purple"] as GroupColor[], rng);
 
   for (const cand of shuffledCandidates) {
     if (selected.length >= 4) break;
-    if (usedTypes.has(cand.type)) continue; // skip duplicate category types
-    const available = cand.pool.filter(p => !usedUuids.has(p.mc_uuid));
+    if (usedTypes.has(cand.type)) continue;
+    // Exclude players who qualify for any already-chosen group
+    const available = cand.pool.filter(p => !poolBlacklist.has(p.mc_uuid));
     if (available.length < 4) continue;
-    const picked = shuffled(available, rng).slice(0, 4);
+    // Prefer higher-GP players: sort desc, cap at top 8, then seeded-shuffle to pick 4
+    const sortedAvail = [...available].sort((a, b) => (gpMap[b.mc_uuid] ?? 0) - (gpMap[a.mc_uuid] ?? 0));
+    const topPool = sortedAvail.slice(0, Math.max(4, Math.min(8, sortedAvail.length)));
+    const picked = shuffled(topPool, rng).slice(0, 4);
     selected.push({ label: cand.label, description: cand.description, color: colors[selected.length], players: picked });
-    for (const p of picked) usedUuids.add(p.mc_uuid);
+    // Blacklist every player in this group's FULL pool, not just the 4 picked,
+    // so none of them can appear as a tile in any other group either.
+    for (const p of cand.pool) poolBlacklist.add(p.mc_uuid);
     usedTypes.add(cand.type);
   }
 
@@ -359,11 +367,18 @@ export default function ConnectionsPage({ params }: { params?: Promise<{ league?
       ]);
       const leaguePlayers = playersArr.filter(p => leagueUuids.has(p.mc_uuid));
 
-      // Build total PBA GP map (used to gate college content — 10+ games required)
+      // Build GP + career PPG maps
       const gpMap: Record<string, number> = {};
-      for (const s of statsArr) { gpMap[s.mc_uuid] = s.gp ?? 0; }
+      const ppgMap: Record<string, number> = {};
+      for (const s of statsArr) {
+        gpMap[s.mc_uuid] = s.gp ?? 0;
+        if (s.ppg != null) ppgMap[s.mc_uuid] = s.ppg;
+      }
 
-      const gs = generateGroups(dayNum, leaguePlayers, ptArr, sznArr, accsArr, gpMap, collegePtArr, collegeAccsArr);
+      // Only use players who average at least 9 PPG (filters out obscure low-usage players)
+      const eligiblePlayers = leaguePlayers.filter(p => (ppgMap[p.mc_uuid] ?? 0) >= 9);
+
+      const gs = generateGroups(dayNum, eligiblePlayers, ptArr, sznArr, accsArr, gpMap, collegePtArr, collegeAccsArr);
       if (!gs) { setNoData(true); setLoading(false); return; }
 
       setGroups(gs);
