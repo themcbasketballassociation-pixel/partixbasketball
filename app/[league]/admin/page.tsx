@@ -5417,6 +5417,186 @@ function PortalAdminTab({ league }: { league: string }) {
   );
 }
 
+// ─── Tab: Crew ────────────────────────────────────────────────────────────────
+
+type CrewAccessEntry = { discord_id: string; display_name: string | null; granted_at: string };
+type CrewClaim = { id: string; game_id: string; discord_id: string; discord_name: string; role: string; league: string; claimed_at: string };
+
+const CREW_ROLE_COINS: Record<string, number> = { streamer: 1000, ref: 500, commentator: 500 };
+
+function CrewAdminTab({ league }: { league: string }) {
+  const [accessList, setAccessList] = useState<CrewAccessEntry[]>([]);
+  const [claims, setClaims] = useState<CrewClaim[]>([]);
+  const [newDiscordId, setNewDiscordId] = useState("");
+  const [newDisplayName, setNewDisplayName] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [err, setErr] = useState("");
+  const [view, setView] = useState<"access" | "coins">("access");
+
+  const loadAll = useCallback(async () => {
+    const [aRes, cRes] = await Promise.all([
+      fetch("/api/crew-access"),
+      fetch(`/api/game-crew?league=${league}`),
+    ]);
+    const aData = await aRes.json().catch(() => []);
+    const cData = await cRes.json().catch(() => []);
+    setAccessList(Array.isArray(aData) ? aData : []);
+    setClaims(Array.isArray(cData) ? cData : []);
+  }, [league]);
+
+  useEffect(() => { loadAll(); }, [loadAll]);
+
+  const addAccess = async () => {
+    if (!newDiscordId.trim()) return;
+    setAdding(true); setErr("");
+    const r = await fetch("/api/crew-access", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ discord_id: newDiscordId.trim(), display_name: newDisplayName.trim() || null }),
+    });
+    const data = await r.json();
+    if (!r.ok) { setErr(data.error ?? "Failed"); setAdding(false); return; }
+    setNewDiscordId(""); setNewDisplayName(""); setAdding(false);
+    loadAll();
+  };
+
+  const revokeAccess = async (discordId: string) => {
+    if (!confirm(`Revoke access for ${discordId}?`)) return;
+    await fetch("/api/crew-access", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ discord_id: discordId }),
+    });
+    loadAll();
+  };
+
+  const removeClaim = async (claimId: string) => {
+    await fetch(`/api/game-crew/${claimId}`, { method: "DELETE" });
+    loadAll();
+  };
+
+  // Compute coins leaderboard
+  const coinsByUser = claims.reduce<Record<string, { discord_name: string; coins: number; breakdown: Record<string, number> }>>((acc, c) => {
+    if (!acc[c.discord_id]) acc[c.discord_id] = { discord_name: c.discord_name || c.discord_id, coins: 0, breakdown: {} };
+    const earned = CREW_ROLE_COINS[c.role] ?? 0;
+    acc[c.discord_id].coins += earned;
+    acc[c.discord_id].breakdown[c.role] = (acc[c.discord_id].breakdown[c.role] ?? 0) + 1;
+    return acc;
+  }, {});
+  const leaderboard = Object.entries(coinsByUser)
+    .map(([id, v]) => ({ discord_id: id, ...v }))
+    .sort((a, b) => b.coins - a.coins);
+
+  return (
+    <div className="space-y-6">
+      {/* Sub-view toggle */}
+      <div className="flex gap-2">
+        {(["access", "coins"] as const).map((v) => (
+          <button
+            key={v}
+            onClick={() => setView(v)}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition capitalize ${view === v ? "bg-slate-700 text-white" : "text-slate-400 hover:text-white hover:bg-slate-800"}`}
+          >
+            {v === "access" ? "Access Management" : "Coins Leaderboard"}
+          </button>
+        ))}
+      </div>
+
+      {view === "access" && (
+        <div className={card}>
+          <h3 className="text-white font-bold mb-4">Crew Access</h3>
+          <p className="text-slate-500 text-sm mb-4">Only Discord IDs in this list can claim crew spots on Press Row.</p>
+
+          {/* Add form */}
+          <div className="flex gap-2 mb-4 flex-wrap">
+            <input
+              className={input}
+              placeholder="Discord ID (e.g. 123456789012345678)"
+              value={newDiscordId}
+              onChange={(e) => setNewDiscordId(e.target.value)}
+              style={{ flex: "1 1 200px" }}
+            />
+            <input
+              className={input}
+              placeholder="Display name (optional)"
+              value={newDisplayName}
+              onChange={(e) => setNewDisplayName(e.target.value)}
+              style={{ flex: "1 1 160px" }}
+            />
+            <button className={btnPrimary} onClick={addAccess} disabled={adding || !newDiscordId.trim()}>
+              {adding ? "Adding…" : "Grant Access"}
+            </button>
+          </div>
+          <ErrMsg msg={err} />
+
+          {/* Access list */}
+          {accessList.length === 0 ? (
+            <p className="text-slate-600 text-sm">No one has access yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {accessList.map((entry) => (
+                <div key={entry.discord_id} className="flex items-center justify-between gap-3 rounded-lg bg-slate-900 border border-slate-800 px-4 py-2.5">
+                  <div>
+                    <div className="text-white text-sm font-semibold">{entry.display_name || entry.discord_id}</div>
+                    <div className="text-slate-500 text-xs font-mono">{entry.discord_id}</div>
+                  </div>
+                  <button className={btnDanger} onClick={() => revokeAccess(entry.discord_id)}>Revoke</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {view === "coins" && (
+        <div className={card}>
+          <h3 className="text-white font-bold mb-4">Coins Leaderboard</h3>
+          {leaderboard.length === 0 ? (
+            <p className="text-slate-600 text-sm">No claims yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {leaderboard.map((entry, i) => (
+                <div key={entry.discord_id} className="flex items-center gap-4 rounded-lg bg-slate-900 border border-slate-800 px-4 py-3">
+                  <span className="text-slate-600 text-sm font-bold w-6 text-center">{i + 1}</span>
+                  <div className="flex-1">
+                    <div className="text-white text-sm font-semibold">{entry.discord_name}</div>
+                    <div className="text-slate-600 text-xs font-mono">{entry.discord_id}</div>
+                    <div className="text-slate-500 text-xs mt-0.5">
+                      {Object.entries(entry.breakdown).map(([role, count]) => `${count}× ${role}`).join(" · ")}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-white font-bold text-lg">{entry.coins.toLocaleString()}</div>
+                    <div className="text-slate-600 text-xs">coins</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* All claims list */}
+          {claims.length > 0 && (
+            <div className="mt-6">
+              <h4 className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-3">All Claims</h4>
+              <div className="space-y-1.5">
+                {claims.map((c) => (
+                  <div key={c.id} className="flex items-center gap-3 rounded-lg bg-slate-950 border border-slate-800/50 px-3 py-2 text-sm">
+                    <span className="text-slate-300 font-medium flex-1">{c.discord_name || c.discord_id}</span>
+                    <span className="text-slate-500 capitalize">{c.role}</span>
+                    <span className="text-slate-600 text-xs font-mono">{c.game_id.slice(0, 8)}…</span>
+                    <span className="text-green-500 text-xs font-bold">+{CREW_ROLE_COINS[c.role] ?? 0}</span>
+                    <button className={btnDanger} style={{ padding: "2px 8px", fontSize: 11 }} onClick={() => removeClaim(c.id)}>Remove</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Admin Page ──────────────────────────────────────────────────────────
 
 const TAB_GROUPS = {
@@ -5425,9 +5605,10 @@ const TAB_GROUPS = {
   Games:        ["Schedule", "Box Scores", "Stats", "Playoffs"],
   Transactions: ["Auction", "Trades", "Signings", "Cuts", "Portal"],
   Content:      ["Accolades", "Champions", "Articles", "Board"],
+  Operations:   ["Crew"],
 } as const;
 type MainTab = keyof typeof TAB_GROUPS | "Backup";
-type Tab = "Players" | "Teams" | "Owners" | "Draft Picks" | "Schedule" | "Box Scores" | "Stats" | "Playoffs" | "Auction" | "Trades" | "Signings" | "Cuts" | "Portal" | "Accolades" | "Champions" | "Articles" | "Board" | "Backup";
+type Tab = "Players" | "Teams" | "Owners" | "Draft Picks" | "Schedule" | "Box Scores" | "Stats" | "Playoffs" | "Auction" | "Trades" | "Signings" | "Cuts" | "Portal" | "Accolades" | "Champions" | "Articles" | "Board" | "Crew" | "Backup";
 const SEASONS = ["Season 1","Season 1 Playoffs","Season 2","Season 2 Playoffs","Season 3","Season 3 Playoffs","Season 4","Season 4 Playoffs","Season 5","Season 5 Playoffs","Season 6","Season 6 Playoffs","Season 7","Season 7 Playoffs"];
 
 export default function AdminPage({ params }: { params?: Promise<{ league?: string }> }) {
@@ -5725,6 +5906,7 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
         {activeTab === "Cuts" && <CutsAdminTab league={league} />}
         {activeTab === "Portal" && <PortalAdminTab league={league} />}
         {activeTab === "Board" && <BoardMembersTab league={league} />}
+        {activeTab === "Crew" && <CrewAdminTab league={league} />}
         {activeTab === "Backup" && (session as any)?.user?.id?.toString() === SUPER_ADMIN_ID && <BackupTab />}
       </div>
     </div>
