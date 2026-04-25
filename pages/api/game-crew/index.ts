@@ -24,10 +24,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === "POST") {
-    const session = await getServerSession(req, res, authOptions as any);
+    const session = await getServerSession(req, res, authOptions as any) as any;
     if (!session?.user) return res.status(401).json({ error: "Not logged in" });
-    const discordId = (session.user as any).id as string;
-    const discordName = ((session.user as any).name as string) ?? "";
+    const discordId = session.user.id as string;
+    const discordName = (session.user.name as string) ?? "";
 
     const { game_id, role, league: leagueRaw } = req.body;
     const league = resolveLeague(leagueRaw);
