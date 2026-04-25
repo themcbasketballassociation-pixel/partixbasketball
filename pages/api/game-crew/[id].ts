@@ -7,9 +7,9 @@ import { requireAdmin } from "../../../lib/adminAuth";
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === "DELETE") {
     const { id } = req.query;
-    const session = await getServerSession(req, res, authOptions as any);
+    const session = await getServerSession(req, res, authOptions as any) as any;
     if (!session?.user) return res.status(401).json({ error: "Not logged in" });
-    const discordId = (session.user as any).id as string;
+    const discordId = session.user.id as string;
 
     const { data: claim, error: fetchErr } = await supabase
       .from("game_crew")
