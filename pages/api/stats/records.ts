@@ -25,13 +25,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!league) return res.status(400).json({ error: "league required" });
 
   // Aggregates from game_stats (individual game rows — used by PCAA/PBGL)
-  const seasonTotals: Record<string, Record<string, { points: number; rebounds: number; assists: number; steals: number }>> = {};
+  const seasonTotals: Record<string, Record<string, { points: number; rebounds: number; assists: number; steals: number; blocks: number }>> = {};
   const seasonGameCount: Record<string, Record<string, number>> = {};
-  const careerTotals: Record<string, { points: number; rebounds: number; assists: number; steals: number }> = {};
+  const careerTotals: Record<string, { points: number; rebounds: number; assists: number; steals: number; blocks: number }> = {};
   const careerGameCount: Record<string, number> = {};
   const playerMap: Record<string, string> = {};
   // Direct avg rows from stats table (PBA source)
-  const statsTableAvgs: { uuid: string; season: string; ppg: number; rpg: number; apg: number; spg: number; gp: number }[] = [];
+  const statsTableAvgs: { uuid: string; season: string; ppg: number; rpg: number; apg: number; spg: number; bpg: number; gp: number }[] = [];
 
   // ── Source 1: game_stats table ─────────────────────────────────────────────
   const { data: games } = await supabase
@@ -47,10 +47,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
   const gameIds = Object.keys(gameMap);
 
+  // Track individual game highs for blocks
+  let gameBlocksRecord: RecordEntry = { mc_uuid: "", mc_username: "", value: 0, season: "" };
+
   if (gameIds.length) {
     const { data: gsRows } = await supabase
       .from("game_stats")
-      .select("game_id, mc_uuid, points, rebounds_off, rebounds_def, assists, steals")
+      .select("game_id, mc_uuid, points, rebounds_off, rebounds_def, assists, steals, blocks")
       .in("game_id", gameIds);
 
     const gsUuids = [...new Set((gsRows ?? []).map((r) => r.mc_uuid as string))];
@@ -66,30 +69,47 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const reb = ((row.rebounds_off as number) ?? 0) + ((row.rebounds_def as number) ?? 0);
       const ast = (row.assists as number) ?? 0;
       const stl = (row.steals as number) ?? 0;
+      const blk = (row.blocks as number) ?? 0;
 
       if (!seasonTotals[uuid]) seasonTotals[uuid] = {};
-      if (!seasonTotals[uuid][season]) seasonTotals[uuid][season] = { points: 0, rebounds: 0, assists: 0, steals: 0 };
+      if (!seasonTotals[uuid][season]) seasonTotals[uuid][season] = { points: 0, rebounds: 0, assists: 0, steals: 0, blocks: 0 };
       seasonTotals[uuid][season].points += pts;
       seasonTotals[uuid][season].rebounds += reb;
       seasonTotals[uuid][season].assists += ast;
       seasonTotals[uuid][season].steals += stl;
+      seasonTotals[uuid][season].blocks += blk;
 
       if (!seasonGameCount[uuid]) seasonGameCount[uuid] = {};
       seasonGameCount[uuid][season] = (seasonGameCount[uuid][season] ?? 0) + 1;
 
-      if (!careerTotals[uuid]) careerTotals[uuid] = { points: 0, rebounds: 0, assists: 0, steals: 0 };
+      if (!careerTotals[uuid]) careerTotals[uuid] = { points: 0, rebounds: 0, assists: 0, steals: 0, blocks: 0 };
       careerTotals[uuid].points += pts;
       careerTotals[uuid].rebounds += reb;
       careerTotals[uuid].assists += ast;
       careerTotals[uuid].steals += stl;
+      careerTotals[uuid].blocks += blk;
       careerGameCount[uuid] = (careerGameCount[uuid] ?? 0) + 1;
+
+      // Track single-game blocks record
+      if (blk > gameBlocksRecord.value) {
+        gameBlocksRecord = {
+          mc_uuid: uuid,
+          mc_username: playerMap[uuid] ?? uuid,
+          value: blk,
+          season,
+        };
+      }
+    }
+    // Re-resolve usernames for game record (playerMap is now fully populated)
+    if (gameBlocksRecord.mc_uuid) {
+      gameBlocksRecord.mc_username = playerMap[gameBlocksRecord.mc_uuid] ?? gameBlocksRecord.mc_uuid;
     }
   }
 
   // ── Source 2: stats table (pre-aggregated — used by PBA) ──────────────────
   const { data: statsRows } = await supabase
     .from("stats")
-    .select("mc_uuid, season, gp, ppg, rpg, apg, spg")
+    .select("mc_uuid, season, gp, ppg, rpg, apg, spg, bpg")
     .eq("league", league);
 
   if (statsRows?.length) {
@@ -109,19 +129,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const reb = Math.round(((row.rpg as number) ?? 0) * gp);
       const ast = Math.round(((row.apg as number) ?? 0) * gp);
       const stl = Math.round(((row.spg as number) ?? 0) * gp);
+      const blk = Math.round(((row.bpg as number) ?? 0) * gp);
 
       if (!seasonTotals[uuid]) seasonTotals[uuid] = {};
-      if (!seasonTotals[uuid][season]) seasonTotals[uuid][season] = { points: 0, rebounds: 0, assists: 0, steals: 0 };
+      if (!seasonTotals[uuid][season]) seasonTotals[uuid][season] = { points: 0, rebounds: 0, assists: 0, steals: 0, blocks: 0 };
       seasonTotals[uuid][season].points += pts;
       seasonTotals[uuid][season].rebounds += reb;
       seasonTotals[uuid][season].assists += ast;
       seasonTotals[uuid][season].steals += stl;
+      seasonTotals[uuid][season].blocks += blk;
 
-      if (!careerTotals[uuid]) careerTotals[uuid] = { points: 0, rebounds: 0, assists: 0, steals: 0 };
+      if (!careerTotals[uuid]) careerTotals[uuid] = { points: 0, rebounds: 0, assists: 0, steals: 0, blocks: 0 };
       careerTotals[uuid].points += pts;
       careerTotals[uuid].rebounds += reb;
       careerTotals[uuid].assists += ast;
       careerTotals[uuid].steals += stl;
+      careerTotals[uuid].blocks += blk;
       careerGameCount[uuid] = (careerGameCount[uuid] ?? 0) + gp;
 
       statsTableAvgs.push({
@@ -130,12 +153,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         rpg: (row.rpg as number) ?? 0,
         apg: (row.apg as number) ?? 0,
         spg: (row.spg as number) ?? 0,
+        bpg: (row.bpg as number) ?? 0,
       });
     }
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────
-  function bestSeason(stat: "points" | "rebounds" | "assists" | "steals"): RecordEntry {
+  function bestSeason(stat: "points" | "rebounds" | "assists" | "steals" | "blocks"): RecordEntry {
     let best: RecordEntry = { mc_uuid: "", mc_username: "", value: 0, season: "" };
     for (const [uuid, seasons] of Object.entries(seasonTotals)) {
       for (const [season, totals] of Object.entries(seasons)) {
@@ -147,10 +171,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return best;
   }
 
-  function bestSeasonAvg(stat: "ppg" | "rpg" | "apg" | "spg"): RecordEntry {
+  function bestSeasonAvg(stat: "ppg" | "rpg" | "apg" | "spg" | "bpg"): RecordEntry {
     const MIN_GAMES = 3;
     let best: RecordEntry = { mc_uuid: "", mc_username: "", value: 0, season: "" };
-    const totalKey = ({ ppg: "points", rpg: "rebounds", apg: "assists", spg: "steals" } as const)[stat];
+    const totalKey = ({ ppg: "points", rpg: "rebounds", apg: "assists", spg: "steals", bpg: "blocks" } as const)[stat];
 
     // From game_stats source
     for (const [uuid, seasons] of Object.entries(seasonTotals)) {
@@ -175,7 +199,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return best;
   }
 
-  function bestCareer(stat: "points" | "rebounds" | "assists" | "steals"): RecordEntry {
+  function bestCareer(stat: "points" | "rebounds" | "assists" | "steals" | "blocks"): RecordEntry {
     let best: RecordEntry = { mc_uuid: "", mc_username: "", value: 0, season: "Career" };
     for (const [uuid, totals] of Object.entries(careerTotals)) {
       if (totals[stat] > best.value) {
@@ -185,7 +209,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return best;
   }
 
-  function bestCareerAvg(stat: "points" | "rebounds" | "assists" | "steals"): RecordEntry {
+  function bestCareerAvg(stat: "points" | "rebounds" | "assists" | "steals" | "blocks"): RecordEntry {
     const MIN_GAMES = 3;
     let best: RecordEntry = { mc_uuid: "", mc_username: "", value: 0, season: "Career" };
     for (const [uuid, totals] of Object.entries(careerTotals)) {
@@ -207,30 +231,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const result: Records = {
     season: {
-      points: bestSeason("points"),
+      points:  bestSeason("points"),
+      assists:  bestSeason("assists"),
       rebounds: bestSeason("rebounds"),
-      assists: bestSeason("assists"),
-      steals: bestSeason("steals"),
+      steals:   bestSeason("steals"),
+      blocks:   bestSeason("blocks"),
     },
     seasonAvg: {
       ppg: bestSeasonAvg("ppg"),
       rpg: bestSeasonAvg("rpg"),
       apg: bestSeasonAvg("apg"),
       spg: bestSeasonAvg("spg"),
+      bpg: bestSeasonAvg("bpg"),
     },
     career: {
-      points: bestCareer("points"),
+      points:   bestCareer("points"),
+      assists:  bestCareer("assists"),
       rebounds: bestCareer("rebounds"),
-      assists: bestCareer("assists"),
-      steals: bestCareer("steals"),
+      steals:   bestCareer("steals"),
+      blocks:   bestCareer("blocks"),
     },
     careerAvg: {
       ppg: bestCareerAvg("points"),
       rpg: bestCareerAvg("rebounds"),
       apg: bestCareerAvg("assists"),
       spg: bestCareerAvg("steals"),
+      bpg: bestCareerAvg("blocks"),
     },
-    game: {},
+    game: {
+      blocks: gameBlocksRecord,
+    },
   };
 
   return res.status(200).json(result);

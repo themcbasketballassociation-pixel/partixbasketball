@@ -110,15 +110,18 @@ export default function AccoladesPage({ params }: { params?: Promise<{ league?: 
             <p className="text-slate-400 text-sm mt-0.5">{leagueDisplay} — all-time bests computed from box scores</p>
           </div>
           <div className="p-6 space-y-6">
-            {/* Game Records — MBA only, hardcoded */}
-            {slug === "mba" && (
+            {/* Game Records */}
+            {(slug === "mba" || (records.game?.blocks?.mc_uuid)) && (
               <div>
                 <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Single Game</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                  <RecordCard
-                    label="Most Points in a Game"
-                    entry={{ mc_uuid: "73b2620d-970a-444f-9459-e45789d36584", mc_username: "yeatgf", value: 81, season: "Season 6" }}
-                  />
+                  {slug === "mba" && (
+                    <RecordCard
+                      label="Most Points in a Game"
+                      entry={{ mc_uuid: "73b2620d-970a-444f-9459-e45789d36584", mc_username: "yeatgf", value: 81, season: "Season 6" }}
+                    />
+                  )}
+                  <RecordCard label="Most Blocks in a Game" entry={records.game?.blocks} />
                 </div>
               </div>
             )}
@@ -131,6 +134,7 @@ export default function AccoladesPage({ params }: { params?: Promise<{ league?: 
                 <RecordCard label="Most Assists in a Season" entry={records.season?.assists} />
                 <RecordCard label="Most Rebounds in a Season" entry={records.season?.rebounds} />
                 <RecordCard label="Most Steals in a Season" entry={records.season?.steals} />
+                <RecordCard label="Most Blocks in a Season" entry={records.season?.blocks} />
               </div>
             </div>
 
@@ -143,6 +147,7 @@ export default function AccoladesPage({ params }: { params?: Promise<{ league?: 
                   <RecordCard label="Highest APG in a Season" entry={records.seasonAvg?.apg} suffix=" APG" />
                   <RecordCard label="Highest RPG in a Season" entry={records.seasonAvg?.rpg} suffix=" RPG" />
                   <RecordCard label="Highest SPG in a Season" entry={records.seasonAvg?.spg} suffix=" SPG" />
+                  <RecordCard label="Highest BPG in a Season" entry={records.seasonAvg?.bpg} suffix=" BPG" />
                 </div>
               </div>
             )}
@@ -155,6 +160,7 @@ export default function AccoladesPage({ params }: { params?: Promise<{ league?: 
                 <RecordCard label="Most Career Assists" entry={records.career?.assists} />
                 <RecordCard label="Most Career Rebounds" entry={records.career?.rebounds} />
                 <RecordCard label="Most Career Steals" entry={records.career?.steals} />
+                <RecordCard label="Most Career Blocks" entry={records.career?.blocks} />
               </div>
             </div>
 
@@ -167,6 +173,7 @@ export default function AccoladesPage({ params }: { params?: Promise<{ league?: 
                   <RecordCard label="Best Career APG" entry={records.careerAvg?.apg} suffix=" APG" />
                   <RecordCard label="Best Career RPG" entry={records.careerAvg?.rpg} suffix=" RPG" />
                   <RecordCard label="Best Career SPG" entry={records.careerAvg?.spg} suffix=" SPG" />
+                  <RecordCard label="Best Career BPG" entry={records.careerAvg?.bpg} suffix=" BPG" />
                 </div>
               </div>
             )}
