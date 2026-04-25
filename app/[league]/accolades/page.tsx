@@ -110,18 +110,15 @@ export default function AccoladesPage({ params }: { params?: Promise<{ league?: 
             <p className="text-slate-400 text-sm mt-0.5">{leagueDisplay} — all-time bests computed from box scores</p>
           </div>
           <div className="p-6 space-y-6">
-            {/* Game Records */}
-            {(slug === "mba" || (records.game?.blocks?.mc_uuid)) && (
+            {/* Game Records — MBA only */}
+            {slug === "mba" && (
               <div>
                 <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Single Game</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                  {slug === "mba" && (
-                    <RecordCard
-                      label="Most Points in a Game"
-                      entry={{ mc_uuid: "73b2620d-970a-444f-9459-e45789d36584", mc_username: "yeatgf", value: 81, season: "Season 6" }}
-                    />
-                  )}
-                  <RecordCard label="Most Blocks in a Game" entry={records.game?.blocks} />
+                  <RecordCard
+                    label="Most Points in a Game"
+                    entry={{ mc_uuid: "73b2620d-970a-444f-9459-e45789d36584", mc_username: "yeatgf", value: 81, season: "Season 6" }}
+                  />
                 </div>
               </div>
             )}
@@ -129,7 +126,7 @@ export default function AccoladesPage({ params }: { params?: Promise<{ league?: 
             {/* Season Records */}
             <div>
               <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Season Totals</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
                 <RecordCard label="Most Points in a Season" entry={records.season?.points} />
                 <RecordCard label="Most Assists in a Season" entry={records.season?.assists} />
                 <RecordCard label="Most Rebounds in a Season" entry={records.season?.rebounds} />
@@ -142,7 +139,7 @@ export default function AccoladesPage({ params }: { params?: Promise<{ league?: 
             {records.seasonAvg && (
               <div>
                 <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Season Averages</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
                   <RecordCard label="Highest PPG in a Season" entry={records.seasonAvg?.ppg} suffix=" PPG" />
                   <RecordCard label="Highest APG in a Season" entry={records.seasonAvg?.apg} suffix=" APG" />
                   <RecordCard label="Highest RPG in a Season" entry={records.seasonAvg?.rpg} suffix=" RPG" />
@@ -155,7 +152,7 @@ export default function AccoladesPage({ params }: { params?: Promise<{ league?: 
             {/* Career Totals */}
             <div>
               <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Career Totals</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
                 <RecordCard label="Most Career Points" entry={records.career?.points} />
                 <RecordCard label="Most Career Assists" entry={records.career?.assists} />
                 <RecordCard label="Most Career Rebounds" entry={records.career?.rebounds} />
@@ -168,7 +165,7 @@ export default function AccoladesPage({ params }: { params?: Promise<{ league?: 
             {records.careerAvg && (
               <div>
                 <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Career Averages</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
                   <RecordCard label="Best Career PPG" entry={records.careerAvg?.ppg} suffix=" PPG" />
                   <RecordCard label="Best Career APG" entry={records.careerAvg?.apg} suffix=" APG" />
                   <RecordCard label="Best Career RPG" entry={records.careerAvg?.rpg} suffix=" RPG" />
