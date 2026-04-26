@@ -3934,15 +3934,42 @@ function AuctionAdminTab({ league }: { league: string }) {
   // Bulk actions
   const [bulkMsg, setBulkMsg] = useState("");
 
+  // Inner tabs: "players" (price setting) | "auctions" (TBA / live / history)
+  const [innerTab, setInnerTab] = useState<"players" | "auctions">("auctions");
+
+  // Player prices (from auction_player_prices table)
+  type PriceRow = { mc_uuid: string; price: number };
+  const [playerPrices, setPlayerPrices] = useState<Record<string, number>>({});
+  type LeaguePlayerRow = { mc_uuid: string; mc_username: string; team_name: string };
+  const [leaguePlayerList, setLeaguePlayerList] = useState<LeaguePlayerRow[]>([]);
+  const [editingPriceMap, setEditingPriceMap] = useState<Record<string, string>>({});
+  const [savingPriceUuid, setSavingPriceUuid] = useState<string | null>(null);
+  const [priceMsg, setPriceMsg] = useState("");
+
   const refresh = useCallback(async () => {
-    const [a, p, t] = await Promise.all([
+    const [a, p, t, prices, lp] = await Promise.all([
       fetch(`/api/auction?league=${league}${filterStatus !== "all" ? `&status=${filterStatus}` : ""}`).then((r) => r.json()),
       fetch("/api/players").then((r) => r.json()),
       fetch(`/api/teams?league=${league}`).then((r) => r.json()),
+      fetch(`/api/auction-prices?league=${league}`).then((r) => r.json()).catch(() => []),
+      fetch(`/api/teams/players?league=${league}`).then((r) => r.json()).catch(() => []),
     ]);
     setAuctions(Array.isArray(a) ? a : []);
     setPlayers(Array.isArray(p) ? p : []);
     setTeams(Array.isArray(t) ? t : []);
+    const pm: Record<string, number> = {};
+    if (Array.isArray(prices)) {
+      for (const r of prices as PriceRow[]) pm[r.mc_uuid] = r.price;
+    }
+    setPlayerPrices(pm);
+    type LPRow = { mc_uuid: string; players: { mc_username: string } | null; teams: { name: string } | null };
+    setLeaguePlayerList(
+      (Array.isArray(lp) ? lp : []).map((pt: LPRow) => ({
+        mc_uuid: pt.mc_uuid,
+        mc_username: pt.players?.mc_username ?? pt.mc_uuid,
+        team_name: pt.teams?.name ?? "—",
+      }))
+    );
   }, [league, filterStatus]);
 
   useEffect(() => { refresh(); }, [refresh]);
@@ -3984,7 +4011,8 @@ function AuctionAdminTab({ league }: { league: string }) {
   const addPending = async () => {
     setNomErr("");
     if (!nomUuid) return setNomErr("Select a player");
-    const price = parseInt(nomMinPrice) || 1000;
+    // Prefer price from Players tab; fall back to manually-entered min price
+    const price = playerPrices[nomUuid] ?? (parseInt(nomMinPrice) || 1000);
     // Fetch owners fresh so we have up-to-date data
     const ownersData = await fetch(`/api/team-owners?league=${league}`).then((r) => r.json());
     type OwnerRow = { discord_id: string; team_id: string };
@@ -4027,25 +4055,26 @@ function AuctionAdminTab({ league }: { league: string }) {
     for (const pt of remaining as PlayerTeamRow[]) {
       const discordId = pt.players?.discord_id;
       const teamId = discordId ? ownerByDiscord.get(discordId) : undefined;
+      const storedPrice = playerPrices[pt.mc_uuid] ?? 1000;
       if (teamId) {
         const cr = await fetch("/api/contracts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ league, mc_uuid: pt.mc_uuid, team_id: teamId, amount: 1000, is_two_season: false, phase: parseInt(nomPhase) || 1, season: nomSeason || null }),
+          body: JSON.stringify({ league, mc_uuid: pt.mc_uuid, team_id: teamId, amount: storedPrice, is_two_season: false, phase: parseInt(nomPhase) || 1, season: nomSeason || null }),
         });
         if (cr.ok) autoSigned++;
       } else {
         const r = await fetch("/api/auction", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ league, mc_uuid: pt.mc_uuid, min_price: 1000, phase: parseInt(nomPhase) || 1, season: nomSeason || null, status: "pending" }),
+          body: JSON.stringify({ league, mc_uuid: pt.mc_uuid, min_price: storedPrice, phase: parseInt(nomPhase) || 1, season: nomSeason || null, status: "pending" }),
         });
         if (r.ok) addedAuction++;
       }
     }
     const parts = [];
     if (autoSigned > 0) parts.push(`${autoSigned} owner(s) auto-signed to their team`);
-    if (addedAuction > 0) parts.push(`${addedAuction} player(s) added at 1,000`);
+    if (addedAuction > 0) parts.push(`${addedAuction} player(s) added at their set price`);
     setBulkMsg(parts.join(" · ") || "Done.");
     refresh();
   };
@@ -4100,6 +4129,43 @@ function AuctionAdminTab({ league }: { league: string }) {
       setBulkMsg(signed > 0 ? `Signed ${signed} owner(s) to their teams.` : "No pending owners found (check that players have discord IDs linked).");
     }
     refresh();
+  };
+
+  // Save a per-player auction price to the DB
+  const savePlayerPrice = async (mc_uuid: string) => {
+    const val = editingPriceMap[mc_uuid];
+    if (val == null) return;
+    const price = parseInt(val) || 1000;
+    setSavingPriceUuid(mc_uuid);
+    await fetch("/api/auction-prices", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mc_uuid, league, price }),
+    });
+    setSavingPriceUuid(null);
+    setEditingPriceMap((m) => { const n = { ...m }; delete n[mc_uuid]; return n; });
+    setPlayerPrices((m) => ({ ...m, [mc_uuid]: price }));
+    setPriceMsg(`Saved ${price.toLocaleString()} for ${leaguePlayerList.find((p) => p.mc_uuid === mc_uuid)?.mc_username ?? mc_uuid}`);
+    setTimeout(() => setPriceMsg(""), 3000);
+  };
+
+  // Save ALL prices at once (bulk)
+  const saveAllPrices = async () => {
+    const entries = Object.entries(editingPriceMap);
+    if (entries.length === 0) return;
+    setPriceMsg("Saving…");
+    for (const [mc_uuid, val] of entries) {
+      const price = parseInt(val) || 1000;
+      await fetch("/api/auction-prices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mc_uuid, league, price }),
+      });
+      setPlayerPrices((m) => ({ ...m, [mc_uuid]: price }));
+    }
+    setEditingPriceMap({});
+    setPriceMsg(`Saved ${entries.length} price(s).`);
+    setTimeout(() => setPriceMsg(""), 3000);
   };
 
   // Remove a pending auction
@@ -4203,24 +4269,110 @@ function AuctionAdminTab({ league }: { league: string }) {
 
   return (
     <div>
-      {/* Add player / set price */}
+      {/* Inner tabs: Players | Auctions */}
+      <div className="flex border-b border-slate-800 mb-4">
+        {(["players", "auctions"] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setInnerTab(t)}
+            className={`px-5 py-2.5 text-sm font-medium capitalize transition ${innerTab === t ? "border-b-2 border-cyan-500 text-white" : "text-slate-500 hover:text-slate-300"}`}
+          >
+            {t === "players" ? "Players" : "Auctions"}
+          </button>
+        ))}
+      </div>
+
+      {/* Players tab: set per-player auction prices */}
+      {innerTab === "players" && (
+        <div>
+          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <div className="text-sm text-slate-400">Set the auction price for each player. These prices are used when adding players to auction.</div>
+            <div className="flex items-center gap-2">
+              {priceMsg && <span className="text-cyan-400 text-xs">{priceMsg}</span>}
+              {Object.keys(editingPriceMap).length > 0 && (
+                <button className="rounded-lg px-3 py-1.5 text-sm font-medium bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-800 transition" onClick={saveAllPrices}>
+                  Save All ({Object.keys(editingPriceMap).length})
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            {leaguePlayerList.length === 0 && (
+              <div className="text-slate-600 text-sm text-center py-8">No players found for this league.</div>
+            )}
+            {[...leaguePlayerList].sort((a, b) => a.mc_username.localeCompare(b.mc_username)).map((p) => {
+              const storedPrice = playerPrices[p.mc_uuid];
+              const editVal = editingPriceMap[p.mc_uuid];
+              const isEditing = editVal !== undefined;
+              const isSaving = savingPriceUuid === p.mc_uuid;
+              return (
+                <div key={p.mc_uuid} className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2">
+                  <img
+                    src={`https://minotar.net/avatar/${p.mc_username}/32`}
+                    className="w-8 h-8 rounded-lg border border-slate-700 flex-shrink-0"
+                    onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/32"; }}
+                    alt=""
+                  />
+                  <span className="text-white font-semibold flex-1 min-w-0 truncate">{p.mc_username}</span>
+                  <span className="text-slate-500 text-xs hidden sm:block">{p.team_name}</span>
+                  {isEditing ? (
+                    <div className="flex gap-1 items-center">
+                      <input
+                        className={input}
+                        type="number"
+                        value={editVal}
+                        onChange={(e) => setEditingPriceMap((m) => ({ ...m, [p.mc_uuid]: e.target.value }))}
+                        style={{ width: 90 }}
+                        onKeyDown={(e) => { if (e.key === "Enter") savePlayerPrice(p.mc_uuid); if (e.key === "Escape") setEditingPriceMap((m) => { const n = { ...m }; delete n[p.mc_uuid]; return n; }); }}
+                        autoFocus
+                      />
+                      <button className={btnPrimary} style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => savePlayerPrice(p.mc_uuid)} disabled={isSaving}>
+                        {isSaving ? "…" : "Save"}
+                      </button>
+                      <button className={btnSecondary} style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => setEditingPriceMap((m) => { const n = { ...m }; delete n[p.mc_uuid]; return n; })}>×</button>
+                    </div>
+                  ) : (
+                    <button
+                      className={`text-sm border rounded-lg px-2 py-0.5 transition ${storedPrice != null ? "text-cyan-400 border-cyan-900 hover:border-cyan-700" : "text-slate-500 border-slate-700 hover:text-white"}`}
+                      onClick={() => setEditingPriceMap((m) => ({ ...m, [p.mc_uuid]: String(storedPrice ?? 1000) }))}
+                    >
+                      {storedPrice != null ? storedPrice.toLocaleString() : "—  set price"}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {innerTab === "auctions" && <div>
+      {/* Add player to auction */}
       <div className={card} style={{ marginBottom: 16 }}>
-        <div className="text-sm font-semibold text-slate-300 mb-4">Set Player Price</div>
+        <div className="text-sm font-semibold text-slate-300 mb-4">Add Player to Auction</div>
         <div className="flex gap-3 flex-wrap mb-3">
           <div style={{ flex: 2, minWidth: 160 }}>
             <PlayerSearchSelect players={players} value={nomUuid} onChange={setNomUuid} placeholder="Search player…" />
           </div>
-          <input className={input} type="number" placeholder="Min Price" value={nomMinPrice} onChange={(e) => setNomMinPrice(e.target.value)} style={{ flex: 1, minWidth: 100 }} />
+          <input className={input} type="number" placeholder="Min Price override" value={nomMinPrice} onChange={(e) => setNomMinPrice(e.target.value)} style={{ flex: 1, minWidth: 100 }} />
           <input className={input} type="number" placeholder="Phase" value={nomPhase} onChange={(e) => setNomPhase(e.target.value)} style={{ flex: 1, minWidth: 80 }} />
           <input className={input} placeholder="Season (opt)" value={nomSeason} onChange={(e) => setNomSeason(e.target.value)} style={{ flex: 1, minWidth: 100 }} />
-          <button className={btnPrimary} onClick={addPending}>Set Price</button>
+          <button className={btnPrimary} onClick={addPending}>Add to Auction</button>
         </div>
+        {nomUuid && (
+          <p className="text-xs text-slate-500 mb-1">
+            {playerPrices[nomUuid] != null
+              ? <span>Using stored price: <span className="text-cyan-400 font-semibold">{playerPrices[nomUuid].toLocaleString()}</span> — override above to use a different value</span>
+              : <span className="text-yellow-600">No stored price — set one in the Players tab, or enter a Min Price override above</span>
+            }
+          </p>
+        )}
         <ErrMsg msg={nomErr} />
 
         {/* Bulk actions */}
         <div className="mt-3 pt-3 border-t border-slate-800 flex gap-3 items-center flex-wrap">
           <button className={btnSecondary} onClick={bulkSetRemaining}>
-            Set all remaining to 1k
+            Add all remaining (use stored prices)
           </button>
           <button
             className="rounded-lg px-3 py-1.5 text-sm font-medium transition bg-green-950 hover:bg-green-900 text-green-300 border border-green-800"
@@ -4408,6 +4560,7 @@ function AuctionAdminTab({ league }: { league: string }) {
           })}
         </div>
       )}
+      </div>}
     </div>
   );
 }
