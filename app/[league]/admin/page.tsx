@@ -2376,12 +2376,17 @@ function ArticlesTab({ league }: { league: string }) {
   return (
     <div className="space-y-5">
 
-      {/* Pending approval queue */}
-      {pendingArticles.length > 0 && (
-        <div className={card}>
-          <h3 className="text-xs font-semibold text-yellow-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-            Pending Approval <span className="rounded-full bg-yellow-950 border border-yellow-800 text-yellow-400 text-xs px-2">{pendingArticles.length}</span>
-          </h3>
+      {/* Pending approval queue — always visible */}
+      <div className={card}>
+        <h3 className="text-xs font-semibold text-yellow-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+          Pending Approval
+          {pendingArticles.length > 0 && (
+            <span className="rounded-full bg-yellow-950 border border-yellow-800 text-yellow-400 text-xs px-2">{pendingArticles.length}</span>
+          )}
+        </h3>
+        {pendingArticles.length === 0 ? (
+          <p className="text-slate-500 text-sm">No articles awaiting approval.</p>
+        ) : (
           <div className="space-y-3">
             {pendingArticles.map((a) => (
               <div key={a.id} className="rounded-xl border border-yellow-900/40 bg-yellow-950/20 p-4">
@@ -2407,8 +2412,8 @@ function ArticlesTab({ league }: { league: string }) {
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       <div className={card}>
         <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-4">Post Article</h3>
