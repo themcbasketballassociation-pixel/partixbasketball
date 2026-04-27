@@ -2240,7 +2240,9 @@ function ChampionsTab({ league, season: initialSeason }: { league: string; seaso
 // ─── Tab: Articles ────────────────────────────────────────────────────────────
 
 function ArticlesTab({ league }: { league: string }) {
-  const [articles, setArticles] = useState<Article[]>([]);
+  type FullArticle = Article & { status?: string; submitted_by?: string };
+  const [articles, setArticles] = useState<FullArticle[]>([]);
+  const [pendingArticles, setPendingArticles] = useState<FullArticle[]>([]);
   const [newTitle, setNewTitle] = useState("");
   const [newBody, setNewBody] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -2249,6 +2251,14 @@ function ArticlesTab({ league }: { league: string }) {
   const [discordConfigured, setDiscordConfigured] = useState<boolean | null>(null);
   const [err, setErr] = useState("");
   const [posting, setPosting] = useState(false);
+  const [approveMsg, setApproveMsg] = useState<Record<string, string>>({});
+
+  // Press member management
+  type PressMemberRow = { id: string; discord_id: string; name: string | null; added_at: string };
+  const [pressMembers, setPressMembers] = useState<PressMemberRow[]>([]);
+  const [newPressDiscord, setNewPressDiscord] = useState("");
+  const [newPressName, setNewPressName] = useState("");
+  const [pressErr, setPressErr] = useState("");
 
   const discordChannelLabel: Record<string, string> = {
     pba: "#mba-media", pcaa: "#mcaa-media", pbgl: "#mbgl-media",
@@ -2256,18 +2266,63 @@ function ArticlesTab({ league }: { league: string }) {
   const channelName = discordChannelLabel[league] ?? "#media";
 
   const refresh = useCallback(async () => {
-    const data = await fetch(`/api/articles?league=${league}`).then((r) => r.json());
-    setArticles(Array.isArray(data) ? data : []);
+    const all = await fetch(`/api/articles?league=${league}&all=true`).then((r) => r.json());
+    const allArr: FullArticle[] = Array.isArray(all) ? all : [];
+    setArticles(allArr.filter((a) => a.status === "published" || !a.status));
+    setPendingArticles(allArr.filter((a) => a.status === "pending_approval"));
+  }, [league]);
+
+  const refreshPress = useCallback(async () => {
+    const d = await fetch(`/api/press-members?league=${league}`).then((r) => r.json());
+    setPressMembers(Array.isArray(d) ? d : []);
   }, [league]);
 
   useEffect(() => {
     refresh();
+    refreshPress();
     // Check if Discord webhook is configured server-side
     fetch(`/api/articles?league=${league}&check=discord`)
       .then((r) => r.json())
       .then((d) => setDiscordConfigured(!!d.configured))
       .catch(() => setDiscordConfigured(false));
-  }, [refresh, league]);
+  }, [refresh, refreshPress, league]);
+
+  const approveArticle = async (id: string, approve: boolean, article: FullArticle) => {
+    const status = approve ? "published" : "rejected";
+    const r = await fetch(`/api/articles/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    if (!r.ok) { const d = await r.json(); setApproveMsg((m) => ({ ...m, [id]: d.error })); return; }
+    setApproveMsg((m) => ({ ...m, [id]: approve ? "✓ Published" : "✗ Rejected" }));
+    // Post to Discord if approving
+    if (approve && postToDiscord && discordConfigured) {
+      await fetch(`/api/articles/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "published" }),
+      });
+    }
+    refresh();
+  };
+
+  const addPressMember = async () => {
+    setPressErr("");
+    if (!newPressDiscord.trim()) return setPressErr("Discord ID required");
+    const r = await fetch("/api/press-members", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ discord_id: newPressDiscord.trim(), league, name: newPressName.trim() || null }),
+    });
+    if (!r.ok) { const d = await r.json(); return setPressErr(d.error); }
+    setNewPressDiscord(""); setNewPressName(""); refreshPress();
+  };
+
+  const removePressMember = async (id: string) => {
+    await fetch(`/api/press-members?id=${id}`, { method: "DELETE" });
+    refreshPress();
+  };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null;
@@ -2328,6 +2383,41 @@ function ArticlesTab({ league }: { league: string }) {
 
   return (
     <div className="space-y-5">
+
+      {/* Pending approval queue */}
+      {pendingArticles.length > 0 && (
+        <div className={card}>
+          <h3 className="text-xs font-semibold text-yellow-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+            Pending Approval <span className="rounded-full bg-yellow-950 border border-yellow-800 text-yellow-400 text-xs px-2">{pendingArticles.length}</span>
+          </h3>
+          <div className="space-y-3">
+            {pendingArticles.map((a) => (
+              <div key={a.id} className="rounded-xl border border-yellow-900/40 bg-yellow-950/20 p-4">
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <div>
+                    <div className="text-white font-semibold">{a.title}</div>
+                    <div className="text-slate-500 text-xs mt-0.5">Submitted {new Date(a.created_at).toLocaleDateString()}{a.submitted_by ? ` · Discord: ${a.submitted_by}` : ""}</div>
+                  </div>
+                  <div className="flex gap-2 flex-shrink-0">
+                    <button
+                      className="rounded-lg px-3 py-1.5 text-sm font-semibold bg-green-900 hover:bg-green-800 text-green-300 border border-green-700 transition"
+                      onClick={() => approveArticle(a.id, true, a)}
+                    >Approve</button>
+                    <button
+                      className="rounded-lg px-3 py-1.5 text-sm font-semibold bg-red-950 hover:bg-red-900 text-red-300 border border-red-800 transition"
+                      onClick={() => approveArticle(a.id, false, a)}
+                    >Reject</button>
+                  </div>
+                </div>
+                {a.image_url && <img src={a.image_url} alt="" className="mb-2 max-h-24 rounded-lg object-contain border border-slate-800" />}
+                <p className="text-slate-400 text-sm line-clamp-4 whitespace-pre-wrap">{a.body}</p>
+                {approveMsg[a.id] && <p className="text-xs mt-2 text-slate-400">{approveMsg[a.id]}</p>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className={card}>
         <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-4">Post Article</h3>
         <div className="space-y-3">
@@ -2387,8 +2477,8 @@ function ArticlesTab({ league }: { league: string }) {
       </div>
 
       <div className={card}>
-        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Announcements ({articles.length})</h3>
-        {articles.length === 0 ? <p className="text-slate-600 text-sm">No announcements yet.</p> : (
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Published Articles ({articles.length})</h3>
+        {articles.length === 0 ? <p className="text-slate-600 text-sm">No published articles yet.</p> : (
           <div className="space-y-2">
             {articles.map((a) => (
               <div key={a.id} className="rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 hover:border-slate-700 transition">
@@ -2403,6 +2493,31 @@ function ArticlesTab({ league }: { league: string }) {
                   </div>
                   <button className={btnDanger} onClick={() => deleteArticle(a.id)}>Delete</button>
                 </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Press member management */}
+      <div className={card}>
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-4">Press Members</h3>
+        <div className="flex gap-2 mb-3 flex-wrap">
+          <input className={input} placeholder="Discord ID" value={newPressDiscord} onChange={(e) => setNewPressDiscord(e.target.value)} style={{ flex: 1, minWidth: 140 }} />
+          <input className={input} placeholder="Display name (opt)" value={newPressName} onChange={(e) => setNewPressName(e.target.value)} style={{ flex: 1, minWidth: 140 }} />
+          <button className={btnPrimary} onClick={addPressMember}>Add</button>
+        </div>
+        <ErrMsg msg={pressErr} />
+        {pressMembers.length === 0 ? (
+          <p className="text-slate-600 text-sm">No press members yet.</p>
+        ) : (
+          <div className="flex flex-col gap-1.5 mt-2">
+            {pressMembers.map((m) => (
+              <div key={m.id} className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2">
+                <span className="text-emerald-400 text-xs font-mono flex-shrink-0">{m.discord_id}</span>
+                <span className="text-white text-sm flex-1">{m.name ?? "—"}</span>
+                <span className="text-slate-600 text-xs">{new Date(m.added_at).toLocaleDateString()}</span>
+                <button className={btnDanger} style={{ padding: "2px 10px", fontSize: 12 }} onClick={() => removePressMember(m.id)}>Remove</button>
               </div>
             ))}
           </div>
@@ -4704,6 +4819,140 @@ function BoardMembersTab({ league }: { league: string }) {
   );
 }
 
+// ─── Press Portal View ────────────────────────────────────────────────────────
+
+function PressPortalView({ league, onBack }: { league: string; onBack?: () => void }) {
+  type PressArticle = { id: string; league: string; title: string; body: string; status: string; created_at: string; image_url?: string | null };
+
+  const [articles, setArticles] = useState<PressArticle[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<"submit" | "mine">("submit");
+
+  // Submit form
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitMsg, setSubmitMsg] = useState("");
+  const [submitErr, setSubmitErr] = useState("");
+
+  const loadMyArticles = useCallback(async () => {
+    // We pass ?all=true but the API will show only their own — for now show all pending/published
+    const r = await fetch(`/api/articles?league=${league}&all=true`);
+    const d = await r.json();
+    setArticles(Array.isArray(d) ? d : []);
+    setLoading(false);
+  }, [league]);
+
+  useEffect(() => { loadMyArticles(); }, [loadMyArticles]);
+
+  const submitArticle = async () => {
+    setSubmitErr("");
+    setSubmitMsg("");
+    if (!title.trim()) return setSubmitErr("Title is required");
+    if (!body.trim()) return setSubmitErr("Body is required");
+    setSubmitting(true);
+    const r = await fetch("/api/articles", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ league, title: title.trim(), body: body.trim(), image_url: imageUrl.trim() || null }),
+    });
+    setSubmitting(false);
+    if (r.ok) {
+      setTitle(""); setBody(""); setImageUrl("");
+      setSubmitMsg("Article submitted! It will be published once an admin approves it.");
+      loadMyArticles();
+      setTab("mine");
+    } else {
+      const d = await r.json();
+      setSubmitErr(d.error ?? "Failed to submit");
+    }
+  };
+
+  const statusBadge = (status: string) => {
+    if (status === "published") return <span className="text-xs px-2 py-0.5 rounded-full border border-green-800 bg-green-950 text-green-400 font-semibold">Published</span>;
+    if (status === "pending_approval") return <span className="text-xs px-2 py-0.5 rounded-full border border-yellow-800 bg-yellow-950 text-yellow-400 font-semibold">Pending Approval</span>;
+    if (status === "rejected") return <span className="text-xs px-2 py-0.5 rounded-full border border-red-800 bg-red-950 text-red-400 font-semibold">Rejected</span>;
+    return null;
+  };
+
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
+      <div className="px-6 py-5 border-b border-slate-800 flex items-center gap-3">
+        {onBack && <button className={btnSecondary} onClick={onBack}>← Back</button>}
+        <h2 className="text-xl font-bold text-white">Press Portal</h2>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex border-b border-slate-800 px-6">
+        {(["submit", "mine"] as const).map((t) => (
+          <button key={t} onClick={() => setTab(t)}
+            className={`px-4 py-3 text-sm font-medium transition ${tab === t ? "border-b-2 border-emerald-500 text-white" : "text-slate-500 hover:text-slate-300"}`}>
+            {t === "submit" ? "Submit Article" : `My Articles (${articles.length})`}
+          </button>
+        ))}
+      </div>
+
+      <div className="p-6">
+        {tab === "submit" && (
+          <div className="max-w-2xl">
+            <p className="text-slate-400 text-sm mb-5">Write your article below. It will go to an admin for review before being published.</p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1.5">Title</label>
+                <input className={input} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Article title…" maxLength={200} />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1.5">Body</label>
+                <textarea
+                  className={`${input} font-mono`}
+                  rows={12}
+                  value={body}
+                  onChange={(e) => setBody(e.target.value)}
+                  placeholder="Write your article here…"
+                  style={{ resize: "vertical" }}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1.5">Image URL <span className="text-slate-600 normal-case font-normal">(optional)</span></label>
+                <input className={input} value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="https://…" />
+              </div>
+              {submitErr && <p className="text-red-400 text-sm rounded-lg bg-red-950 border border-red-900 px-3 py-2">{submitErr}</p>}
+              {submitMsg && <p className="text-green-400 text-sm rounded-lg bg-green-950 border border-green-900 px-3 py-2">{submitMsg}</p>}
+              <button className="rounded-lg px-5 py-2 text-sm font-bold bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-700 transition disabled:opacity-40" onClick={submitArticle} disabled={submitting}>
+                {submitting ? "Submitting…" : "Submit for Review"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {tab === "mine" && (
+          <div>
+            {loading ? (
+              <div className="text-slate-600 text-sm text-center py-8">Loading…</div>
+            ) : articles.length === 0 ? (
+              <div className="text-slate-600 text-sm text-center py-8">No articles submitted yet.</div>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {articles.map((a) => (
+                  <div key={a.id} className="rounded-xl border border-slate-700 bg-slate-950 p-4">
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div className="text-white font-bold">{a.title}</div>
+                      {statusBadge(a.status)}
+                    </div>
+                    <div className="text-slate-500 text-xs mb-2">{new Date(a.created_at).toLocaleDateString()}</div>
+                    <p className="text-slate-400 text-sm line-clamp-3">{a.body}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Board Portal View ────────────────────────────────────────────────────────
 
 function BoardPortalView({ league, onBack }: { league: string; onBack?: () => void }) {
@@ -5686,7 +5935,8 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
   const [authorized, setAuthorized] = useState<boolean | null>(null);
   const [ownerRecord, setOwnerRecord] = useState<{ teams: { id: string; name: string; abbreviation: string; color2: string | null; division: string | null; logo_url: string | null } } | null | "loading">("loading");
   const [isBoardMember, setIsBoardMember] = useState<boolean | "loading">("loading");
-  const [portal, setPortal] = useState<"admin" | "owner" | "board" | null>(null);
+  const [isPressMember, setIsPressMember] = useState<boolean | "loading">("loading");
+  const [portal, setPortal] = useState<"admin" | "owner" | "board" | "press" | null>(null);
   const [mainTab, setMainTab] = useState<MainTab>("Players");
   const [activeTab, setActiveTab] = useState<Tab>("Players");
   const [dbError, setDbError] = useState("");
@@ -5705,9 +5955,14 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
         .then((r) => r.json())
         .then((data) => setIsBoardMember(data.isMember === true))
         .catch(() => setIsBoardMember(false));
+      fetch(`/api/press-members?league=${league}&check=me`)
+        .then((r) => r.json())
+        .then((data) => setIsPressMember(data.isMember === true))
+        .catch(() => setIsPressMember(false));
     } else if (status !== "loading") {
       setOwnerRecord(null);
       setIsBoardMember(false);
+      setIsPressMember(false);
     }
   }, [status, league]);
 
@@ -5721,7 +5976,7 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
       .catch(() => setDbError("Database unreachable — make sure your Supabase project is active at supabase.com and tables have been created."));
   }, [league]);
 
-  if (status === "loading" || ownerRecord === "loading" || isBoardMember === "loading")
+  if (status === "loading" || ownerRecord === "loading" || isBoardMember === "loading" || isPressMember === "loading")
     return <div className="rounded-2xl border border-slate-800 bg-slate-900 p-10 text-center text-slate-500">Loading...</div>;
 
   if (status !== "authenticated") {
@@ -5741,7 +5996,8 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
   const isAdmin = authorized === true;
   const isOwner = ownerRecord !== null;
   const isBoardMemberBool = isBoardMember === true;
-  const hasAccess = isAdmin || isOwner || isBoardMemberBool;
+  const isPressMemberBool = isPressMember === true;
+  const hasAccess = isAdmin || isOwner || isBoardMemberBool || isPressMemberBool;
 
   // Still checking admin status
   if (authorized === null)
@@ -5796,6 +6052,18 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
         available: isAdmin || isBoardMemberBool,
         badge: (!isAdmin && !isBoardMemberBool) ? "No Access" : null,
       },
+      {
+        id: "press" as const,
+        label: "Press Portal",
+        desc: (isAdmin || isPressMemberBool)
+          ? "Write and submit articles for the league"
+          : "You are not registered as a press member",
+        color: "#10b981",
+        border: "#065f46",
+        bg: "#021a10",
+        available: isAdmin || isPressMemberBool,
+        badge: (!isAdmin && !isPressMemberBool) ? "No Access" : null,
+      },
     ];
 
     return (
@@ -5841,6 +6109,11 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
   // ── Board portal ───────────────────────────────────────────────────────────
   if (portal === "board") {
     return <BoardPortalView league={league} onBack={() => setPortal(null)} />;
+  }
+
+  // ── Press portal ───────────────────────────────────────────────────────────
+  if (portal === "press") {
+    return <PressPortalView league={league} onBack={() => setPortal(null)} />;
   }
 
   // ── Owner portal ───────────────────────────────────────────────────────────

@@ -9,10 +9,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "PUT") {
     const admin = await requireAdmin(req, res);
     if (!admin) return;
-    const { title, body } = req.body;
+    const { title, body, status } = req.body;
     const updates: Record<string, unknown> = {};
     if (title !== undefined) updates.title = title;
     if (body !== undefined) updates.body = body;
+    // approve → "published", reject → "rejected"
+    if (status !== undefined) updates.status = status;
     const { data, error } = await supabase.from("articles").update(updates).eq("id", id).select().single();
     if (error) return res.status(500).json({ error: error.message });
     return res.status(200).json(data);
