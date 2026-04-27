@@ -5075,92 +5075,117 @@ function PressPortalView({ league, isAdmin, isCrewMember, onBack }: { league: st
     ] : []),
   ];
 
-  // Crew claiming view — shown inside the "crew" tab
+  // Crew claiming view — full UI ported from old public pressrow page
+  const CREW_ROLES = [
+    { key: "streamer",    label: "Streamer",    cap: 1, coins: 1000, color: "#7c3aed", dimBg: "#1a0a3a", dimBorder: "#3b1f7a" },
+    { key: "ref",         label: "Ref",         cap: 2, coins: 500,  color: "#b45309", dimBg: "#1a0e00", dimBorder: "#5c2d0a" },
+    { key: "commentator", label: "Commentator", cap: 2, coins: 500,  color: "#0e7490", dimBg: "#001a20", dimBorder: "#0a3a4a" },
+  ] as const;
+
   const renderCrewClaim = () => {
-    // My coins from claims
     const myClaims = crewClaims.filter((c) => c.discord_id === myDiscordId);
     const myCoins = myClaims.reduce((sum, c) => sum + (ROLE_COINS[c.role] ?? 0), 0);
 
     return (
-      <div className="space-y-4">
-        {/* Personal coins summary */}
-        {myDiscordId && (
-          <div className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 flex items-center justify-between">
-            <div>
-              <div className="text-white font-bold text-sm">Your Coins</div>
-              <div className="text-slate-500 text-xs mt-0.5">{myClaims.length} crew assignment{myClaims.length !== 1 ? "s" : ""} total</div>
-            </div>
-            <div className="text-right">
-              <div className="text-white font-bold text-2xl">{myCoins.toLocaleString()}</div>
-              <div className="text-slate-600 text-xs">coins</div>
-            </div>
-          </div>
-        )}
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 
+        {/* Header: coins + role rates */}
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {CREW_ROLES.map((r) => (
+              <div key={r.key} style={{ background: "#0a0a0a", border: "1px solid #1a1a1a", borderRadius: 8, padding: "6px 14px", display: "flex", gap: 8, alignItems: "center" }}>
+                <span style={{ color: r.color, fontWeight: 700, fontSize: 12 }}>{r.label}</span>
+                <span style={{ color: "#444", fontSize: 11 }}>·</span>
+                <span style={{ color: "#777", fontSize: 12 }}>{r.coins.toLocaleString()} coins</span>
+                <span style={{ color: "#333", fontSize: 11 }}>·</span>
+                <span style={{ color: "#444", fontSize: 11 }}>max {r.cap}</span>
+              </div>
+            ))}
+          </div>
+          {myDiscordId && (
+            <div style={{ background: "#0a0f1a", border: "1px solid #1e3050", borderRadius: 12, padding: "12px 20px", textAlign: "center", minWidth: 110 }}>
+              <div style={{ color: "#64748b", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 2 }}>Your Coins</div>
+              <div style={{ color: "#fff", fontSize: 28, fontWeight: 800, lineHeight: 1 }}>{myCoins.toLocaleString()}</div>
+            </div>
+          )}
+        </div>
+
+        {/* Games */}
         {crewLoading ? (
-          <div className="text-slate-600 text-sm text-center py-8">Loading games…</div>
+          <div style={{ color: "#444", textAlign: "center", padding: "60px 0" }}>Loading games…</div>
         ) : games.length === 0 ? (
-          <div className="text-slate-600 text-sm text-center py-8">No upcoming scheduled games.</div>
-        ) : (
-          games.map((g) => {
-            const gameCrew = crewClaims.filter((c) => c.game_id === g.id);
-            const homeLabel = g.home_team?.abbreviation ?? g.home_team_id.slice(0, 6);
-            const awayLabel = g.away_team?.abbreviation ?? g.away_team_id.slice(0, 6);
-            const gameDate = new Date(g.scheduled_at);
-            return (
-              <div key={g.id} className="rounded-xl border border-slate-700 bg-slate-950 p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="text-white font-bold">{awayLabel} @ {homeLabel}</div>
-                  <div className="text-slate-500 text-xs">
-                    {gameDate.toLocaleDateString()} {gameDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  {(["streamer", "ref", "commentator"] as const).map((role) => {
-                    const key = `${g.id}-${role}`;
-                    const roleClaims = gameCrew.filter((c) => c.role === role);
-                    const cap = ROLE_CAPS[role];
-                    const isFull = roleClaims.length >= cap;
-                    const myClaim = roleClaims.find((c) => c.discord_id === myDiscordId);
-                    const coins = ROLE_COINS[role];
-                    return (
-                      <div key={role} className="flex items-center gap-3 rounded-lg bg-slate-900 border border-slate-800 px-3 py-2">
-                        <div className="w-24 flex-shrink-0">
-                          <span className="capitalize text-slate-300 text-sm font-medium">{role}</span>
-                          <span className="text-slate-600 text-xs ml-1">+{coins.toLocaleString()}</span>
-                        </div>
-                        <div className="flex-1 flex flex-wrap gap-1">
-                          {roleClaims.map((c) => (
-                            <span key={c.id} className={`text-xs px-2 py-0.5 rounded-full border font-medium ${c.discord_id === myDiscordId ? "bg-emerald-950 border-emerald-700 text-emerald-300" : "bg-slate-800 border-slate-700 text-slate-300"}`}>
-                              {c.discord_name || c.discord_id}
-                            </span>
-                          ))}
-                          {Array.from({ length: Math.max(0, cap - roleClaims.length) }).map((_, i) => (
-                            <span key={i} className="text-xs px-2 py-0.5 rounded-full border border-slate-700 text-slate-600 border-dashed">open</span>
-                          ))}
-                        </div>
-                        {myClaim ? (
-                          <button
-                            className="text-xs px-2.5 py-1 rounded-lg bg-red-950 hover:bg-red-900 text-red-400 border border-red-800 transition flex-shrink-0"
-                            onClick={() => unclaimSpot(myClaim.id)}
-                          >Unclaim</button>
-                        ) : !isFull ? (
-                          <button
-                            className="text-xs px-2.5 py-1 rounded-lg bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-700 transition flex-shrink-0"
-                            onClick={() => claimSpot(g.id, role)}
-                          >Claim</button>
-                        ) : (
-                          <span className="text-xs text-slate-600 flex-shrink-0">Full</span>
-                        )}
-                        {claimMsg[key] && <span className="text-xs text-red-400 flex-shrink-0">{claimMsg[key]}</span>}
-                      </div>
-                    );
-                  })}
+          <div style={{ color: "#444", textAlign: "center", padding: "60px 0" }}>No upcoming scheduled games.</div>
+        ) : games.map((g) => {
+          const gameCrew = crewClaims.filter((c) => c.game_id === g.id);
+          const homeLabel = g.home_team?.abbreviation ?? g.home_team_id.slice(0, 6);
+          const awayLabel = g.away_team?.abbreviation ?? g.away_team_id.slice(0, 6);
+          const date = new Date(g.scheduled_at);
+          const dateStr = date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+          const timeStr = date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+          const isCompleted = g.status === "completed";
+
+          return (
+            <div key={g.id} style={{ background: "#0d0d0d", border: "1px solid #1a1a1a", borderRadius: 12, overflow: "hidden" }}>
+              {/* Game header */}
+              <div style={{ padding: "10px 16px", borderBottom: "1px solid #161616", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                <span style={{ color: "#fff", fontWeight: 700, fontSize: 15 }}>{awayLabel} @ {homeLabel}</span>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <span style={{ color: "#444", fontSize: 11 }}>{dateStr} · {timeStr}</span>
+                  <span style={{ background: isCompleted ? "#111" : "#0a1a0a", border: `1px solid ${isCompleted ? "#222" : "#14532d"}`, color: isCompleted ? "#444" : "#4ade80", borderRadius: 5, fontSize: 10, fontWeight: 700, padding: "2px 7px", textTransform: "uppercase" as const }}>
+                    {g.status}
+                  </span>
                 </div>
               </div>
-            );
-          })
-        )}
+
+              {/* Role slots */}
+              <div style={{ padding: "12px 16px", display: "flex", gap: 8, flexWrap: "wrap" as const }}>
+                {CREW_ROLES.map((role) => {
+                  const roleClaims = gameCrew.filter((c) => c.role === role.key);
+                  const myClaim = roleClaims.find((c) => c.discord_id === myDiscordId);
+                  const key = `${g.id}-${role.key}`;
+
+                  return (
+                    <div key={role.key} style={{ flex: 1, minWidth: 140, background: "#080808", border: "1px solid #161616", borderRadius: 8, padding: "10px 12px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                        <span style={{ color: role.color, fontSize: 11, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>{role.label}</span>
+                        <span style={{ color: "#333", fontSize: 10 }}>{role.coins} coins</span>
+                      </div>
+
+                      {Array.from({ length: role.cap }).map((_, i) => {
+                        const slot = roleClaims[i];
+                        const isMe = slot?.discord_id === myDiscordId;
+                        return (
+                          <div key={i} style={{ marginTop: i > 0 ? 4 : 0 }}>
+                            {slot ? (
+                              <div style={{ background: isMe ? "#0a1020" : "#0d0d0d", border: `1px solid ${isMe ? "#1e3a6a" : "#1a1a1a"}`, borderRadius: 6, padding: "5px 8px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+                                <span style={{ color: isMe ? "#93c5fd" : "#666", fontSize: 12, fontWeight: isMe ? 700 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>
+                                  {isMe ? "You" : (slot.discord_name || slot.discord_id)}
+                                </span>
+                                {isMe && (
+                                  <button onClick={() => unclaimSpot(slot.id)} style={{ color: "#ef4444", background: "none", border: "none", cursor: "pointer", fontSize: 14, padding: "0 2px", lineHeight: 1, flexShrink: 0 }} title="Unclaim">×</button>
+                                )}
+                              </div>
+                            ) : !myClaim ? (
+                              <button
+                                onClick={() => claimSpot(g.id, role.key)}
+                                style={{ width: "100%", background: "#0a120a", border: "1px dashed #1a3a1a", borderRadius: 6, padding: "5px 8px", color: "#4ade80", fontSize: 12, cursor: "pointer", fontWeight: 600 }}
+                              >
+                                + Claim
+                              </button>
+                            ) : (
+                              <div style={{ background: "#080808", border: "1px dashed #161616", borderRadius: 6, padding: "5px 8px", color: "#2a2a2a", fontSize: 11, textAlign: "center" as const }}>Open</div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {claimMsg[key] && <div style={{ color: "#f87171", fontSize: 11, marginTop: 4 }}>{claimMsg[key]}</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
       </div>
     );
   };
