@@ -4864,6 +4864,7 @@ function PressPortalView({ league, isAdmin, isCrewMember, onBack }: { league: st
   // Crew state (crew members + admins)
   const [games, setGames] = useState<GameRow[]>([]);
   const [crewClaims, setCrewClaims] = useState<CrewClaimRow[]>([]);
+  const [crewAccessNames, setCrewAccessNames] = useState<Record<string, string>>({});
   const [crewLoading, setCrewLoading] = useState(false);
   const [crewSubView, setCrewSubView] = useState<"claim" | "manage">("claim");
   const [claimMsg, setClaimMsg] = useState<Record<string, string>>({});
@@ -4892,12 +4893,20 @@ function PressPortalView({ league, isAdmin, isCrewMember, onBack }: { league: st
 
   const loadCrew = useCallback(async () => {
     setCrewLoading(true);
-    const [gRes, cRes] = await Promise.all([
+    const [gRes, cRes, aRes] = await Promise.all([
       fetch(`/api/games?league=${league}`),
       fetch(`/api/game-crew?league=${league}`),
+      fetch(`/api/crew-access`),
     ]);
     const gData = await gRes.json().catch(() => []);
     const cData = await cRes.json().catch(() => []);
+    const aData = await aRes.json().catch(() => []);
+    // Build discord_id → display_name map from crew_access
+    const nameMap: Record<string, string> = {};
+    for (const entry of (Array.isArray(aData) ? aData : [])) {
+      if (entry.discord_id && entry.display_name) nameMap[entry.discord_id] = entry.display_name;
+    }
+    setCrewAccessNames(nameMap);
     // Only keep scheduled/upcoming games, sorted soonest first
     const allGames: GameRow[] = Array.isArray(gData) ? gData : [];
     const upcoming = allGames
@@ -5067,7 +5076,6 @@ function PressPortalView({ league, isAdmin, isCrewMember, onBack }: { league: st
       { id: "mine" as PressTab,   label: isAdmin ? `Published (${articles.length})` : `My Articles (${articles.length + pendingArticles.length})` },
     ] : []),
     ...(isAdmin ? [
-      { id: "review" as PressTab,  label: `Review (${pendingArticles.length})` },
       { id: "members" as PressTab, label: "Press Members" },
     ] : []),
     ...(showCrewTab ? [
@@ -5159,7 +5167,7 @@ function PressPortalView({ league, isAdmin, isCrewMember, onBack }: { league: st
                             {slot ? (
                               <div style={{ background: isMe ? "#0a1020" : "#0d0d0d", border: `1px solid ${isMe ? "#1e3a6a" : "#1a1a1a"}`, borderRadius: 6, padding: "5px 8px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
                                 <span style={{ color: isMe ? "#93c5fd" : "#666", fontSize: 12, fontWeight: isMe ? 700 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>
-                                  {isMe ? "You" : (slot.discord_name || slot.discord_id)}
+                                  {isMe ? "You" : (crewAccessNames[slot.discord_id] || slot.discord_name || slot.discord_id)}
                                 </span>
                                 {isMe && (
                                   <button onClick={() => unclaimSpot(slot.id)} style={{ color: "#ef4444", background: "none", border: "none", cursor: "pointer", fontSize: 14, padding: "0 2px", lineHeight: 1, flexShrink: 0 }} title="Unclaim">×</button>
@@ -5312,57 +5320,6 @@ function PressPortalView({ league, isAdmin, isCrewMember, onBack }: { league: st
                     </div>
                     {a.image_url && <img src={a.image_url} alt="" className="mb-2 max-h-24 rounded-lg object-contain border border-slate-800" />}
                     <p className="text-slate-400 text-sm line-clamp-3">{a.body}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Review tab — admin only */}
-        {tab === "review" && isAdmin && (
-          <div>
-            {discordConfigured !== null && (
-              <div className="mb-5 rounded-xl border border-slate-700 bg-slate-950 p-3 flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm font-semibold text-slate-200 flex items-center gap-2">
-                    <span>🔔</span>
-                    Post to Discord on Approve <span className="text-slate-500 font-normal">{channelName}</span>
-                  </div>
-                  {discordConfigured === false && <div className="text-xs text-amber-500 mt-0.5">Webhook not configured</div>}
-                  {discordConfigured === true && <div className="text-xs text-green-500 mt-0.5">Webhook configured ✓</div>}
-                </div>
-                <button
-                  onClick={() => setPostToDiscord((v) => !v)}
-                  disabled={!discordConfigured}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none flex-shrink-0 ${postToDiscord && discordConfigured ? "bg-blue-600" : "bg-slate-700"} ${!discordConfigured ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
-                >
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${postToDiscord && discordConfigured ? "translate-x-6" : "translate-x-1"}`} />
-                </button>
-              </div>
-            )}
-            {pendingArticles.length === 0 ? (
-              <div className="text-slate-600 text-sm text-center py-8">No articles pending review.</div>
-            ) : (
-              <div className="flex flex-col gap-4">
-                {pendingArticles.map((a) => (
-                  <div key={a.id} className="rounded-xl border border-yellow-900/40 bg-yellow-950/20 p-4">
-                    <div className="flex items-start justify-between gap-3 mb-2">
-                      <div>
-                        <div className="text-white font-semibold">{a.title}</div>
-                        <div className="text-slate-500 text-xs mt-0.5">
-                          Submitted {new Date(a.created_at).toLocaleDateString()}
-                          {a.submitted_by_name ? ` · by ${a.submitted_by_name}` : a.submitted_by ? ` · Discord: ${a.submitted_by}` : ""}
-                        </div>
-                      </div>
-                      <div className="flex gap-2 flex-shrink-0">
-                        <button className="rounded-lg px-3 py-1.5 text-sm font-semibold bg-green-900 hover:bg-green-800 text-green-300 border border-green-700 transition" onClick={() => approveArticle(a.id, true)}>Approve</button>
-                        <button className="rounded-lg px-3 py-1.5 text-sm font-semibold bg-red-950 hover:bg-red-900 text-red-300 border border-red-800 transition" onClick={() => approveArticle(a.id, false)}>Reject</button>
-                      </div>
-                    </div>
-                    {a.image_url && <img src={a.image_url} alt="" className="mb-2 max-h-24 rounded-lg object-contain border border-slate-800" />}
-                    <p className="text-slate-400 text-sm line-clamp-4 whitespace-pre-wrap">{a.body}</p>
-                    {approveMsg[a.id] && <p className="text-xs mt-2 text-slate-400">{approveMsg[a.id]}</p>}
                   </div>
                 ))}
               </div>
@@ -6396,10 +6353,10 @@ const TAB_GROUPS = {
   Teams:        ["Teams", "Owners", "Draft Picks"],
   Games:        ["Schedule", "Box Scores", "Stats", "Playoffs"],
   Transactions: ["Auction", "Trades", "Signings", "Cuts", "Portal"],
-  Content:      ["Accolades", "Champions", "Board"],
+  Content:      ["Accolades", "Champions", "Articles", "Board"],
 } as const;
 type MainTab = keyof typeof TAB_GROUPS | "Backup";
-type Tab = "Players" | "Teams" | "Owners" | "Draft Picks" | "Schedule" | "Box Scores" | "Stats" | "Playoffs" | "Auction" | "Trades" | "Signings" | "Cuts" | "Portal" | "Accolades" | "Champions" | "Board" | "Backup";
+type Tab = "Players" | "Teams" | "Owners" | "Draft Picks" | "Schedule" | "Box Scores" | "Stats" | "Playoffs" | "Auction" | "Trades" | "Signings" | "Cuts" | "Portal" | "Accolades" | "Champions" | "Articles" | "Board" | "Backup";
 const SEASONS = ["Season 1","Season 1 Playoffs","Season 2","Season 2 Playoffs","Season 3","Season 3 Playoffs","Season 4","Season 4 Playoffs","Season 5","Season 5 Playoffs","Season 6","Season 6 Playoffs","Season 7","Season 7 Playoffs"];
 
 export default function AdminPage({ params }: { params?: Promise<{ league?: string }> }) {
@@ -6725,6 +6682,7 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
         {activeTab === "Box Scores" && <BoxScoresTab league={league} season={season} />}
         {activeTab === "Accolades" && <AccoladesTab league={league} season={season} />}
         {activeTab === "Champions" && <ChampionsTab league={league} season={season} />}
+        {activeTab === "Articles" && <ArticlesTab league={league} />}
         {activeTab === "Stats" && <StatsViewTab league={league} season={season} />}
         {activeTab === "Playoffs" && <PlayoffsTab league={league} season={season} />}
         {activeTab === "Owners" && <OwnersTab league={league} />}
