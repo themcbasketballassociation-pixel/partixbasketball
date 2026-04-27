@@ -5,13 +5,15 @@ import { resolveLeague } from "../../lib/leagueMapping";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === "GET") {
-    const { league: leagueRaw } = req.query;
+    const { league: leagueRaw, season } = req.query;
     const league = resolveLeague(leagueRaw);
     if (!league) return res.status(400).json({ error: "league required" });
-    const { data, error } = await supabase
+    let query = supabase
       .from("auction_player_prices")
-      .select("mc_uuid, league, price")
+      .select("mc_uuid, league, season, price")
       .eq("league", league);
+    if (season) query = query.eq("season", season as string);
+    const { data, error } = await query;
     if (error) return res.status(500).json({ error: error.message });
     return res.status(200).json(data ?? []);
   }
@@ -19,14 +21,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "POST") {
     const admin = await requireAdmin(req, res);
     if (!admin) return;
-    const { mc_uuid, league: leagueRaw, price } = req.body;
+    const { mc_uuid, league: leagueRaw, season, price } = req.body;
     const league = resolveLeague(leagueRaw);
-    if (!mc_uuid || !league || price == null)
-      return res.status(400).json({ error: "mc_uuid, league, price required" });
+    if (!mc_uuid || !league || !season || price == null)
+      return res.status(400).json({ error: "mc_uuid, league, season, price required" });
     const { data, error } = await supabase
       .from("auction_player_prices")
-      .upsert([{ mc_uuid, league, price: Number(price) }], { onConflict: "mc_uuid,league" })
-      .select("mc_uuid, league, price")
+      .upsert(
+        [{ mc_uuid, league, season, price: Number(price), updated_at: new Date().toISOString() }],
+        { onConflict: "mc_uuid,league,season" }
+      )
+      .select("mc_uuid, league, season, price")
       .single();
     if (error) return res.status(500).json({ error: error.message });
     return res.status(200).json(data);
