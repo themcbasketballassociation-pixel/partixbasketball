@@ -23,7 +23,6 @@ const tabs = [
   { label: "Auction",     path: "/auction",   global: false, only: ["mba"] },
   { label: "Portal",      path: "/portal",    global: false, only: ["mcaa"] },
   { label: "Mini Games",  path: "/games",     global: false, only: null },
-  { label: "Press Row",   path: "/pressrow",  global: false, only: null },
   { label: "Links",       path: "/links",     global: true,  only: null },
   { label: "Admin",       path: "/admin",     global: false, only: null },
 ];
