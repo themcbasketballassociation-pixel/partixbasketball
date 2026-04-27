@@ -4829,7 +4829,7 @@ function BoardMembersTab({ league }: { league: string }) {
 function PressPortalView({ league, isAdmin, onBack }: { league: string; isAdmin?: boolean; onBack?: () => void }) {
   type PressArticle = { id: string; league: string; title: string; body: string; status: string; created_at: string; image_url?: string | null; submitted_by?: string | null; submitted_by_name?: string | null };
   type PressMemberRow = { id: string; discord_id: string; name: string | null; added_at: string };
-  type PressTab = "submit" | "mine" | "review" | "members";
+  type PressTab = "submit" | "mine" | "review" | "members" | "crew";
 
   const [articles, setArticles] = useState<PressArticle[]>([]);
   const [pendingArticles, setPendingArticles] = useState<PressArticle[]>([]);
@@ -5000,6 +5000,7 @@ function PressPortalView({ league, isAdmin, onBack }: { league: string; isAdmin?
     ...(isAdmin ? [
       { id: "review" as PressTab,  label: `Review (${pendingArticles.length})` },
       { id: "members" as PressTab, label: "Press Members" },
+      { id: "crew" as PressTab,    label: "Press Row" },
     ] : []),
   ];
 
@@ -5208,6 +5209,11 @@ function PressPortalView({ league, isAdmin, onBack }: { league: string; isAdmin?
               </div>
             )}
           </div>
+        )}
+
+        {/* Press Row / Crew tab — admin only */}
+        {tab === "crew" && isAdmin && (
+          <CrewAdminTab league={league} />
         )}
 
       </div>
@@ -6183,10 +6189,9 @@ const TAB_GROUPS = {
   Games:        ["Schedule", "Box Scores", "Stats", "Playoffs"],
   Transactions: ["Auction", "Trades", "Signings", "Cuts", "Portal"],
   Content:      ["Accolades", "Champions", "Board"],
-  Operations:   ["Crew"],
 } as const;
 type MainTab = keyof typeof TAB_GROUPS | "Backup";
-type Tab = "Players" | "Teams" | "Owners" | "Draft Picks" | "Schedule" | "Box Scores" | "Stats" | "Playoffs" | "Auction" | "Trades" | "Signings" | "Cuts" | "Portal" | "Accolades" | "Champions" | "Board" | "Crew" | "Backup";
+type Tab = "Players" | "Teams" | "Owners" | "Draft Picks" | "Schedule" | "Box Scores" | "Stats" | "Playoffs" | "Auction" | "Trades" | "Signings" | "Cuts" | "Portal" | "Accolades" | "Champions" | "Board" | "Backup";
 const SEASONS = ["Season 1","Season 1 Playoffs","Season 2","Season 2 Playoffs","Season 3","Season 3 Playoffs","Season 4","Season 4 Playoffs","Season 5","Season 5 Playoffs","Season 6","Season 6 Playoffs","Season 7","Season 7 Playoffs"];
 
 export default function AdminPage({ params }: { params?: Promise<{ league?: string }> }) {
@@ -6507,7 +6512,6 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
         {activeTab === "Cuts" && <CutsAdminTab league={league} />}
         {activeTab === "Portal" && <PortalAdminTab league={league} />}
         {activeTab === "Board" && <BoardMembersTab league={league} />}
-        {activeTab === "Crew" && <CrewAdminTab league={league} />}
         {activeTab === "Backup" && (session as any)?.user?.id?.toString() === SUPER_ADMIN_ID && <BackupTab />}
       </div>
     </div>
