@@ -4826,15 +4826,20 @@ function BoardMembersTab({ league }: { league: string }) {
 
 // ─── Press Portal View ────────────────────────────────────────────────────────
 
-function PressPortalView({ league, isAdmin, onBack }: { league: string; isAdmin?: boolean; onBack?: () => void }) {
+function PressPortalView({ league, isAdmin, isCrewMember, onBack }: { league: string; isAdmin?: boolean; isCrewMember?: boolean; onBack?: () => void }) {
   type PressArticle = { id: string; league: string; title: string; body: string; status: string; created_at: string; image_url?: string | null; submitted_by?: string | null; submitted_by_name?: string | null };
   type PressMemberRow = { id: string; discord_id: string; name: string | null; added_at: string };
+  type GameRow = { id: string; scheduled_at: string; home_team_id: string; away_team_id: string; status: string; home_team?: { name: string; abbreviation: string } | null; away_team?: { name: string; abbreviation: string } | null };
+  type CrewClaimRow = { id: string; game_id: string; discord_id: string; discord_name: string; role: string; claimed_at: string };
   type PressTab = "submit" | "mine" | "review" | "members" | "crew";
+
+  const { data: session } = useSession();
+  const myDiscordId = (session?.user as any)?.id as string | undefined;
 
   const [articles, setArticles] = useState<PressArticle[]>([]);
   const [pendingArticles, setPendingArticles] = useState<PressArticle[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<PressTab>("submit");
+  const [tab, setTab] = useState<PressTab>((isCrewMember && !isAdmin) ? "crew" : "submit");
 
   // Submit form state
   const [title, setTitle] = useState("");
@@ -4856,6 +4861,16 @@ function PressPortalView({ league, isAdmin, onBack }: { league: string; isAdmin?
   const [newPressName, setNewPressName] = useState("");
   const [pressErr, setPressErr] = useState("");
 
+  // Crew state (crew members + admins)
+  const [games, setGames] = useState<GameRow[]>([]);
+  const [crewClaims, setCrewClaims] = useState<CrewClaimRow[]>([]);
+  const [crewLoading, setCrewLoading] = useState(false);
+  const [crewSubView, setCrewSubView] = useState<"claim" | "manage">("claim");
+  const [claimMsg, setClaimMsg] = useState<Record<string, string>>({});
+
+  const ROLE_CAPS: Record<string, number> = { streamer: 1, ref: 2, commentator: 2 };
+  const ROLE_COINS: Record<string, number> = { streamer: 1000, ref: 500, commentator: 500 };
+
   const discordChannelLabel: Record<string, string> = {
     pba: "#mba-media", pcaa: "#mcaa-media", pbgl: "#mbgl-media",
   };
@@ -4875,14 +4890,43 @@ function PressPortalView({ league, isAdmin, onBack }: { league: string; isAdmin?
     setPressMembers(Array.isArray(d) ? d : []);
   }, [league]);
 
+  const loadCrew = useCallback(async () => {
+    setCrewLoading(true);
+    const [gRes, cRes] = await Promise.all([
+      fetch(`/api/games?league=${league}`),
+      fetch(`/api/game-crew?league=${league}`),
+    ]);
+    const gData = await gRes.json().catch(() => []);
+    const cData = await cRes.json().catch(() => []);
+    // Only keep scheduled/upcoming games, sorted soonest first
+    const allGames: GameRow[] = Array.isArray(gData) ? gData : [];
+    const upcoming = allGames
+      .filter((g) => g.status === "scheduled")
+      .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime());
+    setGames(upcoming);
+    setCrewClaims(Array.isArray(cData) ? cData : []);
+    setCrewLoading(false);
+  }, [league]);
+
   useEffect(() => {
-    loadArticles();
-    if (isAdmin) loadPressMembers();
-    fetch(`/api/articles?league=${league}&check=discord`)
-      .then((r) => r.json())
-      .then((d) => setDiscordConfigured(!!d.configured))
-      .catch(() => setDiscordConfigured(false));
-  }, [loadArticles, loadPressMembers, isAdmin, league]);
+    if (isAdmin || isCrewMember || true) {
+      // only load articles/press if user is a press member or admin
+      if (isAdmin || (!isCrewMember)) loadArticles();
+      if (isAdmin) { loadPressMembers(); }
+      if (isAdmin || isCrewMember) loadCrew();
+      fetch(`/api/articles?league=${league}&check=discord`)
+        .then((r) => r.json())
+        .then((d) => setDiscordConfigured(!!d.configured))
+        .catch(() => setDiscordConfigured(false));
+    }
+  }, [loadArticles, loadPressMembers, loadCrew, isAdmin, isCrewMember, league]);
+
+  // For press members who are NOT crew, still load articles
+  useEffect(() => {
+    if (!isCrewMember) {
+      loadArticles();
+    }
+  }, [loadArticles, isCrewMember]);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null;
@@ -4987,6 +5031,26 @@ function PressPortalView({ league, isAdmin, onBack }: { league: string; isAdmin?
     loadPressMembers();
   };
 
+  const claimSpot = async (gameId: string, role: string) => {
+    const key = `${gameId}-${role}`;
+    setClaimMsg((m) => ({ ...m, [key]: "" }));
+    const r = await fetch("/api/game-crew", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ game_id: gameId, role, league }),
+    });
+    if (!r.ok) {
+      const d = await r.json();
+      setClaimMsg((m) => ({ ...m, [key]: d.error ?? "Failed to claim" }));
+    }
+    loadCrew();
+  };
+
+  const unclaimSpot = async (claimId: string) => {
+    await fetch(`/api/game-crew/${claimId}`, { method: "DELETE" });
+    loadCrew();
+  };
+
   const statusBadge = (status: string) => {
     if (status === "published") return <span className="text-xs px-2 py-0.5 rounded-full border border-green-800 bg-green-950 text-green-400 font-semibold">Published</span>;
     if (status === "pending_approval") return <span className="text-xs px-2 py-0.5 rounded-full border border-yellow-800 bg-yellow-950 text-yellow-400 font-semibold">Pending Approval</span>;
@@ -4994,15 +5058,112 @@ function PressPortalView({ league, isAdmin, onBack }: { league: string; isAdmin?
     return null;
   };
 
+  const showCrewTab = isAdmin || isCrewMember;
+  const showArticleTabs = isAdmin || (!isCrewMember);
+
   const tabDefs: { id: PressTab; label: string }[] = [
-    { id: "submit", label: isAdmin ? "Post Article" : "Submit Article" },
-    { id: "mine",   label: isAdmin ? `Published (${articles.length})` : `My Articles (${articles.length + pendingArticles.length})` },
+    ...(showArticleTabs ? [
+      { id: "submit" as PressTab, label: isAdmin ? "Post Article" : "Submit Article" },
+      { id: "mine" as PressTab,   label: isAdmin ? `Published (${articles.length})` : `My Articles (${articles.length + pendingArticles.length})` },
+    ] : []),
     ...(isAdmin ? [
       { id: "review" as PressTab,  label: `Review (${pendingArticles.length})` },
       { id: "members" as PressTab, label: "Press Members" },
-      { id: "crew" as PressTab,    label: "Press Row" },
+    ] : []),
+    ...(showCrewTab ? [
+      { id: "crew" as PressTab, label: "Press Row" },
     ] : []),
   ];
+
+  // Crew claiming view — shown inside the "crew" tab
+  const renderCrewClaim = () => {
+    // My coins from claims
+    const myClaims = crewClaims.filter((c) => c.discord_id === myDiscordId);
+    const myCoins = myClaims.reduce((sum, c) => sum + (ROLE_COINS[c.role] ?? 0), 0);
+
+    return (
+      <div className="space-y-4">
+        {/* Personal coins summary */}
+        {myDiscordId && (
+          <div className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 flex items-center justify-between">
+            <div>
+              <div className="text-white font-bold text-sm">Your Coins</div>
+              <div className="text-slate-500 text-xs mt-0.5">{myClaims.length} crew assignment{myClaims.length !== 1 ? "s" : ""} total</div>
+            </div>
+            <div className="text-right">
+              <div className="text-white font-bold text-2xl">{myCoins.toLocaleString()}</div>
+              <div className="text-slate-600 text-xs">coins</div>
+            </div>
+          </div>
+        )}
+
+        {crewLoading ? (
+          <div className="text-slate-600 text-sm text-center py-8">Loading games…</div>
+        ) : games.length === 0 ? (
+          <div className="text-slate-600 text-sm text-center py-8">No upcoming scheduled games.</div>
+        ) : (
+          games.map((g) => {
+            const gameCrew = crewClaims.filter((c) => c.game_id === g.id);
+            const homeLabel = g.home_team?.abbreviation ?? g.home_team_id.slice(0, 6);
+            const awayLabel = g.away_team?.abbreviation ?? g.away_team_id.slice(0, 6);
+            const gameDate = new Date(g.scheduled_at);
+            return (
+              <div key={g.id} className="rounded-xl border border-slate-700 bg-slate-950 p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-white font-bold">{awayLabel} @ {homeLabel}</div>
+                  <div className="text-slate-500 text-xs">
+                    {gameDate.toLocaleDateString()} {gameDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {(["streamer", "ref", "commentator"] as const).map((role) => {
+                    const key = `${g.id}-${role}`;
+                    const roleClaims = gameCrew.filter((c) => c.role === role);
+                    const cap = ROLE_CAPS[role];
+                    const isFull = roleClaims.length >= cap;
+                    const myClaim = roleClaims.find((c) => c.discord_id === myDiscordId);
+                    const coins = ROLE_COINS[role];
+                    return (
+                      <div key={role} className="flex items-center gap-3 rounded-lg bg-slate-900 border border-slate-800 px-3 py-2">
+                        <div className="w-24 flex-shrink-0">
+                          <span className="capitalize text-slate-300 text-sm font-medium">{role}</span>
+                          <span className="text-slate-600 text-xs ml-1">+{coins.toLocaleString()}</span>
+                        </div>
+                        <div className="flex-1 flex flex-wrap gap-1">
+                          {roleClaims.map((c) => (
+                            <span key={c.id} className={`text-xs px-2 py-0.5 rounded-full border font-medium ${c.discord_id === myDiscordId ? "bg-emerald-950 border-emerald-700 text-emerald-300" : "bg-slate-800 border-slate-700 text-slate-300"}`}>
+                              {c.discord_name || c.discord_id}
+                            </span>
+                          ))}
+                          {Array.from({ length: Math.max(0, cap - roleClaims.length) }).map((_, i) => (
+                            <span key={i} className="text-xs px-2 py-0.5 rounded-full border border-slate-700 text-slate-600 border-dashed">open</span>
+                          ))}
+                        </div>
+                        {myClaim ? (
+                          <button
+                            className="text-xs px-2.5 py-1 rounded-lg bg-red-950 hover:bg-red-900 text-red-400 border border-red-800 transition flex-shrink-0"
+                            onClick={() => unclaimSpot(myClaim.id)}
+                          >Unclaim</button>
+                        ) : !isFull ? (
+                          <button
+                            className="text-xs px-2.5 py-1 rounded-lg bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-700 transition flex-shrink-0"
+                            onClick={() => claimSpot(g.id, role)}
+                          >Claim</button>
+                        ) : (
+                          <span className="text-xs text-slate-600 flex-shrink-0">Full</span>
+                        )}
+                        {claimMsg[key] && <span className="text-xs text-red-400 flex-shrink-0">{claimMsg[key]}</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
@@ -5024,7 +5185,7 @@ function PressPortalView({ league, isAdmin, onBack }: { league: string; isAdmin?
       <div className="p-6">
 
         {/* Submit / Post tab */}
-        {tab === "submit" && (
+        {tab === "submit" && showArticleTabs && (
           <div className="max-w-2xl">
             {!isAdmin && <p className="text-slate-400 text-sm mb-5">Write your article below. It will go to an admin for review before being published.</p>}
             <div className="space-y-4">
@@ -5044,14 +5205,14 @@ function PressPortalView({ league, isAdmin, onBack }: { league: string; isAdmin?
                 />
               </div>
 
-              {/* Image upload (same as admin ArticlesTab) */}
+              {/* Image upload */}
               <div className="rounded-xl border border-slate-700 bg-slate-950 p-3">
                 <label className="block text-xs font-semibold text-slate-400 mb-2">📷 Image (optional)</label>
                 <input
                   type="file"
                   accept="image/*"
                   onChange={handleImageChange}
-                  className="block text-sm text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-700 file:text-slate-200 hover:file:bg-slate-600 cursor-pointer"
+                  className="block text-sm text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font--semibold file:bg-slate-700 file:text-slate-200 hover:file:bg-slate-600 cursor-pointer"
                 />
                 {imagePreview && (
                   <div className="mt-3 relative inline-block">
@@ -5064,7 +5225,7 @@ function PressPortalView({ league, isAdmin, onBack }: { league: string; isAdmin?
                 )}
               </div>
 
-              {/* Discord toggle — admin only (press articles post to Discord when approved) */}
+              {/* Discord toggle — admin only */}
               {isAdmin && (
                 <div className="rounded-xl border border-slate-700 bg-slate-950 p-3 flex items-center justify-between gap-3">
                   <div>
@@ -5101,7 +5262,7 @@ function PressPortalView({ league, isAdmin, onBack }: { league: string; isAdmin?
         )}
 
         {/* My Articles / Published tab */}
-        {tab === "mine" && (
+        {tab === "mine" && showArticleTabs && (
           <div>
             {loading ? (
               <div className="text-slate-600 text-sm text-center py-8">Loading…</div>
@@ -5133,10 +5294,9 @@ function PressPortalView({ league, isAdmin, onBack }: { league: string; isAdmin?
           </div>
         )}
 
-        {/* Review tab — admin only: pending approval queue */}
+        {/* Review tab — admin only */}
         {tab === "review" && isAdmin && (
           <div>
-            {/* Discord toggle for approvals */}
             {discordConfigured !== null && (
               <div className="mb-5 rounded-xl border border-slate-700 bg-slate-950 p-3 flex items-center justify-between gap-3">
                 <div>
@@ -5211,9 +5371,32 @@ function PressPortalView({ league, isAdmin, onBack }: { league: string; isAdmin?
           </div>
         )}
 
-        {/* Press Row / Crew tab — admin only */}
-        {tab === "crew" && isAdmin && (
-          <CrewAdminTab league={league} />
+        {/* Press Row tab — crew members + admins */}
+        {tab === "crew" && showCrewTab && (
+          <div>
+            {/* Sub-view toggle (admin only sees manage option) */}
+            {isAdmin && (
+              <div className="flex gap-2 mb-5">
+                {(["claim", "manage"] as const).map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => setCrewSubView(v)}
+                    className={`px-4 py-1.5 rounded-lg text-sm font-medium transition capitalize ${crewSubView === v ? "bg-slate-700 text-white" : "text-slate-400 hover:text-white hover:bg-slate-800"}`}
+                  >
+                    {v === "claim" ? "Claim Spots" : "Manage Access"}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Claim spots view — available to everyone with crew access */}
+            {(crewSubView === "claim" || !isAdmin) && renderCrewClaim()}
+
+            {/* Manage view — admin only */}
+            {crewSubView === "manage" && isAdmin && (
+              <CrewAdminTab league={league} />
+            )}
+          </div>
         )}
 
       </div>
@@ -6203,6 +6386,7 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
   const [ownerRecord, setOwnerRecord] = useState<{ teams: { id: string; name: string; abbreviation: string; color2: string | null; division: string | null; logo_url: string | null } } | null | "loading">("loading");
   const [isBoardMember, setIsBoardMember] = useState<boolean | "loading">("loading");
   const [isPressMember, setIsPressMember] = useState<boolean | "loading">("loading");
+  const [isCrewMember, setIsCrewMember] = useState<boolean | "loading">("loading");
   const [portal, setPortal] = useState<"admin" | "owner" | "board" | "press" | null>(null);
   const [mainTab, setMainTab] = useState<MainTab>("Players");
   const [activeTab, setActiveTab] = useState<Tab>("Players");
@@ -6226,12 +6410,23 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
         .then((r) => r.json())
         .then((data) => setIsPressMember(data.isMember === true))
         .catch(() => setIsPressMember(false));
+      // Crew access is global (not per-league), use discord_id from session
+      const discordId = (session?.user as any)?.id;
+      if (discordId) {
+        fetch(`/api/crew-access?discord_id=${discordId}`)
+          .then((r) => r.json())
+          .then((data) => setIsCrewMember(data.hasAccess === true))
+          .catch(() => setIsCrewMember(false));
+      } else {
+        setIsCrewMember(false);
+      }
     } else if (status !== "loading") {
       setOwnerRecord(null);
       setIsBoardMember(false);
       setIsPressMember(false);
+      setIsCrewMember(false);
     }
-  }, [status, league]);
+  }, [status, league, session]);
 
   useEffect(() => {
     if (!league) return;
@@ -6243,7 +6438,7 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
       .catch(() => setDbError("Database unreachable — make sure your Supabase project is active at supabase.com and tables have been created."));
   }, [league]);
 
-  if (status === "loading" || ownerRecord === "loading" || isBoardMember === "loading" || isPressMember === "loading")
+  if (status === "loading" || ownerRecord === "loading" || isBoardMember === "loading" || isPressMember === "loading" || isCrewMember === "loading")
     return <div className="rounded-2xl border border-slate-800 bg-slate-900 p-10 text-center text-slate-500">Loading...</div>;
 
   if (status !== "authenticated") {
@@ -6264,7 +6459,8 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
   const isOwner = ownerRecord !== null;
   const isBoardMemberBool = isBoardMember === true;
   const isPressMemberBool = isPressMember === true;
-  const hasAccess = isAdmin || isOwner || isBoardMemberBool || isPressMemberBool;
+  const isCrewMemberBool = isCrewMember === true;
+  const hasAccess = isAdmin || isOwner || isBoardMemberBool || isPressMemberBool || isCrewMemberBool;
 
   // Still checking admin status
   if (authorized === null)
@@ -6322,14 +6518,16 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
       {
         id: "press" as const,
         label: "Press Portal",
-        desc: (isAdmin || isPressMemberBool)
-          ? "Write and submit articles for the league"
-          : "You are not registered as a press member",
+        desc: (isAdmin || isPressMemberBool || isCrewMemberBool)
+          ? isCrewMemberBool && !isPressMemberBool && !isAdmin
+            ? "Claim crew spots for upcoming games (Press Row)"
+            : "Write articles and claim crew spots for upcoming games"
+          : "You are not registered as press or crew",
         color: "#10b981",
         border: "#065f46",
         bg: "#021a10",
-        available: isAdmin || isPressMemberBool,
-        badge: (!isAdmin && !isPressMemberBool) ? "No Access" : null,
+        available: isAdmin || isPressMemberBool || isCrewMemberBool,
+        badge: (!isAdmin && !isPressMemberBool && !isCrewMemberBool) ? "No Access" : null,
       },
     ];
 
@@ -6380,7 +6578,7 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
 
   // ── Press portal ───────────────────────────────────────────────────────────
   if (portal === "press") {
-    return <PressPortalView league={league} isAdmin={isAdmin} onBack={() => setPortal(null)} />;
+    return <PressPortalView league={league} isAdmin={isAdmin} isCrewMember={isCrewMemberBool} onBack={() => setPortal(null)} />;
   }
 
   // ── Owner portal ───────────────────────────────────────────────────────────
