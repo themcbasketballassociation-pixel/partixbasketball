@@ -51,9 +51,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const status = isAdmin ? "published" : "pending_approval";
+    const submittedByName = session?.user?.name ?? null;
     const { data, error } = await supabase
       .from("articles")
-      .insert([{ league, title, body, image_url: image_url ?? null, status, submitted_by: discordId }])
+      .insert([{ league, title, body, image_url: image_url ?? null, status, submitted_by: discordId, submitted_by_name: submittedByName }])
       .select()
       .single();
     if (error) return res.status(500).json({ error: error.message });

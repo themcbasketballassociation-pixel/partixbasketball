@@ -2240,7 +2240,7 @@ function ChampionsTab({ league, season: initialSeason }: { league: string; seaso
 // ─── Tab: Articles ────────────────────────────────────────────────────────────
 
 function ArticlesTab({ league }: { league: string }) {
-  type FullArticle = Article & { status?: string; submitted_by?: string };
+  type FullArticle = Article & { status?: string; submitted_by?: string; submitted_by_name?: string | null };
   const [articles, setArticles] = useState<FullArticle[]>([]);
   const [pendingArticles, setPendingArticles] = useState<FullArticle[]>([]);
   const [newTitle, setNewTitle] = useState("");
@@ -2292,18 +2292,10 @@ function ArticlesTab({ league }: { league: string }) {
     const r = await fetch(`/api/articles/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, post_to_discord: approve && postToDiscord && discordConfigured }),
     });
     if (!r.ok) { const d = await r.json(); setApproveMsg((m) => ({ ...m, [id]: d.error })); return; }
     setApproveMsg((m) => ({ ...m, [id]: approve ? "✓ Published" : "✗ Rejected" }));
-    // Post to Discord if approving
-    if (approve && postToDiscord && discordConfigured) {
-      await fetch(`/api/articles/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "published" }),
-      });
-    }
     refresh();
   };
 
@@ -2396,7 +2388,7 @@ function ArticlesTab({ league }: { league: string }) {
                 <div className="flex items-start justify-between gap-3 mb-2">
                   <div>
                     <div className="text-white font-semibold">{a.title}</div>
-                    <div className="text-slate-500 text-xs mt-0.5">Submitted {new Date(a.created_at).toLocaleDateString()}{a.submitted_by ? ` · Discord: ${a.submitted_by}` : ""}</div>
+                    <div className="text-slate-500 text-xs mt-0.5">Submitted {new Date(a.created_at).toLocaleDateString()}{a.submitted_by_name ? ` · by ${a.submitted_by_name}` : a.submitted_by ? ` · Discord: ${a.submitted_by}` : ""}</div>
                   </div>
                   <div className="flex gap-2 flex-shrink-0">
                     <button
@@ -4019,7 +4011,7 @@ function AuctionAdminTab({ league }: { league: string }) {
     winning_bid: number | null; winning_is_two_season: boolean; winning_team_id: string | null;
     players: { mc_uuid: string; mc_username: string };
     winning_team: { id: string; name: string; abbreviation: string } | null;
-    auction_bids: { id: string; team_id: string; amount: number; is_two_season: boolean; effective_value: number; placed_at: string; is_valid: boolean; teams: { id: string; name: string; abbreviation: string; color2: string | null } }[];
+    auction_bids: { id: string; team_id: string; amount: number; is_two_season: boolean; effective_value: number; placed_at: string; is_valid: boolean; performed_by_name?: string | null; performed_by_discord_id?: string | null; teams: { id: string; name: string; abbreviation: string; color2: string | null } }[];
   };
   type TeamRow = { id: string; name: string; abbreviation: string };
   type PriceRow = { mc_uuid: string; season: string; price: number };
@@ -4538,7 +4530,11 @@ function AuctionAdminTab({ league }: { league: string }) {
                         {sortedBids.slice(0, 6).map((b, i) => (
                           <div key={b.id} className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm ${i === 0 ? "bg-slate-800 border border-slate-600" : "bg-slate-900 border border-slate-800"}`}>
                             <span className="text-slate-400 w-5 text-center">{i + 1}</span>
-                            <span className="text-white flex-1">{b.teams?.name ?? b.team_id.slice(0, 8)}</span>
+                            <span className="text-white">{b.teams?.name ?? b.team_id.slice(0, 8)}</span>
+                            {(b.performed_by_name || b.performed_by_discord_id) && (
+                              <span className="text-slate-500 text-xs">({b.performed_by_name ?? b.performed_by_discord_id})</span>
+                            )}
+                            <span className="flex-1" />
                             <span className="text-cyan-400 font-bold">{b.effective_value.toLocaleString()}</span>
                             <span className="text-slate-500 text-xs">{b.amount.toLocaleString()}{b.is_two_season ? " 2yr" : ""}</span>
                             {topBid && i > 0 && topBid.effective_value - b.effective_value <= PLAYER_CHOICE_WINDOW && (
@@ -4600,6 +4596,7 @@ function TradesAdminTab({ league }: { league: string }) {
   type TradeRow = {
     id: string; league: string; proposing_team_id: string; receiving_team_id: string;
     status: string; proposed_at: string; resolved_at: string | null; notes: string | null; admin_note: string | null;
+    proposed_by_name?: string | null; proposed_by_discord_id?: string | null;
     proposing_team: { id: string; name: string; abbreviation: string; color2: string | null };
     receiving_team: { id: string; name: string; abbreviation: string; color2: string | null };
     trade_assets: {
@@ -4665,8 +4662,16 @@ function TradesAdminTab({ league }: { league: string }) {
           {trades.map((t) => (
             <div key={t.id} className="rounded-xl border border-slate-700 bg-slate-950 p-4">
               <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-                <div className="text-white font-semibold">
-                  {t.proposing_team.name} <span className="text-slate-500">→</span> {t.receiving_team.name}
+                <div>
+                  <div className="text-white font-semibold">
+                    {t.proposing_team.name} <span className="text-slate-500">→</span> {t.receiving_team.name}
+                  </div>
+                  {(t.proposed_by_name || t.proposed_by_discord_id) && (
+                    <div className="text-slate-500 text-xs mt-0.5">
+                      Proposed by <span className="text-slate-300 font-medium">{t.proposed_by_name ?? t.proposed_by_discord_id}</span>
+                      {" · "}{new Date(t.proposed_at).toLocaleDateString()}
+                    </div>
+                  )}
                 </div>
                 <span className={`text-xs px-2 py-0.5 rounded-full border font-semibold ${statusColors[t.status] ?? "text-slate-400 border-slate-700 bg-slate-900"}`}>
                   {t.status.replace("_", " ")}
@@ -4821,52 +4826,165 @@ function BoardMembersTab({ league }: { league: string }) {
 
 // ─── Press Portal View ────────────────────────────────────────────────────────
 
-function PressPortalView({ league, onBack }: { league: string; onBack?: () => void }) {
-  type PressArticle = { id: string; league: string; title: string; body: string; status: string; created_at: string; image_url?: string | null };
+function PressPortalView({ league, isAdmin, onBack }: { league: string; isAdmin?: boolean; onBack?: () => void }) {
+  type PressArticle = { id: string; league: string; title: string; body: string; status: string; created_at: string; image_url?: string | null; submitted_by?: string | null; submitted_by_name?: string | null };
+  type PressMemberRow = { id: string; discord_id: string; name: string | null; added_at: string };
+  type PressTab = "submit" | "mine" | "review" | "members";
 
   const [articles, setArticles] = useState<PressArticle[]>([]);
+  const [pendingArticles, setPendingArticles] = useState<PressArticle[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"submit" | "mine">("submit");
+  const [tab, setTab] = useState<PressTab>("submit");
 
-  // Submit form
+  // Submit form state
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
-  const [imageUrl, setImageUrl] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [postToDiscord, setPostToDiscord] = useState(true);
+  const [discordConfigured, setDiscordConfigured] = useState<boolean | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitMsg, setSubmitMsg] = useState("");
   const [submitErr, setSubmitErr] = useState("");
 
-  const loadMyArticles = useCallback(async () => {
-    // We pass ?all=true but the API will show only their own — for now show all pending/published
+  // Approve/reject state (admin)
+  const [approveMsg, setApproveMsg] = useState<Record<string, string>>({});
+
+  // Press members state (admin only)
+  const [pressMembers, setPressMembers] = useState<PressMemberRow[]>([]);
+  const [newPressDiscord, setNewPressDiscord] = useState("");
+  const [newPressName, setNewPressName] = useState("");
+  const [pressErr, setPressErr] = useState("");
+
+  const discordChannelLabel: Record<string, string> = {
+    pba: "#mba-media", pcaa: "#mcaa-media", pbgl: "#mbgl-media",
+  };
+  const channelName = discordChannelLabel[league] ?? "#media";
+
+  const loadArticles = useCallback(async () => {
     const r = await fetch(`/api/articles?league=${league}&all=true`);
     const d = await r.json();
-    setArticles(Array.isArray(d) ? d : []);
+    const arr: PressArticle[] = Array.isArray(d) ? d : [];
+    setPendingArticles(arr.filter((a) => a.status === "pending_approval"));
+    setArticles(arr.filter((a) => a.status === "published" || !a.status));
     setLoading(false);
   }, [league]);
 
-  useEffect(() => { loadMyArticles(); }, [loadMyArticles]);
+  const loadPressMembers = useCallback(async () => {
+    const d = await fetch(`/api/press-members?league=${league}`).then((r) => r.json());
+    setPressMembers(Array.isArray(d) ? d : []);
+  }, [league]);
+
+  useEffect(() => {
+    loadArticles();
+    if (isAdmin) loadPressMembers();
+    fetch(`/api/articles?league=${league}&check=discord`)
+      .then((r) => r.json())
+      .then((d) => setDiscordConfigured(!!d.configured))
+      .catch(() => setDiscordConfigured(false));
+  }, [loadArticles, loadPressMembers, isAdmin, league]);
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null;
+    setImageFile(file);
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => setImagePreview(reader.result as string);
+      reader.readAsDataURL(file);
+    } else {
+      setImagePreview(null);
+    }
+  };
 
   const submitArticle = async () => {
-    setSubmitErr("");
-    setSubmitMsg("");
+    setSubmitErr(""); setSubmitMsg("");
     if (!title.trim()) return setSubmitErr("Title is required");
     if (!body.trim()) return setSubmitErr("Body is required");
     setSubmitting(true);
+
+    let image_url: string | null = null;
+    if (imageFile) {
+      const reader = new FileReader();
+      const base64 = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve((reader.result as string).split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(imageFile);
+      });
+      const up = await fetch("/api/articles/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ base64, filename: imageFile.name, contentType: imageFile.type }),
+      });
+      if (!up.ok) {
+        const d = await up.json();
+        setSubmitErr(d.error ?? "Image upload failed");
+        setSubmitting(false);
+        return;
+      }
+      const upData = await up.json();
+      image_url = upData.url;
+    }
+
     const r = await fetch("/api/articles", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ league, title: title.trim(), body: body.trim(), image_url: imageUrl.trim() || null }),
+      body: JSON.stringify({
+        league,
+        title: title.trim(),
+        body: body.trim(),
+        image_url,
+        post_to_discord: isAdmin && postToDiscord && discordConfigured,
+      }),
     });
     setSubmitting(false);
     if (r.ok) {
-      setTitle(""); setBody(""); setImageUrl("");
-      setSubmitMsg("Article submitted! It will be published once an admin approves it.");
-      loadMyArticles();
-      setTab("mine");
+      setTitle(""); setBody(""); setImageFile(null); setImagePreview(null);
+      if (isAdmin) {
+        setSubmitMsg("Article posted!");
+      } else {
+        setSubmitMsg("Article submitted! It will be published once an admin approves it.");
+        setTab("mine");
+      }
+      loadArticles();
     } else {
       const d = await r.json();
       setSubmitErr(d.error ?? "Failed to submit");
     }
+  };
+
+  const approveArticle = async (id: string, approve: boolean) => {
+    const status = approve ? "published" : "rejected";
+    const r = await fetch(`/api/articles/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status, post_to_discord: approve && postToDiscord && discordConfigured }),
+    });
+    if (!r.ok) { const d = await r.json(); setApproveMsg((m) => ({ ...m, [id]: d.error })); return; }
+    setApproveMsg((m) => ({ ...m, [id]: approve ? "✓ Published" : "✗ Rejected" }));
+    loadArticles();
+  };
+
+  const deleteArticle = async (id: string) => {
+    if (!confirm("Delete this article?")) return;
+    await fetch(`/api/articles/${id}`, { method: "DELETE" });
+    loadArticles();
+  };
+
+  const addPressMember = async () => {
+    setPressErr("");
+    if (!newPressDiscord.trim()) return setPressErr("Discord ID required");
+    const r = await fetch("/api/press-members", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ discord_id: newPressDiscord.trim(), league, name: newPressName.trim() || null }),
+    });
+    if (!r.ok) { const d = await r.json(); return setPressErr(d.error); }
+    setNewPressDiscord(""); setNewPressName(""); loadPressMembers();
+  };
+
+  const removePressMember = async (id: string) => {
+    await fetch(`/api/press-members?id=${id}`, { method: "DELETE" });
+    loadPressMembers();
   };
 
   const statusBadge = (status: string) => {
@@ -4876,6 +4994,15 @@ function PressPortalView({ league, onBack }: { league: string; onBack?: () => vo
     return null;
   };
 
+  const tabDefs: { id: PressTab; label: string }[] = [
+    { id: "submit", label: isAdmin ? "Post Article" : "Submit Article" },
+    { id: "mine",   label: isAdmin ? `Published (${articles.length})` : `My Articles (${articles.length + pendingArticles.length})` },
+    ...(isAdmin ? [
+      { id: "review" as PressTab,  label: `Review (${pendingArticles.length})` },
+      { id: "members" as PressTab, label: "Press Members" },
+    ] : []),
+  ];
+
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
       <div className="px-6 py-5 border-b border-slate-800 flex items-center gap-3">
@@ -4884,19 +5011,21 @@ function PressPortalView({ league, onBack }: { league: string; onBack?: () => vo
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-slate-800 px-6">
-        {(["submit", "mine"] as const).map((t) => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-3 text-sm font-medium transition ${tab === t ? "border-b-2 border-emerald-500 text-white" : "text-slate-500 hover:text-slate-300"}`}>
-            {t === "submit" ? "Submit Article" : `My Articles (${articles.length})`}
+      <div className="flex border-b border-slate-800 px-6 overflow-x-auto">
+        {tabDefs.map((t) => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            className={`px-4 py-3 text-sm font-medium whitespace-nowrap transition ${tab === t.id ? "border-b-2 border-emerald-500 text-white" : "text-slate-500 hover:text-slate-300"}`}>
+            {t.label}
           </button>
         ))}
       </div>
 
       <div className="p-6">
+
+        {/* Submit / Post tab */}
         {tab === "submit" && (
           <div className="max-w-2xl">
-            <p className="text-slate-400 text-sm mb-5">Write your article below. It will go to an admin for review before being published.</p>
+            {!isAdmin && <p className="text-slate-400 text-sm mb-5">Write your article below. It will go to an admin for review before being published.</p>}
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1.5">Title</label>
@@ -4913,34 +5042,88 @@ function PressPortalView({ league, onBack }: { league: string; onBack?: () => vo
                   style={{ resize: "vertical" }}
                 />
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1.5">Image URL <span className="text-slate-600 normal-case font-normal">(optional)</span></label>
-                <input className={input} value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="https://…" />
+
+              {/* Image upload (same as admin ArticlesTab) */}
+              <div className="rounded-xl border border-slate-700 bg-slate-950 p-3">
+                <label className="block text-xs font-semibold text-slate-400 mb-2">📷 Image (optional)</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageChange}
+                  className="block text-sm text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-700 file:text-slate-200 hover:file:bg-slate-600 cursor-pointer"
+                />
+                {imagePreview && (
+                  <div className="mt-3 relative inline-block">
+                    <img src={imagePreview} alt="preview" className="max-h-48 rounded-lg border border-slate-700 object-contain" />
+                    <button
+                      onClick={() => { setImageFile(null); setImagePreview(null); }}
+                      className="absolute top-1 right-1 rounded-full bg-slate-900/90 text-slate-400 hover:text-red-400 text-xs px-1.5 py-0.5 border border-slate-700"
+                    >✕</button>
+                  </div>
+                )}
               </div>
+
+              {/* Discord toggle — admin only (press articles post to Discord when approved) */}
+              {isAdmin && (
+                <div className="rounded-xl border border-slate-700 bg-slate-950 p-3 flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                      <span>🔔</span>
+                      Post to Discord <span className="text-slate-500 font-normal">{channelName}</span>
+                    </div>
+                    {discordConfigured === false && (
+                      <div className="text-xs text-amber-500 mt-0.5">Not configured — add <code className="bg-slate-800 px-1 rounded">DISCORD_WEBHOOK_{league.toUpperCase()}</code> to .env</div>
+                    )}
+                    {discordConfigured === true && <div className="text-xs text-green-500 mt-0.5">Webhook configured ✓</div>}
+                  </div>
+                  <button
+                    onClick={() => setPostToDiscord((v) => !v)}
+                    disabled={!discordConfigured}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none flex-shrink-0 ${postToDiscord && discordConfigured ? "bg-blue-600" : "bg-slate-700"} ${!discordConfigured ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${postToDiscord && discordConfigured ? "translate-x-6" : "translate-x-1"}`} />
+                  </button>
+                </div>
+              )}
+
               {submitErr && <p className="text-red-400 text-sm rounded-lg bg-red-950 border border-red-900 px-3 py-2">{submitErr}</p>}
               {submitMsg && <p className="text-green-400 text-sm rounded-lg bg-green-950 border border-green-900 px-3 py-2">{submitMsg}</p>}
-              <button className="rounded-lg px-5 py-2 text-sm font-bold bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-700 transition disabled:opacity-40" onClick={submitArticle} disabled={submitting}>
-                {submitting ? "Submitting…" : "Submit for Review"}
+              <button
+                className="rounded-lg px-5 py-2 text-sm font-bold bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-700 transition disabled:opacity-40"
+                onClick={submitArticle}
+                disabled={submitting}
+              >
+                {submitting ? (isAdmin ? "Posting…" : "Submitting…") : (isAdmin ? "Post Article" : "Submit for Review")}
               </button>
             </div>
           </div>
         )}
 
+        {/* My Articles / Published tab */}
         {tab === "mine" && (
           <div>
             {loading ? (
               <div className="text-slate-600 text-sm text-center py-8">Loading…</div>
             ) : articles.length === 0 ? (
-              <div className="text-slate-600 text-sm text-center py-8">No articles submitted yet.</div>
+              <div className="text-slate-600 text-sm text-center py-8">No {isAdmin ? "published" : "submitted"} articles yet.</div>
             ) : (
               <div className="flex flex-col gap-4">
                 {articles.map((a) => (
                   <div key={a.id} className="rounded-xl border border-slate-700 bg-slate-950 p-4">
                     <div className="flex items-start justify-between gap-3 mb-2">
-                      <div className="text-white font-bold">{a.title}</div>
-                      {statusBadge(a.status)}
+                      <div>
+                        <div className="text-white font-bold">{a.title}</div>
+                        <div className="text-slate-500 text-xs mt-0.5">
+                          {new Date(a.created_at).toLocaleDateString()}
+                          {a.submitted_by_name ? ` · by ${a.submitted_by_name}` : a.submitted_by ? ` · Discord: ${a.submitted_by}` : ""}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {statusBadge(a.status)}
+                        {isAdmin && <button className={btnDanger} style={{ padding: "2px 10px", fontSize: 12 }} onClick={() => deleteArticle(a.id)}>Delete</button>}
+                      </div>
                     </div>
-                    <div className="text-slate-500 text-xs mb-2">{new Date(a.created_at).toLocaleDateString()}</div>
+                    {a.image_url && <img src={a.image_url} alt="" className="mb-2 max-h-24 rounded-lg object-contain border border-slate-800" />}
                     <p className="text-slate-400 text-sm line-clamp-3">{a.body}</p>
                   </div>
                 ))}
@@ -4948,6 +5131,85 @@ function PressPortalView({ league, onBack }: { league: string; onBack?: () => vo
             )}
           </div>
         )}
+
+        {/* Review tab — admin only: pending approval queue */}
+        {tab === "review" && isAdmin && (
+          <div>
+            {/* Discord toggle for approvals */}
+            {discordConfigured !== null && (
+              <div className="mb-5 rounded-xl border border-slate-700 bg-slate-950 p-3 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                    <span>🔔</span>
+                    Post to Discord on Approve <span className="text-slate-500 font-normal">{channelName}</span>
+                  </div>
+                  {discordConfigured === false && <div className="text-xs text-amber-500 mt-0.5">Webhook not configured</div>}
+                  {discordConfigured === true && <div className="text-xs text-green-500 mt-0.5">Webhook configured ✓</div>}
+                </div>
+                <button
+                  onClick={() => setPostToDiscord((v) => !v)}
+                  disabled={!discordConfigured}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none flex-shrink-0 ${postToDiscord && discordConfigured ? "bg-blue-600" : "bg-slate-700"} ${!discordConfigured ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${postToDiscord && discordConfigured ? "translate-x-6" : "translate-x-1"}`} />
+                </button>
+              </div>
+            )}
+            {pendingArticles.length === 0 ? (
+              <div className="text-slate-600 text-sm text-center py-8">No articles pending review.</div>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {pendingArticles.map((a) => (
+                  <div key={a.id} className="rounded-xl border border-yellow-900/40 bg-yellow-950/20 p-4">
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div>
+                        <div className="text-white font-semibold">{a.title}</div>
+                        <div className="text-slate-500 text-xs mt-0.5">
+                          Submitted {new Date(a.created_at).toLocaleDateString()}
+                          {a.submitted_by_name ? ` · by ${a.submitted_by_name}` : a.submitted_by ? ` · Discord: ${a.submitted_by}` : ""}
+                        </div>
+                      </div>
+                      <div className="flex gap-2 flex-shrink-0">
+                        <button className="rounded-lg px-3 py-1.5 text-sm font-semibold bg-green-900 hover:bg-green-800 text-green-300 border border-green-700 transition" onClick={() => approveArticle(a.id, true)}>Approve</button>
+                        <button className="rounded-lg px-3 py-1.5 text-sm font-semibold bg-red-950 hover:bg-red-900 text-red-300 border border-red-800 transition" onClick={() => approveArticle(a.id, false)}>Reject</button>
+                      </div>
+                    </div>
+                    {a.image_url && <img src={a.image_url} alt="" className="mb-2 max-h-24 rounded-lg object-contain border border-slate-800" />}
+                    <p className="text-slate-400 text-sm line-clamp-4 whitespace-pre-wrap">{a.body}</p>
+                    {approveMsg[a.id] && <p className="text-xs mt-2 text-slate-400">{approveMsg[a.id]}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Press Members tab — admin only */}
+        {tab === "members" && isAdmin && (
+          <div>
+            <div className="flex gap-2 mb-4 flex-wrap">
+              <input className={input} placeholder="Discord ID" value={newPressDiscord} onChange={(e) => setNewPressDiscord(e.target.value)} style={{ flex: 1, minWidth: 140 }} />
+              <input className={input} placeholder="Display name (opt)" value={newPressName} onChange={(e) => setNewPressName(e.target.value)} style={{ flex: 1, minWidth: 140 }} />
+              <button className={btnPrimary} onClick={addPressMember}>Add</button>
+            </div>
+            {pressErr && <p className="text-red-400 text-sm mb-3 rounded-lg bg-red-950 border border-red-900 px-3 py-2">{pressErr}</p>}
+            {pressMembers.length === 0 ? (
+              <p className="text-slate-600 text-sm">No press members yet.</p>
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                {pressMembers.map((m) => (
+                  <div key={m.id} className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2">
+                    <span className="text-emerald-400 text-xs font-mono flex-shrink-0">{m.discord_id}</span>
+                    <span className="text-white text-sm flex-1">{m.name ?? "—"}</span>
+                    <span className="text-slate-600 text-xs">{new Date(m.added_at).toLocaleDateString()}</span>
+                    <button className={btnDanger} style={{ padding: "2px 10px", fontSize: 12 }} onClick={() => removePressMember(m.id)}>Remove</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
       </div>
     </div>
   );
@@ -5920,11 +6182,11 @@ const TAB_GROUPS = {
   Teams:        ["Teams", "Owners", "Draft Picks"],
   Games:        ["Schedule", "Box Scores", "Stats", "Playoffs"],
   Transactions: ["Auction", "Trades", "Signings", "Cuts", "Portal"],
-  Content:      ["Accolades", "Champions", "Articles", "Board"],
+  Content:      ["Accolades", "Champions", "Board"],
   Operations:   ["Crew"],
 } as const;
 type MainTab = keyof typeof TAB_GROUPS | "Backup";
-type Tab = "Players" | "Teams" | "Owners" | "Draft Picks" | "Schedule" | "Box Scores" | "Stats" | "Playoffs" | "Auction" | "Trades" | "Signings" | "Cuts" | "Portal" | "Accolades" | "Champions" | "Articles" | "Board" | "Crew" | "Backup";
+type Tab = "Players" | "Teams" | "Owners" | "Draft Picks" | "Schedule" | "Box Scores" | "Stats" | "Playoffs" | "Auction" | "Trades" | "Signings" | "Cuts" | "Portal" | "Accolades" | "Champions" | "Board" | "Crew" | "Backup";
 const SEASONS = ["Season 1","Season 1 Playoffs","Season 2","Season 2 Playoffs","Season 3","Season 3 Playoffs","Season 4","Season 4 Playoffs","Season 5","Season 5 Playoffs","Season 6","Season 6 Playoffs","Season 7","Season 7 Playoffs"];
 
 export default function AdminPage({ params }: { params?: Promise<{ league?: string }> }) {
@@ -6113,7 +6375,7 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
 
   // ── Press portal ───────────────────────────────────────────────────────────
   if (portal === "press") {
-    return <PressPortalView league={league} onBack={() => setPortal(null)} />;
+    return <PressPortalView league={league} isAdmin={isAdmin} onBack={() => setPortal(null)} />;
   }
 
   // ── Owner portal ───────────────────────────────────────────────────────────
@@ -6235,7 +6497,6 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
         {activeTab === "Box Scores" && <BoxScoresTab league={league} season={season} />}
         {activeTab === "Accolades" && <AccoladesTab league={league} season={season} />}
         {activeTab === "Champions" && <ChampionsTab league={league} season={season} />}
-        {activeTab === "Articles" && <ArticlesTab league={league} />}
         {activeTab === "Stats" && <StatsViewTab league={league} season={season} />}
         {activeTab === "Playoffs" && <PlayoffsTab league={league} season={season} />}
         {activeTab === "Owners" && <OwnersTab league={league} />}

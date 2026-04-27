@@ -139,10 +139,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (receiverRetentionTotal > MAX_CAP_SPACE_TRADE)
       return res.status(400).json({ error: `Receiving team cannot retain more than ${MAX_CAP_SPACE_TRADE} total` });
 
+    // Get proposer display name for admin tracking
+    const { getServerSession } = await import("next-auth/next");
+    const { authOptions } = await import("../auth/[...nextauth]");
+    const tradeSession = await getServerSession(req, res, authOptions as any);
+    const proposerName: string | null = ((tradeSession as any)?.user as any)?.name ?? null;
+
     // ── Create trade ─────────────────────────────────────────────────────────
     const { data: trade, error: tradeErr } = await supabase
       .from("trade_proposals")
-      .insert([{ league, proposing_team_id, receiving_team_id, notes: notes ?? null, status: "pending" }])
+      .insert([{ league, proposing_team_id, receiving_team_id, notes: notes ?? null, status: "pending", proposed_by_discord_id: discordId, proposed_by_name: proposerName }])
       .select()
       .single();
     if (tradeErr) return res.status(500).json({ error: tradeErr.message });

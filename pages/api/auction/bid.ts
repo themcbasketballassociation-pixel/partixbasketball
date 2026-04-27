@@ -2,6 +2,8 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { supabase } from "../../../lib/supabase";
 import { getSessionDiscordId, isAdminId } from "../../../lib/ownerAuth";
 import { sendWebhook, getWebhookUrl } from "../../../lib/discordWebhook";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "../auth/[...nextauth]";
 
 const TOTAL_CAP = 25000;
 const COURT_CAP = 22000;
@@ -18,6 +20,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const discordId = await getSessionDiscordId(req, res);
   if (!discordId) return;
+  const fullSession = await getServerSession(req, res, authOptions as any);
+  const performerName: string | null = ((fullSession as any)?.user as any)?.name ?? null;
 
   const { auction_id, team_id, amount: rawAmount, is_two_season = false } = req.body;
   if (!auction_id || !team_id || rawAmount == null)
@@ -130,7 +134,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // ── Place bid ────────────────────────────────────────────────────────────────
   const { data: bid, error: bidErr } = await supabase
     .from("auction_bids")
-    .insert([{ auction_id, team_id, amount, is_two_season, effective_value: effectiveValue, is_valid: true }])
+    .insert([{ auction_id, team_id, amount, is_two_season, effective_value: effectiveValue, is_valid: true, performed_by_discord_id: discordId, performed_by_name: performerName }])
     .select("*, teams(id, name, abbreviation, color2)")
     .single();
   if (bidErr) return res.status(500).json({ error: bidErr.message });
