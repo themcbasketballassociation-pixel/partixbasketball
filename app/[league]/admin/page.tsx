@@ -4365,9 +4365,13 @@ function AuctionAdminTab({ league }: { league: string }) {
             )}
             {[...filteredPlayers]
               .sort((a, b) => {
-                const ap = playerPrices[a.mc_uuid] != null ? 0 : 1;
-                const bp = playerPrices[b.mc_uuid] != null ? 0 : 1;
-                if (ap !== bp) return ap - bp;
+                const ap = playerPrices[a.mc_uuid];
+                const bp = playerPrices[b.mc_uuid];
+                // Priced players first, sorted by price descending
+                if (ap != null && bp != null) return bp - ap;
+                if (ap != null) return -1;
+                if (bp != null) return 1;
+                // Both unpriced — alphabetical
                 return a.mc_username.localeCompare(b.mc_username);
               })
               .map((p) => {
