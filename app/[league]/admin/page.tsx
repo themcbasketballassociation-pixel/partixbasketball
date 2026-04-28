@@ -4026,10 +4026,15 @@ function AuctionAdminTab({ league }: { league: string }) {
   const [teams, setTeams] = useState<TeamRow[]>([]);
   const [innerTab, setInnerTab] = useState<"prices" | "auctions">("prices");
 
+  // Only show players who had stats in this regular season (no playoffs)
+  const REGULAR_SEASONS = SEASONS.filter((s) => !s.includes("Playoff"));
+  const [statsFilterSeason, setStatsFilterSeason] = useState("Season 6");
+
   useEffect(() => {
-    fetch("/api/players").then((r) => r.json()).then((d) => setPlayers(Array.isArray(d) ? d : []));
+    fetch(`/api/players?stats_season=${encodeURIComponent(statsFilterSeason)}&league=${league}`)
+      .then((r) => r.json()).then((d) => setPlayers(Array.isArray(d) ? d : []));
     fetch(`/api/teams?league=${league}`).then((r) => r.json()).then((d) => setTeams(Array.isArray(d) ? d : []));
-  }, [league]);
+  }, [league, statsFilterSeason]);
 
   // ── Prices tab state ──────────────────────────────────────────────────────────
   const [priceSeason, setPriceSeason] = useState(SEASONS[SEASONS.length - 1]);
@@ -4264,6 +4269,19 @@ function AuctionAdminTab({ league }: { league: string }) {
               {SEASONS.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
 
+            {/* Stats eligibility filter */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-slate-500 whitespace-nowrap">Stats from:</span>
+              <select
+                className={`${input} text-xs`}
+                style={{ maxWidth: 160 }}
+                value={statsFilterSeason}
+                onChange={(e) => setStatsFilterSeason(e.target.value)}
+              >
+                {REGULAR_SEASONS.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+
             <button
               className={`${btnSecondary} text-xs`}
               onClick={() => { setShowPaste(!showPaste); setPasteResult(""); }}
@@ -4330,7 +4348,7 @@ function AuctionAdminTab({ league }: { league: string }) {
 
           {/* Summary + search */}
           <div className="flex items-center gap-3 mb-3 flex-wrap">
-            <span className="text-xs text-slate-500">{pricedCount} / {players.length} priced for {priceSeason}</span>
+            <span className="text-xs text-slate-500">{pricedCount} / {players.length} priced for {priceSeason} <span className="text-slate-600">· showing players with {statsFilterSeason} stats</span></span>
             <input
               className={`${input} text-xs`}
               style={{ maxWidth: 200 }}
