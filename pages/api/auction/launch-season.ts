@@ -31,13 +31,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     .in("status", ["active", "pending", "player_choice", "signed"]);
   const existingSet = new Set((existing ?? []).map((a) => a.mc_uuid));
 
-  // 3. Create active auctions for all priced players not already in the auction
+  // 3. Fetch players who already have an active contract (manually added to a team before launch)
+  const { data: existingContracts } = await supabase
+    .from("contracts")
+    .select("mc_uuid")
+    .eq("league", league)
+    .in("status", ["active", "pending_approval"]);
+  const contractedSet = new Set((existingContracts ?? []).map((c) => c.mc_uuid));
+
+  // 4. Create active auctions for all priced players not already in auction or contracted
   const closesAt = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();
   let created = 0;
   let skipped = 0;
 
   for (const { mc_uuid, price } of prices) {
-    if (existingSet.has(mc_uuid)) {
+    if (existingSet.has(mc_uuid) || contractedSet.has(mc_uuid)) {
       skipped++;
       continue;
     }

@@ -33,25 +33,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .insert([{ mc_uuid, team_id, league, season: season ?? null }]);
     if (error) return res.status(500).json({ error: error.message });
 
-    // Determine the contract amount: use provided amount, or auto-fetch from the player's auction min_price
+    // Determine the contract amount: use provided amount, or auto-fetch from the player's auction price
     let contractAmount: number | null = (amount != null && Number(amount) > 0) ? Number(amount) : null;
 
     if (contractAmount == null) {
-      // Try season-specific auction first (auctions.season is an int like 7)
+      // 1. Try auction_player_prices for this season (set in the Prices tab — most reliable)
       if (season) {
-        const seasonNum = parseInt(String(season).replace(/\D/g, ""), 10);
-        if (!isNaN(seasonNum)) {
-          const { data: auctionRow } = await supabase
-            .from("auctions")
-            .select("min_price")
-            .eq("mc_uuid", mc_uuid)
-            .eq("league", league)
-            .eq("season", seasonNum)
-            .maybeSingle();
-          if (auctionRow?.min_price != null) contractAmount = Number(auctionRow.min_price);
-        }
+        const { data: priceRow } = await supabase
+          .from("auction_player_prices")
+          .select("price")
+          .eq("mc_uuid", mc_uuid)
+          .eq("league", league)
+          .eq("season", season)
+          .maybeSingle();
+        if (priceRow?.price != null) contractAmount = Number(priceRow.price);
       }
-      // Fall back to any active/pending auction for this player (season may be null on older auctions)
+      // 2. Fall back to the season-matching auction row (compare season as string)
+      if (contractAmount == null && season) {
+        const { data: auctionRow } = await supabase
+          .from("auctions")
+          .select("min_price")
+          .eq("mc_uuid", mc_uuid)
+          .eq("league", league)
+          .eq("season", season)
+          .maybeSingle();
+        if (auctionRow?.min_price != null) contractAmount = Number(auctionRow.min_price);
+      }
+      // 3. Fall back to any active/pending auction for this player
       if (contractAmount == null) {
         const { data: auctionRow } = await supabase
           .from("auctions")
