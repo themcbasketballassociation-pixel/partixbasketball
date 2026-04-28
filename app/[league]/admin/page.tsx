@@ -4049,6 +4049,7 @@ function AuctionAdminTab({ league }: { league: string }) {
   const [launching, setLaunching] = useState(false);
   const [launchMsg, setLaunchMsg] = useState("");
   const [priceSearch, setPriceSearch] = useState("");
+  const [priceSort, setPriceSort] = useState<"price" | "name">("price");
 
   const loadPrices = useCallback(async () => {
     const r = await fetch(`/api/auction-prices?league=${league}&season=${encodeURIComponent(priceSeason)}`);
@@ -4356,6 +4357,21 @@ function AuctionAdminTab({ league }: { league: string }) {
               value={priceSearch}
               onChange={(e) => setPriceSearch(e.target.value)}
             />
+            <div className="flex rounded-lg overflow-hidden border border-slate-700 text-xs font-semibold">
+              {(["price", "name"] as const).map((opt) => (
+                <button
+                  key={opt}
+                  onClick={() => setPriceSort(opt)}
+                  className="px-3 py-1.5 transition"
+                  style={priceSort === opt
+                    ? { background: "#1e3a5f", color: "#93c5fd" }
+                    : { background: "#0f172a", color: "#475569" }
+                  }
+                >
+                  {opt === "price" ? "Price ↓" : "Name"}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Player list */}
@@ -4365,13 +4381,13 @@ function AuctionAdminTab({ league }: { league: string }) {
             )}
             {[...filteredPlayers]
               .sort((a, b) => {
+                if (priceSort === "name") return a.mc_username.localeCompare(b.mc_username);
+                // price: priced players first, highest → lowest; unpriced alphabetical below
                 const ap = playerPrices[a.mc_uuid];
                 const bp = playerPrices[b.mc_uuid];
-                // Priced players first, sorted by price descending
                 if (ap != null && bp != null) return bp - ap;
                 if (ap != null) return -1;
                 if (bp != null) return 1;
-                // Both unpriced — alphabetical
                 return a.mc_username.localeCompare(b.mc_username);
               })
               .map((p) => {
