@@ -7,28 +7,46 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "GET") {
     const { stats_season, league: leagueRaw } = req.query;
 
-    // When stats_season + league are provided, return only players who appeared
-    // in game_stats for games played in that exact season (regular season only —
-    // caller should NOT pass a "Playoffs" string here).
+    // When stats_season + league are provided, return only players who played
+    // in that regular season. Checks BOTH the manual `stats` table and the
+    // computed `game_stats` table so all entry methods are covered.
     if (stats_season && leagueRaw) {
       const league = resolveLeague(leagueRaw);
       if (!league) return res.status(400).json({ error: "Invalid league" });
 
+      const seasonStr = stats_season as string;
+
+      // 1. Manual stats table — players with a direct row for this season
+      const { data: manualRows } = await supabase
+        .from("stats")
+        .select("mc_uuid")
+        .eq("league", league)
+        .eq("season", seasonStr);
+
+      // 2. Computed game_stats — players who appeared in games this season
       const { data: gameRows } = await supabase
         .from("games")
         .select("id")
         .eq("league", league)
-        .eq("season", stats_season as string);
+        .eq("season", seasonStr);
 
       const gameIds = (gameRows ?? []).map((g: Record<string, unknown>) => g.id as string);
-      if (gameIds.length === 0) return res.status(200).json([]);
+      const gameStatsUuids: string[] = [];
+      if (gameIds.length > 0) {
+        const { data: gsRows } = await supabase
+          .from("game_stats")
+          .select("mc_uuid")
+          .in("game_id", gameIds);
+        for (const r of gsRows ?? []) gameStatsUuids.push(r.mc_uuid as string);
+      }
 
-      const { data: statsRows } = await supabase
-        .from("game_stats")
-        .select("mc_uuid")
-        .in("game_id", gameIds);
-
-      const uuids = [...new Set((statsRows ?? []).map((r: Record<string, unknown>) => r.mc_uuid as string))];
+      // Union both sources
+      const uuids = [
+        ...new Set([
+          ...(manualRows ?? []).map((r: Record<string, unknown>) => r.mc_uuid as string),
+          ...gameStatsUuids,
+        ]),
+      ];
       if (uuids.length === 0) return res.status(200).json([]);
 
       const { data, error } = await supabase
