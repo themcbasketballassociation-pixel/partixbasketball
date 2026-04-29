@@ -4403,6 +4403,41 @@ function AuctionAdminTab({ league }: { league: string }) {
         ))}
       </div>
 
+      {/* ── TEST AUCTION CARD (always visible) ──────────────────────────────────── */}
+      <div className="mb-5 rounded-xl border border-yellow-800 bg-yellow-950/40 px-4 py-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="text-yellow-400 text-xs font-bold uppercase tracking-widest">🧪 Test Auction</span>
+          <PlayerSearchSelect players={players} value={nomUuid} onChange={setNomUuid} placeholder="Pick a player…" />
+          <input
+            className={input}
+            type="number"
+            placeholder="Price"
+            value={nomMinPrice}
+            onChange={(e) => setNomMinPrice(e.target.value)}
+            style={{ width: 90 }}
+          />
+          <div className="flex items-center gap-1.5">
+            <input
+              className={input}
+              type="number"
+              min="1"
+              value={testMinutes}
+              onChange={(e) => setTestMinutes(e.target.value)}
+              style={{ width: 60 }}
+            />
+            <span className="text-slate-500 text-xs">min</span>
+          </div>
+          <button
+            className="rounded-lg px-4 py-2 text-sm font-bold bg-yellow-700 hover:bg-yellow-600 text-yellow-100 border border-yellow-600 transition whitespace-nowrap"
+            onClick={() => addManual(true)}
+          >
+            Launch Test
+          </button>
+          {nomErr && <span className="text-red-400 text-xs">{nomErr}</span>}
+        </div>
+        <p className="text-yellow-700 text-xs mt-2">Creates a live auction that closes in the set number of minutes — owners can bid on it right away at <strong className="text-yellow-600">/mba/auction</strong>. Delete it from the Auctions tab when done.</p>
+      </div>
+
       {/* ── PRICES TAB ──────────────────────────────────────────────────────────── */}
       {innerTab === "prices" && (
         <div>
