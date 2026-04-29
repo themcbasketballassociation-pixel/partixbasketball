@@ -138,8 +138,15 @@ async function getPlayerStats(
   const { data: completedGames } = await gamesQuery;
   const gameIds = (completedGames ?? []).map((g) => g.id as string);
 
-  let gsGp = 0, gsPts = 0, gsReb = 0, gsAst = 0, gsStl = 0, gsBlk = 0;
-  let gsFgm = 0, gsFga = 0, gsTpm = 0;
+  // Per-stat accumulators — each stat tracks its own "games where it was recorded"
+  let gsGp = 0;
+  let gsPts = 0, gpPts = 0;
+  let gsReb = 0, gpReb = 0;
+  let gsAst = 0, gpAst = 0;
+  let gsStl = 0, gpStl = 0;
+  let gsBlk = 0, gpBlk = 0;
+  let gsFgm = 0, gsFga = 0, gpFg = 0;
+  let gsTpm = 0;
   let hasGameStats = false;
 
   if (gameIds.length > 0) {
@@ -153,13 +160,18 @@ async function getPlayerStats(
       hasGameStats = true;
       for (const s of gsRows) {
         gsGp++;
-        gsPts += (s.points as number) ?? 0;
-        gsReb += (((s.rebounds_off as number) ?? 0) + ((s.rebounds_def as number) ?? 0));
-        gsAst += (s.assists as number) ?? 0;
-        gsStl += (s.steals as number) ?? 0;
-        gsBlk += (s.blocks as number) ?? 0;
-        gsFgm += (s.fg_made as number) ?? 0;
-        gsFga += (s.fg_attempted as number) ?? 0;
+        // Only add to a stat's total + denominator when the field was actually recorded (not null)
+        if (s.points != null)   { gsPts += s.points as number; gpPts++; }
+        const hasReb = s.rebounds_off != null || s.rebounds_def != null;
+        if (hasReb) { gsReb += ((s.rebounds_off as number) ?? 0) + ((s.rebounds_def as number) ?? 0); gpReb++; }
+        if (s.assists != null)  { gsAst += s.assists as number; gpAst++; }
+        if (s.steals  != null)  { gsStl += s.steals  as number; gpStl++; }
+        if (s.blocks  != null)  { gsBlk += s.blocks  as number; gpBlk++; }
+        if (s.fg_attempted != null && (s.fg_attempted as number) > 0) {
+          gsFgm += (s.fg_made as number) ?? 0;
+          gsFga += s.fg_attempted as number;
+          gpFg++;
+        }
         gsTpm += (s.three_pt_made as number) ?? 0;
       }
     }
@@ -177,28 +189,37 @@ async function getPlayerStats(
   const { data: manualRows } = await statsQuery;
 
   if (manualRows && manualRows.length > 0) {
-    let gp = 0, wPts = 0, wReb = 0, wAst = 0, wStl = 0, wBlk = 0, wFg = 0, fgGames = 0, manualTpm = 0;
+    // Per-stat weighted sums — only include a season's GP in the denominator
+    // for a given stat if that stat was actually recorded (non-null) that season.
+    let gp = 0;
+    let wPts = 0, gpMPts = 0;
+    let wReb = 0, gpMReb = 0;
+    let wAst = 0, gpMAst = 0;
+    let wStl = 0, gpMStl = 0;
+    let wBlk = 0, gpMBlk = 0;
+    let wFg  = 0, gpMFg  = 0;
+    let manualTpm = 0;
+
     for (const r of manualRows) {
       const g = (r.gp as number) ?? 0;
       gp += g;
-      wPts += ((r.ppg as number) ?? 0) * g;
-      wReb += ((r.rpg as number) ?? 0) * g;
-      wAst += ((r.apg as number) ?? 0) * g;
-      wStl += ((r.spg as number) ?? 0) * g;
-      wBlk += ((r.bpg as number) ?? 0) * g;
-      const fgP = (r.fg_pct as number) ?? 0;
-      if (fgP > 0) { wFg += fgP * g; fgGames += g; }
+      if (r.ppg    != null) { wPts += (r.ppg as number) * g; gpMPts += g; }
+      if (r.rpg    != null) { wReb += (r.rpg as number) * g; gpMReb += g; }
+      if (r.apg    != null) { wAst += (r.apg as number) * g; gpMAst += g; }
+      if (r.spg    != null) { wStl += (r.spg as number) * g; gpMStl += g; }
+      if (r.bpg    != null) { wBlk += (r.bpg as number) * g; gpMBlk += g; }
+      if (r.fg_pct != null && (r.fg_pct as number) > 0) { wFg += (r.fg_pct as number) * g; gpMFg += g; }
       manualTpm += (r.three_pt_made as number) ?? 0;
     }
     return {
       gp,
-      ppg: gp > 0 ? r1(wPts / gp) : null,
-      rpg: gp > 0 ? r1(wReb / gp) : null,
-      apg: gp > 0 ? r1(wAst / gp) : null,
-      spg: gp > 0 ? r1(wStl / gp) : null,
-      bpg: gp > 0 ? r1(wBlk / gp) : null,
-      fg_pct: fgGames > 0 ? r1(wFg / fgGames) : null,
-      // Always prefer game_stats for three_pt_made total — manual entries often miss this field
+      ppg:    gpMPts > 0 ? r1(wPts / gpMPts) : null,
+      rpg:    gpMReb > 0 ? r1(wReb / gpMReb) : null,
+      apg:    gpMAst > 0 ? r1(wAst / gpMAst) : null,
+      spg:    gpMStl > 0 ? r1(wStl / gpMStl) : null,
+      bpg:    gpMBlk > 0 ? r1(wBlk / gpMBlk) : null,
+      fg_pct: gpMFg  > 0 ? r1(wFg  / gpMFg)  : null,
+      // Always prefer game_stats three_pt_made — manual entries often leave this blank
       three_pt_made: hasGameStats ? gsTpm : manualTpm,
     };
   }
@@ -207,12 +228,12 @@ async function getPlayerStats(
   if (!hasGameStats) return null;
 
   return {
-    gp: gsGp,
-    ppg: gsGp > 0 ? r1(gsPts / gsGp) : null,
-    rpg: gsGp > 0 ? r1(gsReb / gsGp) : null,
-    apg: gsGp > 0 ? r1(gsAst / gsGp) : null,
-    spg: gsGp > 0 ? r1(gsStl / gsGp) : null,
-    bpg: gsGp > 0 ? r1(gsBlk / gsGp) : null,
+    gp:    gsGp,
+    ppg:   gpPts  > 0 ? r1(gsPts / gpPts)  : null,
+    rpg:   gpReb  > 0 ? r1(gsReb / gpReb)  : null,
+    apg:   gpAst  > 0 ? r1(gsAst / gpAst)  : null,
+    spg:   gpStl  > 0 ? r1(gsStl / gpStl)  : null,
+    bpg:   gpBlk  > 0 ? r1(gsBlk / gpBlk)  : null,
     fg_pct: gsFga > 0 ? r1((gsFgm / gsFga) * 100) : null,
     three_pt_made: gsTpm,
   };
