@@ -31,7 +31,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "POST") {
     const admin = await requireAdmin(req, res);
     if (!admin) return;
-    const { league: leagueRaw, mc_uuid, min_price, season, phase, status: reqStatus } = req.body;
+    const { league: leagueRaw, mc_uuid, min_price, season, phase, status: reqStatus, duration_minutes } = req.body;
     const league = resolveLeague(leagueRaw);
     if (!league || !mc_uuid)
       return res.status(400).json({ error: "league and mc_uuid required" });
@@ -48,8 +48,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .maybeSingle();
     if (existing) return res.status(400).json({ error: "Player already has an active or pending auction" });
 
-    // For pending auctions use a far-future sentinel (year 9999) — no timer runs until launched
-    const closesAt = isPending ? "9999-01-01T00:00:00.000Z" : new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();
+    // duration_minutes overrides default 12h — used for test auctions
+    const durationMs = duration_minutes ? Number(duration_minutes) * 60 * 1000 : 12 * 60 * 60 * 1000;
+    const closesAt = isPending ? "9999-01-01T00:00:00.000Z" : new Date(Date.now() + durationMs).toISOString();
     const { data, error } = await supabase
       .from("auctions")
       .insert([{

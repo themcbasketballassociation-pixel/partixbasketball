@@ -4288,6 +4288,8 @@ function AuctionAdminTab({ league }: { league: string }) {
   const [nomPhase, setNomPhase] = useState("1");
   const [nomSeason, setNomSeason] = useState("");
   const [nomErr, setNomErr] = useState("");
+  const [testMode, setTestMode] = useState(false);
+  const [testMinutes, setTestMinutes] = useState("2");
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
   const [editingPrice, setEditingPrice] = useState("");
   const [closingId, setClosingId] = useState<string | null>(null);
@@ -4303,13 +4305,21 @@ function AuctionAdminTab({ league }: { league: string }) {
 
   useEffect(() => { if (innerTab === "auctions") loadAuctions(); }, [innerTab, loadAuctions]);
 
-  const addManual = async () => {
+  const addManual = async (isTest = false) => {
     setNomErr("");
     if (!nomUuid) return setNomErr("Select a player");
+    const mins = isTest ? parseInt(testMinutes) || 2 : undefined;
     const r = await fetch("/api/auction", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ league, mc_uuid: nomUuid, min_price: parseInt(nomMinPrice) || 1000, phase: parseInt(nomPhase) || 1, season: nomSeason || null, status: "active" }),
+      body: JSON.stringify({
+        league, mc_uuid: nomUuid,
+        min_price: parseInt(nomMinPrice) || 1000,
+        phase: parseInt(nomPhase) || 1,
+        season: nomSeason || null,
+        status: "active",
+        ...(mins != null && { duration_minutes: mins }),
+      }),
     });
     if (!r.ok) { const d = await r.json(); return setNomErr(d.error); }
     setNomUuid(""); setNomMinPrice("1000"); loadAuctions();
@@ -4586,7 +4596,26 @@ function AuctionAdminTab({ league }: { league: string }) {
         <div>
           {/* Manual add */}
           <div className={card} style={{ marginBottom: 16 }}>
-            <div className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Add Player Manually</div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Add Player to Auction</div>
+              {/* Test mode toggle */}
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <div
+                  className={`relative w-9 h-5 rounded-full transition-colors ${testMode ? "bg-yellow-500" : "bg-slate-700"}`}
+                  onClick={() => setTestMode(v => !v)}
+                >
+                  <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${testMode ? "translate-x-4" : ""}`} />
+                </div>
+                <span className={`text-xs font-semibold ${testMode ? "text-yellow-400" : "text-slate-500"}`}>🧪 Test Mode</span>
+              </label>
+            </div>
+
+            {testMode && (
+              <div className="mb-3 rounded-lg bg-yellow-950 border border-yellow-800 px-3 py-2 text-xs text-yellow-300">
+                Test mode creates a real auction that closes in a few minutes so you can verify the whole flow without waiting 12 hours.
+              </div>
+            )}
+
             <div className="flex gap-3 flex-wrap mb-2">
               <div style={{ flex: 2, minWidth: 160 }}>
                 <PlayerSearchSelect players={players} value={nomUuid} onChange={setNomUuid} placeholder="Search player…" />
@@ -4594,7 +4623,28 @@ function AuctionAdminTab({ league }: { league: string }) {
               <input className={input} type="number" placeholder="Min Price" value={nomMinPrice} onChange={(e) => setNomMinPrice(e.target.value)} style={{ flex: 1, minWidth: 100 }} />
               <input className={input} type="number" placeholder="Phase" value={nomPhase} onChange={(e) => setNomPhase(e.target.value)} style={{ flex: 1, minWidth: 70 }} />
               <input className={input} placeholder="Season (opt)" value={nomSeason} onChange={(e) => setNomSeason(e.target.value)} style={{ flex: 1, minWidth: 100 }} />
-              <button className={btnPrimary} onClick={addManual}>Add Live</button>
+              {testMode ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    className={input}
+                    type="number"
+                    min="1"
+                    placeholder="mins"
+                    value={testMinutes}
+                    onChange={(e) => setTestMinutes(e.target.value)}
+                    style={{ width: 70 }}
+                    title="Closes in this many minutes"
+                  />
+                  <button
+                    className="rounded-lg px-4 py-2 text-sm font-bold bg-yellow-700 hover:bg-yellow-600 text-yellow-100 border border-yellow-600 transition"
+                    onClick={() => addManual(true)}
+                  >
+                    🧪 Test ({testMinutes}m)
+                  </button>
+                </div>
+              ) : (
+                <button className={btnPrimary} onClick={() => addManual(false)}>Add Live</button>
+              )}
             </div>
             <ErrMsg msg={nomErr} />
           </div>
