@@ -53,9 +53,9 @@ const commands = [
     options: [
       {
         name: "player",
-        description: "The Discord user to look up",
+        description: "The player to look up (leave blank to see your own stats)",
         type: 6, // USER
-        required: true,
+        required: false,
       },
       {
         name: "league",

@@ -392,28 +392,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const playerOption = options.find((o) => o.name === "player");
     const leagueOption = options.find((o) => o.name === "league");
 
-    const mentionedUserId = playerOption?.value;
+    // If no player mentioned, show the command invoker's own stats
+    const invokerId = body.member?.user?.id ?? body.user?.id;
+    const targetUserId = playerOption?.value ?? invokerId;
     const leagueRaw = leagueOption?.value ?? "pba";
     const league = resolveLeague(leagueRaw) || "pba";
 
-    if (!mentionedUserId) {
+    if (!targetUserId) {
       return res.status(200).json({
         type: 4,
-        data: { content: "Please mention a player.", flags: 64 },
+        data: { content: "Could not determine which player to look up.", flags: 64 },
       });
     }
 
     const { data: player } = await supabase
       .from("players")
       .select("mc_uuid, mc_username")
-      .eq("discord_id", mentionedUserId)
+      .eq("discord_id", targetUserId)
       .maybeSingle();
 
     if (!player) {
+      const isSelf = targetUserId === invokerId && !playerOption;
       return res.status(200).json({
         type: 4,
         data: {
-          content: `No player found for <@${mentionedUserId}>. They may not be registered yet.`,
+          content: isSelf
+            ? "You don't have a player linked to your Discord. Ask an admin to add your Discord ID to your player profile."
+            : `No player found for <@${targetUserId}>. They may not be registered yet.`,
           flags: 64,
         },
       });
