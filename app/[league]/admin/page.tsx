@@ -1290,6 +1290,15 @@ function etToUtcIso(dateStr: string, estHHMM: string): string {
   return new Date(Date.UTC(y, mo - 1, d, h + 5, m)).toISOString();
 }
 
+// Returns "YYYY-MM-DD" for the 2nd Thursday of May in the given year
+function secondThursdayOfMay(year: number): string {
+  const may1 = new Date(year, 4, 1);
+  const dow = may1.getDay(); // 0=Sun … 6=Sat
+  const daysToFirstThu = dow <= 4 ? 4 - dow : 4 + 7 - dow;
+  const day = 1 + daysToFirstThu + 7;
+  return `${year}-05-${day.toString().padStart(2, "0")}`;
+}
+
 function ScheduleTab({ league, season }: { league: string; season: string }) {
   const [games, setGames] = useState<Game[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -1303,9 +1312,11 @@ function ScheduleTab({ league, season }: { league: string; season: string }) {
   const [err, setErr] = useState("");
   const [showImport, setShowImport] = useState(false);
   const [importText, setImportText] = useState("");
-  const [importStart, setImportStart] = useState("");
+  const [importStart, setImportStart] = useState(secondThursdayOfMay(new Date().getFullYear()));
   const [parsed, setParsed] = useState<ParsedGame[] | null>(null);
   const [importing, setImporting] = useState(false);
+  const [rescheduleTarget, setRescheduleTarget] = useState(secondThursdayOfMay(new Date().getFullYear()));
+  const [rescheduling, setRescheduling] = useState(false);
 
   const refresh = useCallback(async () => {
     const [g, t] = await Promise.all([
@@ -1417,6 +1428,36 @@ function ScheduleTab({ league, season }: { league: string; season: string }) {
     setRandomizing(false); refresh();
   };
 
+  const rescheduleGames = async () => {
+    if (!rescheduleTarget) { setErr("Pick a new Week 1 start date."); return; }
+    if (!games.length) { setErr("No games loaded."); return; }
+    // Find the Thursday of the earliest game's week (= current Week 1)
+    const earliest = games.reduce((a, b) => a.scheduled_at < b.scheduled_at ? a : b);
+    const d = new Date(earliest.scheduled_at);
+    const dow = d.getDay();
+    const daysToThu = dow >= 4 ? dow - 4 : dow + 3;
+    const week1Thu = new Date(d);
+    week1Thu.setDate(d.getDate() - daysToThu);
+    week1Thu.setHours(0, 0, 0, 0);
+    const targetThu = new Date(rescheduleTarget + "T00:00:00");
+    const offsetMs = targetThu.getTime() - week1Thu.getTime();
+    const offsetDays = Math.round(offsetMs / 86400000);
+    if (offsetDays === 0) { setErr("Schedule is already at that start date."); return; }
+    if (!confirm(`Shift all ${games.length} games by ${offsetDays > 0 ? "+" : ""}${offsetDays} day(s)? Week 1 will move from ${week1Thu.toDateString()} → ${targetThu.toDateString()}.`)) return;
+    setRescheduling(true); setErr("");
+    for (const g of games) {
+      const newDate = new Date(new Date(g.scheduled_at).getTime() + offsetDays * 86400000).toISOString();
+      const r = await fetch(`/api/games/${g.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scheduled_at: newDate }),
+      });
+      if (!r.ok) { const data = await r.json(); setErr(data.error ?? "Reschedule failed"); setRescheduling(false); return; }
+    }
+    setRescheduling(false);
+    refresh();
+  };
+
   const parseImport = () => {
     if (!importText.trim() || !importStart) return;
     const raw = parseScheduleText(importText);
@@ -1461,6 +1502,32 @@ function ScheduleTab({ league, season }: { league: string; season: string }) {
   return (
     <div className="space-y-5">
       <ErrMsg msg={err} />
+
+      {/* Reschedule Season */}
+      <div className={card}>
+        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">📅 Reschedule Season</h3>
+        <p className="text-xs text-slate-500 mb-3">Shift every game in this season so Week 1 starts on a new date. All weeks move together.</p>
+        <div className="flex items-center gap-3 flex-wrap">
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">New Week 1 Thursday</label>
+            <input type="date" className={`${input} w-48`} value={rescheduleTarget} onChange={(e) => setRescheduleTarget(e.target.value)} />
+          </div>
+          <div className="mt-4">
+            <button className={`${btnSecondary} text-xs`} onClick={() => setRescheduleTarget(secondThursdayOfMay(new Date().getFullYear()))}>
+              2nd Thu of May {new Date().getFullYear()}
+            </button>
+          </div>
+          <div className="mt-4">
+            <button
+              className="rounded-lg px-4 py-2 text-sm font-bold bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-700 transition disabled:opacity-40"
+              onClick={rescheduleGames}
+              disabled={rescheduling || !games.length}
+            >
+              {rescheduling ? "Rescheduling…" : `Shift ${games.length} games`}
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* Bulk Import */}
       <div className={card}>
