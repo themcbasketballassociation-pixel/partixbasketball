@@ -226,80 +226,135 @@ function buildEmbed(
     : type === "playoffs" ? `${season} Playoffs` : season;
 
   const leagueLabel = LEAGUE_LABELS[league] ?? league.toUpperCase();
-  const skinUrl = `https://crafatar.com/avatars/${mc_uuid}?size=64&default=MHF_Steve&overlay`;
+
+  // mc-heads.net is more reliable for Discord embeds than crafatar
+  const skinUrl = `https://mc-heads.net/avatar/${mc_uuid}/64`;
 
   const fields: { name: string; value: string; inline: boolean }[] = [];
 
   if (stats) {
-    if (stats.ppg != null) fields.push({ name: "PPG", value: `${stats.ppg}`, inline: true });
-    if (stats.rpg != null) fields.push({ name: "RPG", value: `${stats.rpg}`, inline: true });
-    if (stats.apg != null) fields.push({ name: "APG", value: `${stats.apg}`, inline: true });
-    if (stats.spg != null) fields.push({ name: "SPG", value: `${stats.spg}`, inline: true });
-    if (stats.bpg != null) fields.push({ name: "BPG", value: `${stats.bpg}`, inline: true });
-    if (stats.fg_pct != null) fields.push({ name: "FG%", value: `${stats.fg_pct}%`, inline: true });
-    fields.push({ name: "GP", value: `${stats.gp}`, inline: true });
-    if (stats.three_pt_made > 0) fields.push({ name: "3PM", value: `${stats.three_pt_made}`, inline: true });
+    // Stats grid — bold values to stand out
+    const statCells: [string, string | number | null][] = [
+      ["GP",   stats.gp],
+      ["PPG",  stats.ppg],
+      ["RPG",  stats.rpg],
+      ["APG",  stats.apg],
+      ["SPG",  stats.spg],
+      ["BPG",  stats.bpg],
+      ["FG%",  stats.fg_pct != null ? `${stats.fg_pct}%` : null],
+      ["3PM",  stats.three_pt_made > 0 ? stats.three_pt_made : null],
+    ];
+    for (const [name, val] of statCells) {
+      if (val != null) fields.push({ name, value: `**${val}**`, inline: true });
+    }
   } else {
-    fields.push({ name: "No Stats", value: "No stats recorded for this period.", inline: false });
+    fields.push({ name: "​", value: "*No stats recorded for this period.*", inline: false });
   }
 
+  // Compact accolades: group by type, show count + seasons on one line each
   if (accolades.length > 0) {
-    const text = accolades
-      .map((a) => `🏆 **${a.type}**${a.season ? ` *(${a.season})*` : ""}`)
-      .join("\n");
-    fields.push({ name: "Accolades", value: text.slice(0, 1024), inline: false });
+    const grouped: Record<string, string[]> = {};
+    for (const a of accolades) {
+      if (!grouped[a.type]) grouped[a.type] = [];
+      if (a.season) grouped[a.type].push(a.season.replace("Season ", "S"));
+    }
+
+    const AWARD_EMOJI: Record<string, string> = {
+      "Finals Champion": "🏆",
+      "MVP": "🥇",
+      "Finals MVP": "🥇",
+      "Defensive Player of the Year": "🛡️",
+      "DPOY": "🛡️",
+      "Rookie of the Year": "🌟",
+      "ROY": "🌟",
+      "All-Star": "⭐",
+      "Scoring Champion": "🎯",
+      "All-PBA": "🏅",
+      "All-PCAA": "🏅",
+      "All-PBGL": "🏅",
+    };
+
+    const lines = Object.entries(grouped).map(([type, seasons]) => {
+      const emoji = AWARD_EMOJI[type] ?? "🏆";
+      const count = seasons.length;
+      const seasonStr = seasons.length > 0 ? ` *(${seasons.join(", ")})*` : "";
+      return count > 1
+        ? `${emoji} **${type}** ×${count}${seasonStr}`
+        : `${emoji} **${type}**${seasonStr}`;
+    });
+
+    fields.push({
+      name: "🎖️ Accolades",
+      value: lines.join("\n").slice(0, 1024),
+      inline: false,
+    });
   }
 
   return {
-    title: `${mc_username}`,
-    description: `**${leagueLabel}** — ${seasonLabel}`,
-    color: 0x3b82f6,
+    author: { name: `${leagueLabel} · ${seasonLabel}` },
+    title: mc_username,
+    color: type === "playoffs" ? 0xf59e0b : 0x3b82f6, // gold for playoffs, blue for regular
     thumbnail: { url: skinUrl },
     fields,
-    footer: { text: "Partix Basketball" },
+    footer: { text: "Partix Basketball · /stats @player" },
   };
 }
 
-function buildSelectMenu(
+function buildComponents(
   mc_uuid: string,
   league: string,
   seasons: SeasonEntry[],
   currentSeason: string,
   currentType: "regular" | "playoffs"
 ) {
-  const options: { label: string; value: string; default?: boolean }[] = [];
+  // Unique seasons (no playoff duplicates) + All-Time
+  const uniqueSeasons = [...new Set(seasons.map((s) => s.season))];
+  const hasPlayoffs = (s: string) => seasons.some((e) => e.season === s && e.type === "playoffs");
+  const hasRegular = (s: string) => seasons.some((e) => e.season === s && e.type === "regular");
 
-  for (const { season, type } of seasons) {
-    const label = type === "playoffs" ? `${season} Playoffs` : season;
-    options.push({
-      label,
-      value: `${season}|${type}`,
-      default: season === currentSeason && type === currentType,
-    });
-  }
+  const seasonOptions = uniqueSeasons.map((s) => ({
+    label: s,
+    value: s,
+    default: s === currentSeason,
+  }));
+  seasonOptions.push({ label: "All-Time", value: "all", default: currentSeason === "all" });
 
-  options.push({
-    label: "All-Time Regular Season",
-    value: "all|regular",
-    default: currentSeason === "all" && currentType === "regular",
-  });
-  options.push({
-    label: "All-Time Playoffs",
-    value: "all|playoffs",
-    default: currentSeason === "all" && currentType === "playoffs",
-  });
+  // Row 1: season select
+  const seasonRow = {
+    type: 1,
+    components: [{
+      type: 3, // STRING_SELECT
+      custom_id: `statsseason:${mc_uuid}:${league}:${currentType}`,
+      placeholder: "Switch season",
+      options: seasonOptions.slice(0, 25),
+    }],
+  };
 
-  return {
-    type: 1, // ACTION_ROW
+  // Row 2: Regular / Playoffs buttons
+  const regularAvailable = currentSeason === "all" || hasRegular(currentSeason);
+  const playoffsAvailable = currentSeason === "all" || hasPlayoffs(currentSeason);
+
+  const typeRow = {
+    type: 1,
     components: [
       {
-        type: 3, // STRING_SELECT
-        custom_id: `stats:${mc_uuid}:${league}`,
-        placeholder: "Switch season / view",
-        options: options.slice(0, 25),
+        type: 2, // BUTTON
+        style: currentType === "regular" ? 1 : 2, // Primary (blue) if active, Secondary if not
+        label: "Regular Season",
+        custom_id: `statstype:${mc_uuid}:${league}:${currentSeason}:regular`,
+        disabled: !regularAvailable,
+      },
+      {
+        type: 2,
+        style: currentType === "playoffs" ? 1 : 2,
+        label: "Playoffs",
+        custom_id: `statstype:${mc_uuid}:${league}:${currentSeason}:playoffs`,
+        disabled: !playoffsAvailable,
       },
     ],
   };
+
+  return [seasonRow, typeRow];
 }
 
 // ── Main handler ──────────────────────────────────────────────────────────────
@@ -388,55 +443,61 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .eq("league", league);
 
     const embed = buildEmbed(mc_username, mc_uuid, stats, league, defaultEntry.season, defaultEntry.type, accolades ?? []);
-    const selectMenu = buildSelectMenu(mc_uuid, league, seasons, defaultEntry.season, defaultEntry.type);
+    const components = buildComponents(mc_uuid, league, seasons, defaultEntry.season, defaultEntry.type);
 
     return res.status(200).json({
-      type: 4, // CHANNEL_MESSAGE_WITH_SOURCE
-      data: { embeds: [embed], components: [selectMenu] },
+      type: 4,
+      data: { embeds: [embed], components },
     });
   }
 
-  // ── MESSAGE_COMPONENT — season switcher ───────────────────────────────────
+  // ── MESSAGE_COMPONENT — season select or type button ─────────────────────
   if (body.type === 3) {
     const customId = (body.data?.custom_id ?? "") as string;
-    const selectedValue = (body.data?.values?.[0] ?? "") as string;
 
-    if (!customId.startsWith("stats:") || !selectedValue) {
-      return res.status(200).json({ type: 6 }); // DEFERRED_UPDATE_MESSAGE
+    // Helper to load player + rebuild embed
+    async function updateEmbed(mc_uuid: string, league: string, season: string, type: "regular" | "playoffs") {
+      const { data: player } = await supabase
+        .from("players").select("mc_uuid, mc_username").eq("mc_uuid", mc_uuid).maybeSingle();
+      if (!player) return res.status(200).json({ type: 6 });
+
+      const { mc_username } = player as { mc_uuid: string; mc_username: string };
+      const [seasons, stats, accoladesResult] = await Promise.all([
+        getPlayerSeasons(mc_uuid, league),
+        getPlayerStats(mc_uuid, league, season, type),
+        supabase.from("accolades").select("type, season, description").eq("mc_uuid", mc_uuid).eq("league", league),
+      ]);
+
+      // If requested type doesn't exist for this season, fall back to regular
+      const hasType = season === "all" || seasons.some((s) => s.season === season && s.type === type);
+      const resolvedType = hasType ? type : "regular";
+
+      const embed = buildEmbed(mc_username, mc_uuid, stats ?? null, league, season, resolvedType, accoladesResult.data ?? []);
+      const components = buildComponents(mc_uuid, league, seasons, season, resolvedType);
+      return res.status(200).json({ type: 7, data: { embeds: [embed], components } });
     }
 
-    const parts = customId.split(":");
-    const mc_uuid = parts[1];
-    const league = parts[2];
-    const [season, type] = selectedValue.split("|") as [string, "regular" | "playoffs"];
+    // Season dropdown changed
+    if (customId.startsWith("statsseason:")) {
+      const parts = customId.split(":");
+      const mc_uuid = parts[1];
+      const league = parts[2];
+      const currentType = parts[3] as "regular" | "playoffs";
+      const season = (body.data?.values?.[0] ?? "all") as string;
+      return updateEmbed(mc_uuid, league, season, currentType);
+    }
 
-    const { data: player } = await supabase
-      .from("players")
-      .select("mc_uuid, mc_username")
-      .eq("mc_uuid", mc_uuid)
-      .maybeSingle();
+    // Regular / Playoffs button clicked
+    if (customId.startsWith("statstype:")) {
+      const parts = customId.split(":");
+      const mc_uuid = parts[1];
+      const league = parts[2];
+      const season = parts[3];
+      const type = parts[4] as "regular" | "playoffs";
+      return updateEmbed(mc_uuid, league, season, type);
+    }
 
-    if (!player) return res.status(200).json({ type: 6 });
-
-    const { mc_username } = player as { mc_uuid: string; mc_username: string };
-
-    const [seasons, stats, accoladesResult] = await Promise.all([
-      getPlayerSeasons(mc_uuid, league),
-      getPlayerStats(mc_uuid, league, season, type),
-      supabase
-        .from("accolades")
-        .select("type, season, description")
-        .eq("mc_uuid", mc_uuid)
-        .eq("league", league),
-    ]);
-
-    const embed = buildEmbed(mc_username, mc_uuid, stats, league, season, type, accoladesResult.data ?? []);
-    const selectMenu = buildSelectMenu(mc_uuid, league, seasons, season, type);
-
-    return res.status(200).json({
-      type: 7, // UPDATE_MESSAGE
-      data: { embeds: [embed], components: [selectMenu] },
-    });
+    return res.status(200).json({ type: 6 });
   }
 
   return res.status(400).json({ error: "Unknown interaction type" });
