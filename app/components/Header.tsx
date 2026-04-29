@@ -7,7 +7,6 @@ import Image from "next/image";
 
 const leagues = [
   { short: "MBA",  full: "Minecraft Basketball Association", slug: "mba",  logo: "/logos/mba.webp",  accent: "#C8102E" },
-  { short: "MBGL", full: "G League",                         slug: "mbgl", logo: "/logos/MBGL.png", accent: "#BB3430" },
   { short: "MCAA", full: "College",                          slug: "mcaa", logo: "/logos/mcaa.webp", accent: "#003087" },
 ];
 
@@ -36,7 +35,7 @@ export default function Header() {
   useEffect(() => {
     const saved = localStorage.getItem("partix:selectedLeague");
     // migrate old pba/pcaa/pbgl keys
-    const migrated = saved === "pba" ? "mba" : saved === "pcaa" ? "mcaa" : saved === "pbgl" ? "mbgl" : saved;
+    const migrated = saved === "pba" ? "mba" : saved === "pcaa" ? "mcaa" : saved === "pbgl" || saved === "mbgl" ? "mba" : saved;
     if (migrated) setSelected(migrated);
   }, []);
 
