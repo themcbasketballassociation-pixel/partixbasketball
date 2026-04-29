@@ -23,17 +23,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!prices || prices.length === 0)
     return res.status(400).json({ error: "No prices set for this season. Set prices in the Prices tab first." });
 
-  // 2a. In test mode: cancel any already-expired active auctions so they can be re-created fresh
+  // 2a. In test mode: cancel ALL pending/active/player_choice auctions so every priced player re-appears fresh
   if (duration_minutes) {
     await supabase
       .from("auctions")
       .update({ status: "cancelled" })
       .eq("league", league)
-      .eq("status", "active")
-      .lt("closes_at", new Date().toISOString());
+      .in("status", ["active", "pending", "player_choice"]);
   }
 
-  // 2b. Fetch existing auctions for this league that are still live (not expired/cancelled)
+  // 2b. Fetch existing auctions for this league that are still live (not cancelled/expired)
   const { data: existing } = await supabase
     .from("auctions")
     .select("mc_uuid, status")

@@ -17,8 +17,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     .from("auctions")
     .update({ status: "cancelled" })
     .eq("league", league)
-    .eq("status", "active")
-    .lt("closes_at", new Date().toISOString())
+    .in("status", ["active", "pending", "player_choice"])
     .select("id");
 
   if (error) return res.status(500).json({ error: error.message });
