@@ -126,15 +126,16 @@ function BidView({ auctions, teamId, contracts, onRefresh }: { auctions: Auction
   const existingTotal = contracts.reduce((s, c) => s + c.amount, 0);
   const active = auctions.filter(a => a.status === "active");
 
+  // Declare helpers BEFORE they are used in pendingHolds to avoid TDZ crash
+  const topBid = (a: Auction) => [...(a.auction_bids ?? [])].filter(b => b.is_valid).sort((x, y) => y.effective_value - x.effective_value)[0] ?? null;
+  const myBid = (a: Auction) => [...(a.auction_bids ?? [])].filter(b => b.is_valid && b.team_id === teamId).sort((x, y) => y.effective_value - x.effective_value)[0] ?? null;
+
   // Pending cap holds: team's highest bid per active auction (counts against cap until player signs)
   const pendingHolds = active.reduce((sum, a) => {
     const my = myBid(a);
     return sum + (my ? my.amount : 0);
   }, 0);
   const availableCap = Math.max(0, 25000 - existingTotal - pendingHolds);
-
-  const topBid = (a: Auction) => [...(a.auction_bids ?? [])].filter(b => b.is_valid).sort((x, y) => y.effective_value - x.effective_value)[0] ?? null;
-  const myBid = (a: Auction) => [...(a.auction_bids ?? [])].filter(b => b.is_valid && b.team_id === teamId).sort((x, y) => y.effective_value - x.effective_value)[0] ?? null;
 
   const placeBid = async (aId: string) => {
     const amt = parseInt(amounts[aId] ?? "");
@@ -173,9 +174,9 @@ function BidView({ auctions, teamId, contracts, onRefresh }: { auctions: Auction
         return (
           <div key={a.id} style={{ background: "#0d0d0d", border: `1px solid ${iAmTop ? "#164e63" : "#1a1a1a"}`, borderRadius: 12, padding: 14, marginBottom: 10 }}>
             <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 10 }}>
-              <img src={`https://minotar.net/avatar/${a.players.mc_username}/36`} style={{ width: 36, height: 36, borderRadius: 8, border: "1px solid #222" }} onError={e => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/36"; }} alt="" />
+              <img src={`https://minotar.net/avatar/${a.players?.mc_username ?? "MHF_Steve"}/36`} style={{ width: 36, height: 36, borderRadius: 8, border: "1px solid #222" }} onError={e => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/36"; }} alt="" />
               <div style={{ flex: 1 }}>
-                <div style={{ color: "#fff", fontWeight: 700 }}>{a.players.mc_username}</div>
+                <div style={{ color: "#fff", fontWeight: 700 }}>{a.players?.mc_username ?? a.mc_uuid.slice(0, 8)}</div>
                 <div style={{ color: "#555", fontSize: 12 }}>Phase {a.phase} · Closes in <Countdown closesAt={a.closes_at} /></div>
               </div>
               {iAmTop && <span style={{ color: "#22d3ee", fontSize: 11, background: "#0a1a1f", border: "1px solid #164e63", borderRadius: 6, padding: "2px 8px" }}>Leading</span>}

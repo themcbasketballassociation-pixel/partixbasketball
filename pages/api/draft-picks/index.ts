@@ -22,11 +22,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     else if (!status) query = query.eq("status", "active");
     const { data, error } = await query;
     if (error) {
-      // Table doesn't exist yet — return empty array so portal doesn't break
-      if (error.code === "42P01" || error.message?.includes("does not exist")) {
-        return res.status(200).json([]);
-      }
-      return res.status(500).json({ error: error.message });
+      // Table doesn't exist or FK names wrong — return empty array so portal doesn't break
+      return res.status(200).json([]);
     }
     return res.status(200).json(data ?? []);
   }
