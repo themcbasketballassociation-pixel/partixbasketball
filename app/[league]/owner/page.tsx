@@ -162,8 +162,12 @@ function BidTab({ auctions, teamId, contracts, onRefresh }: {
   const [twoSeason, setTwoSeason] = useState<Record<string, boolean>>({});
   const [msgs, setMsgs] = useState<Record<string, { type: "ok" | "err"; text: string }>>({});
   const [loading, setLoading] = useState<Record<string, boolean>>({});
+  const [search, setSearch] = useState("");
 
   const activeAuctions = auctions.filter((a) => a.status === "active");
+  const filteredAuctions = search.trim()
+    ? activeAuctions.filter((a) => (a.players?.mc_username ?? "").toLowerCase().includes(search.toLowerCase()))
+    : activeAuctions;
   const TOTAL_CAP = 25000;
   const MAX_VIABILITY = 20000;
 
@@ -203,13 +207,23 @@ function BidTab({ auctions, teamId, contracts, onRefresh }: {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <input
+        type="text"
+        placeholder={`Search ${activeAuctions.length} player${activeAuctions.length !== 1 ? "s" : ""}…`}
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        style={{ ...input }}
+      />
       <div style={{ ...innerCard, display: "flex", gap: 20, flexWrap: "wrap" as const }}>
         <div><span style={{ color: "#555", fontSize: 12 }}>Cap remaining: </span><span style={{ color: "#22d3ee", fontWeight: 700 }}>{fmt(TOTAL_CAP - existingTotal)}</span></div>
         <div><span style={{ color: "#555", fontSize: 12 }}>Highest contract: </span><span style={{ color: "#fff", fontWeight: 600 }}>{fmt(maxExisting)}</span></div>
         <div><span style={{ color: "#555", fontSize: 12 }}>Viability max new: </span><span style={{ color: "#f97316", fontWeight: 600 }}>{fmt(MAX_VIABILITY - maxExisting)}</span></div>
       </div>
 
-      {activeAuctions.map((auction) => {
+      {filteredAuctions.length === 0 && search && (
+        <div style={{ color: "#555", textAlign: "center", padding: "20px 0", fontSize: 13 }}>No players matching "{search}"</div>
+      )}
+      {filteredAuctions.map((auction) => {
         const top = topBid(auction);
         const myLatest = myBids(auction).sort((a, b) => b.effective_value - a.effective_value)[0];
         const amt = parseInt(bidAmounts[auction.id] ?? "") || 0;

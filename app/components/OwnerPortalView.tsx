@@ -121,10 +121,14 @@ function BidView({ auctions, teamId, contracts, onRefresh }: { auctions: Auction
   const [twos, setTwos] = useState<Record<string, boolean>>({});
   const [msgs, setMsgs] = useState<Record<string, { ok: boolean; text: string }>>({});
   const [busy, setBusy] = useState<Record<string, boolean>>({});
+  const [search, setSearch] = useState("");
 
   const maxExisting = contracts.reduce((m, c) => Math.max(m, c.amount), 0);
   const existingTotal = contracts.reduce((s, c) => s + c.amount, 0);
   const active = auctions.filter(a => a.status === "active");
+  const filtered = search.trim()
+    ? active.filter(a => (a.players?.mc_username ?? "").toLowerCase().includes(search.toLowerCase()))
+    : active;
 
   // Declare helpers BEFORE they are used in pendingHolds to avoid TDZ crash
   const topBid = (a: Auction) => [...(a.auction_bids ?? [])].filter(b => b.is_valid).sort((x, y) => y.effective_value - x.effective_value)[0] ?? null;
@@ -152,6 +156,15 @@ function BidView({ auctions, teamId, contracts, onRefresh }: { auctions: Auction
 
   return (
     <div>
+      {/* Search bar */}
+      <input
+        type="text"
+        placeholder={`Search ${active.length} player${active.length !== 1 ? "s" : ""}…`}
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        style={{ ...st.input, marginBottom: 12 }}
+      />
+
       <div style={{ ...st.innerCard, marginBottom: 14 }}>
         <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginBottom: 6 }}>
           <span style={{ color: "#555", fontSize: 13 }}>Signed: <strong style={{ color: "#ccc" }}>{fmt(existingTotal)}</strong></span>
@@ -165,7 +178,10 @@ function BidView({ auctions, teamId, contracts, onRefresh }: { auctions: Auction
           </div>
         )}
       </div>
-      {active.map(a => {
+      {filtered.length === 0 && search && (
+        <div style={{ color: "#555", textAlign: "center", padding: "24px 0", fontSize: 13 }}>No players matching "{search}"</div>
+      )}
+      {filtered.map(a => {
         const top = topBid(a); const my = myBid(a);
         const iAmTop = top?.team_id === teamId;
         const amt = parseInt(amounts[a.id] ?? "") || 0;
