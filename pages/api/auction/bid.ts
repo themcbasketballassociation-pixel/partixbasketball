@@ -123,12 +123,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
 
   // ── Phase signing limit (can bid but flagged) ────────────────────────────────
+  // Only count active contracts for the same season AND phase — not old seasons or cuts
   const { data: phaseSignings } = await supabase
     .from("contracts")
     .select("id")
     .eq("team_id", team_id)
     .eq("league", auction.league)
-    .eq("phase", auction.phase);
+    .eq("phase", auction.phase)
+    .eq("season", auction.season)
+    .eq("status", "active");
   const signingsThisPhase = (phaseSignings ?? []).length;
 
   // ── Place bid ────────────────────────────────────────────────────────────────
