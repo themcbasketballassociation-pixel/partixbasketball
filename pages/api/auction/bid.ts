@@ -53,7 +53,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // ── Fetch auction ────────────────────────────────────────────────────────────
   const { data: auction, error: auctionErr } = await supabase
     .from("auctions")
-    .select("*, auction_bids(team_id, amount, effective_value, is_valid)")
+    .select("*, players(mc_uuid, mc_username), auction_bids(team_id, amount, effective_value, is_valid)")
     .eq("id", auction_id)
     .single();
   if (auctionErr || !auction) return res.status(404).json({ error: "Auction not found" });
@@ -154,8 +154,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       : null;
 
   const playerName = (auction as any).players?.mc_username ?? auction.mc_uuid;
-  const teamName = (bid as any).teams?.abbreviation ?? team_id;
-  const leagueDisplay = auction.league === "pba" ? "MBA" : auction.league.toUpperCase();
+  const teamName = (bid as any).teams?.name ?? (bid as any).teams?.abbreviation ?? team_id;
+  const LEAGUE_LABELS: Record<string, string> = { pba: "MBA", pcaa: "MCAA", pbgl: "MBGL" };
+  const leagueDisplay = LEAGUE_LABELS[auction.league] ?? auction.league.toUpperCase();
   const twoSeasonLabel = is_two_season ? " (2-season)" : "";
   await sendWebhook(
     getWebhookUrl(auction.league, "bid"),
