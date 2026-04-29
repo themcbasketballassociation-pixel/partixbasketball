@@ -6,7 +6,7 @@ export const config = {
   api: { bodyParser: false },
 };
 
-const LEAGUE_LABELS: Record<string, string> = { pba: "PBA", pcaa: "PCAA", pbgl: "PBGL" };
+const LEAGUE_LABELS: Record<string, string> = { pba: "MBA", pcaa: "MCAA", pbgl: "MBGL" };
 
 // ── Signature verification ────────────────────────────────────────────────────
 
@@ -126,7 +126,46 @@ async function getPlayerStats(
   const isAll = season === "all";
   const seasonStr = !isAll && type === "playoffs" ? `${season} Playoffs` : season;
 
-  // Manual stats
+  // ── 1. Always fetch game_stats (used for three_pt_made totals and as fallback) ──
+  let gamesQuery = supabase.from("games").select("id").eq("league", league).not("home_score", "is", null);
+  if (!isAll) {
+    gamesQuery = gamesQuery.eq("season", seasonStr);
+  } else if (type === "playoffs") {
+    gamesQuery = (gamesQuery as typeof gamesQuery).ilike("season", "%Playoff%");
+  } else {
+    gamesQuery = (gamesQuery as typeof gamesQuery).not("season", "ilike", "%Playoff%");
+  }
+  const { data: completedGames } = await gamesQuery;
+  const gameIds = (completedGames ?? []).map((g) => g.id as string);
+
+  let gsGp = 0, gsPts = 0, gsReb = 0, gsAst = 0, gsStl = 0, gsBlk = 0;
+  let gsFgm = 0, gsFga = 0, gsTpm = 0;
+  let hasGameStats = false;
+
+  if (gameIds.length > 0) {
+    const { data: gsRows } = await supabase
+      .from("game_stats")
+      .select("points, rebounds_off, rebounds_def, assists, steals, blocks, fg_made, fg_attempted, three_pt_made")
+      .eq("mc_uuid", mc_uuid)
+      .in("game_id", gameIds);
+
+    if (gsRows && gsRows.length > 0) {
+      hasGameStats = true;
+      for (const s of gsRows) {
+        gsGp++;
+        gsPts += (s.points as number) ?? 0;
+        gsReb += (((s.rebounds_off as number) ?? 0) + ((s.rebounds_def as number) ?? 0));
+        gsAst += (s.assists as number) ?? 0;
+        gsStl += (s.steals as number) ?? 0;
+        gsBlk += (s.blocks as number) ?? 0;
+        gsFgm += (s.fg_made as number) ?? 0;
+        gsFga += (s.fg_attempted as number) ?? 0;
+        gsTpm += (s.three_pt_made as number) ?? 0;
+      }
+    }
+  }
+
+  // ── 2. Fetch manual stats (used for averages when present) ───────────────────
   let statsQuery = supabase.from("stats").select("*").eq("mc_uuid", mc_uuid).eq("league", league);
   if (!isAll) {
     statsQuery = statsQuery.eq("season", seasonStr);
@@ -138,7 +177,7 @@ async function getPlayerStats(
   const { data: manualRows } = await statsQuery;
 
   if (manualRows && manualRows.length > 0) {
-    let gp = 0, wPts = 0, wReb = 0, wAst = 0, wStl = 0, wBlk = 0, wFg = 0, fgGames = 0, totalTpm = 0;
+    let gp = 0, wPts = 0, wReb = 0, wAst = 0, wStl = 0, wBlk = 0, wFg = 0, fgGames = 0, manualTpm = 0;
     for (const r of manualRows) {
       const g = (r.gp as number) ?? 0;
       gp += g;
@@ -149,7 +188,7 @@ async function getPlayerStats(
       wBlk += ((r.bpg as number) ?? 0) * g;
       const fgP = (r.fg_pct as number) ?? 0;
       if (fgP > 0) { wFg += fgP * g; fgGames += g; }
-      totalTpm += (r.three_pt_made as number) ?? 0;
+      manualTpm += (r.three_pt_made as number) ?? 0;
     }
     return {
       gp,
@@ -159,53 +198,23 @@ async function getPlayerStats(
       spg: gp > 0 ? r1(wStl / gp) : null,
       bpg: gp > 0 ? r1(wBlk / gp) : null,
       fg_pct: fgGames > 0 ? r1(wFg / fgGames) : null,
-      three_pt_made: totalTpm,
+      // Always prefer game_stats for three_pt_made total — manual entries often miss this field
+      three_pt_made: hasGameStats ? gsTpm : manualTpm,
     };
   }
 
-  // Computed from game_stats
-  let gamesQuery = supabase.from("games").select("id").eq("league", league).not("home_score", "is", null);
-  if (!isAll) {
-    gamesQuery = gamesQuery.eq("season", seasonStr);
-  } else if (type === "playoffs") {
-    gamesQuery = (gamesQuery as typeof gamesQuery).ilike("season", "%Playoff%");
-  } else {
-    gamesQuery = (gamesQuery as typeof gamesQuery).not("season", "ilike", "%Playoff%");
-  }
-  const { data: completedGames } = await gamesQuery;
-  const gameIds = (completedGames ?? []).map((g) => g.id as string);
-  if (!gameIds.length) return null;
-
-  const { data: gsRows } = await supabase
-    .from("game_stats")
-    .select("points, rebounds_off, rebounds_def, assists, steals, blocks, fg_made, fg_attempted, three_pt_made")
-    .eq("mc_uuid", mc_uuid)
-    .in("game_id", gameIds);
-
-  if (!gsRows || gsRows.length === 0) return null;
-
-  let gp = 0, pts = 0, reb = 0, ast = 0, stl = 0, blk = 0, fgm = 0, fga = 0, tpm = 0;
-  for (const s of gsRows) {
-    gp++;
-    pts += (s.points as number) ?? 0;
-    reb += (((s.rebounds_off as number) ?? 0) + ((s.rebounds_def as number) ?? 0));
-    ast += (s.assists as number) ?? 0;
-    stl += (s.steals as number) ?? 0;
-    blk += (s.blocks as number) ?? 0;
-    fgm += (s.fg_made as number) ?? 0;
-    fga += (s.fg_attempted as number) ?? 0;
-    tpm += (s.three_pt_made as number) ?? 0;
-  }
+  // ── 3. Fall back to pure game_stats ──────────────────────────────────────────
+  if (!hasGameStats) return null;
 
   return {
-    gp,
-    ppg: gp > 0 ? r1(pts / gp) : null,
-    rpg: gp > 0 ? r1(reb / gp) : null,
-    apg: gp > 0 ? r1(ast / gp) : null,
-    spg: gp > 0 ? r1(stl / gp) : null,
-    bpg: gp > 0 ? r1(blk / gp) : null,
-    fg_pct: fga > 0 ? r1((fgm / fga) * 100) : null,
-    three_pt_made: tpm,
+    gp: gsGp,
+    ppg: gsGp > 0 ? r1(gsPts / gsGp) : null,
+    rpg: gsGp > 0 ? r1(gsReb / gsGp) : null,
+    apg: gsGp > 0 ? r1(gsAst / gsGp) : null,
+    spg: gsGp > 0 ? r1(gsStl / gsGp) : null,
+    bpg: gsGp > 0 ? r1(gsBlk / gsGp) : null,
+    fg_pct: gsFga > 0 ? r1((gsFgm / gsFga) * 100) : null,
+    three_pt_made: gsTpm,
   };
 }
 
