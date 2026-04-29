@@ -306,6 +306,9 @@ function PlayersTab({ league }: { league: string }) {
     refresh();
   };
 
+  // Search filter
+  const [playerSearch, setPlayerSearch] = useState("");
+
   // Inline Discord ID editing
   const [editingDiscord, setEditingDiscord] = useState<string | null>(null); // mc_uuid being edited
   const [editDiscordVal, setEditDiscordVal] = useState("");
@@ -461,7 +464,9 @@ function PlayersTab({ league }: { league: string }) {
 
       <div className={card}>
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Players ({players.length})</h3>
+          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest">
+            Players ({players.length}{playerSearch ? ` — ${players.filter(p => p.mc_username.toLowerCase().includes(playerSearch.toLowerCase()) || (p.discord_id ?? "").includes(playerSearch)).length} shown` : ""})
+          </h3>
           <div className="flex items-center gap-2">
             <button className={btnSecondary} onClick={refreshUsernames} disabled={refreshingNames} title="Re-fetch MC usernames for all players from Mojang">
               {refreshingNames ? "Refreshing..." : "Refresh Usernames"}
@@ -471,6 +476,15 @@ function PlayersTab({ league }: { league: string }) {
             )}
           </div>
         </div>
+
+        {/* Search bar */}
+        <input
+          className={`${input} w-full mb-3`}
+          placeholder="Search by name or Discord ID…"
+          value={playerSearch}
+          onChange={(e) => setPlayerSearch(e.target.value)}
+        />
+
         {refreshResult && (
           <p className={`text-xs mb-3 ${refreshResult.failed === -1 ? "text-red-400" : "text-slate-400"}`}>
             {refreshResult.failed === -1
@@ -481,42 +495,54 @@ function PlayersTab({ league }: { league: string }) {
         )}
         {players.length === 0 ? (
           <p className="text-slate-600 text-sm">No players yet.</p>
-        ) : (
-          <div className="space-y-2">
-            {players.map((p) => (
-              <div key={p.mc_uuid} className="rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 hover:border-slate-700 transition">
-                <div className="flex items-center justify-between gap-4">
-                  <Avatar uuid={p.mc_uuid} username={p.mc_username} />
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <button className={btnSecondary} style={{ fontSize: 12, padding: "2px 10px" }} onClick={() => startEditDiscord(p)}>
-                      {p.discord_id ? "Edit Discord" : "Add Discord"}
-                    </button>
-                    <button className={btnDanger} onClick={() => deletePlayer(p.mc_uuid)}>Delete</button>
+        ) : (() => {
+          const filtered = players.filter(p =>
+            p.mc_username.toLowerCase().includes(playerSearch.toLowerCase()) ||
+            (p.discord_id ?? "").includes(playerSearch)
+          );
+          return filtered.length === 0 ? (
+            <p className="text-slate-500 text-sm">No players match &ldquo;{playerSearch}&rdquo;.</p>
+          ) : (
+            <div className="space-y-2">
+              {filtered.map((p) => (
+                <div key={p.mc_uuid} className="rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 hover:border-slate-700 transition">
+                  <div className="flex items-center justify-between gap-4">
+                    <Avatar uuid={p.mc_uuid} username={p.mc_username} />
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <button className={btnSecondary} style={{ fontSize: 12, padding: "2px 10px" }} onClick={() => startEditDiscord(p)}>
+                        {p.discord_id ? "Edit Discord" : "Add Discord"}
+                      </button>
+                      <button className={btnDanger} onClick={() => deletePlayer(p.mc_uuid)}>Delete</button>
+                    </div>
                   </div>
+                  {/* Discord ID display / inline edit */}
+                  {editingDiscord === p.mc_uuid ? (
+                    <div className="flex items-center gap-2 mt-2">
+                      <input
+                        className={`${input} flex-1 text-xs`}
+                        placeholder="Discord User ID (e.g. 123456789012345678)"
+                        value={editDiscordVal}
+                        onChange={(e) => setEditDiscordVal(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") saveDiscord(p); if (e.key === "Escape") setEditingDiscord(null); }}
+                        autoFocus
+                      />
+                      <button className={btnPrimary} style={{ fontSize: 12, padding: "2px 12px" }} onClick={() => saveDiscord(p)} disabled={savingDiscord}>
+                        {savingDiscord ? "Saving…" : "Save"}
+                      </button>
+                      <button className={btnSecondary} style={{ fontSize: 12, padding: "2px 10px" }} onClick={() => setEditingDiscord(null)}>Cancel</button>
+                    </div>
+                  ) : p.discord_id ? (
+                    <div className="mt-1 text-xs text-slate-500 font-mono pl-1">
+                      <span className="text-emerald-500">✓</span> Discord linked: {p.discord_id}
+                    </div>
+                  ) : (
+                    <div className="mt-1 text-xs text-slate-600 pl-1">No Discord linked</div>
+                  )}
                 </div>
-                {/* Discord ID display / inline edit */}
-                {editingDiscord === p.mc_uuid ? (
-                  <div className="flex items-center gap-2 mt-2">
-                    <input
-                      className={`${input} flex-1 text-xs`}
-                      placeholder="Discord User ID (e.g. 123456789012345678)"
-                      value={editDiscordVal}
-                      onChange={(e) => setEditDiscordVal(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter") saveDiscord(p); if (e.key === "Escape") setEditingDiscord(null); }}
-                      autoFocus
-                    />
-                    <button className={btnPrimary} style={{ fontSize: 12, padding: "2px 12px" }} onClick={() => saveDiscord(p)} disabled={savingDiscord}>
-                      {savingDiscord ? "Saving…" : "Save"}
-                    </button>
-                    <button className={btnSecondary} style={{ fontSize: 12, padding: "2px 10px" }} onClick={() => setEditingDiscord(null)}>Cancel</button>
-                  </div>
-                ) : p.discord_id ? (
-                  <div className="mt-1 text-xs text-slate-500 font-mono pl-1">Discord: {p.discord_id}</div>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
