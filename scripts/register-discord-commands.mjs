@@ -70,6 +70,10 @@ const commands = [
       },
     ],
   },
+  {
+    name: "site",
+    description: "Get the link to the Partix Basketball website",
+  },
 ];
 
 const url = GUILD_ID

@@ -306,6 +306,28 @@ function PlayersTab({ league }: { league: string }) {
     refresh();
   };
 
+  // Inline Discord ID editing
+  const [editingDiscord, setEditingDiscord] = useState<string | null>(null); // mc_uuid being edited
+  const [editDiscordVal, setEditDiscordVal] = useState("");
+  const [savingDiscord, setSavingDiscord] = useState(false);
+
+  const startEditDiscord = (p: Player) => {
+    setEditingDiscord(p.mc_uuid);
+    setEditDiscordVal(p.discord_id ?? "");
+  };
+
+  const saveDiscord = async (p: Player) => {
+    setSavingDiscord(true);
+    const r = await fetch("/api/players", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mc_uuid: p.mc_uuid, mc_username_override: p.mc_username, discord_id: editDiscordVal.trim() || null }),
+    });
+    setSavingDiscord(false);
+    if (r.ok) { setEditingDiscord(null); refresh(); }
+    else { const d = await r.json(); setErr(d.error ?? "Failed to save Discord ID"); }
+  };
+
   const [refreshingNames, setRefreshingNames] = useState(false);
   const [refreshResult, setRefreshResult] = useState<{ updated: number; failed: number; total: number } | null>(null);
 
@@ -462,11 +484,35 @@ function PlayersTab({ league }: { league: string }) {
         ) : (
           <div className="space-y-2">
             {players.map((p) => (
-              <div key={p.mc_uuid} className="flex items-center justify-between gap-4 rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 hover:border-slate-700 transition">
-                <Avatar uuid={p.mc_uuid} username={p.mc_username} />
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <button className={btnDanger} onClick={() => deletePlayer(p.mc_uuid)}>Delete</button>
+              <div key={p.mc_uuid} className="rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 hover:border-slate-700 transition">
+                <div className="flex items-center justify-between gap-4">
+                  <Avatar uuid={p.mc_uuid} username={p.mc_username} />
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button className={btnSecondary} style={{ fontSize: 12, padding: "2px 10px" }} onClick={() => startEditDiscord(p)}>
+                      {p.discord_id ? "Edit Discord" : "Add Discord"}
+                    </button>
+                    <button className={btnDanger} onClick={() => deletePlayer(p.mc_uuid)}>Delete</button>
+                  </div>
                 </div>
+                {/* Discord ID display / inline edit */}
+                {editingDiscord === p.mc_uuid ? (
+                  <div className="flex items-center gap-2 mt-2">
+                    <input
+                      className={`${input} flex-1 text-xs`}
+                      placeholder="Discord User ID (e.g. 123456789012345678)"
+                      value={editDiscordVal}
+                      onChange={(e) => setEditDiscordVal(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") saveDiscord(p); if (e.key === "Escape") setEditingDiscord(null); }}
+                      autoFocus
+                    />
+                    <button className={btnPrimary} style={{ fontSize: 12, padding: "2px 12px" }} onClick={() => saveDiscord(p)} disabled={savingDiscord}>
+                      {savingDiscord ? "Saving…" : "Save"}
+                    </button>
+                    <button className={btnSecondary} style={{ fontSize: 12, padding: "2px 10px" }} onClick={() => setEditingDiscord(null)}>Cancel</button>
+                  </div>
+                ) : p.discord_id ? (
+                  <div className="mt-1 text-xs text-slate-500 font-mono pl-1">Discord: {p.discord_id}</div>
+                ) : null}
               </div>
             ))}
           </div>

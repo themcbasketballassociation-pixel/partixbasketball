@@ -319,8 +319,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({ type: 1 });
   }
 
-  // ── APPLICATION_COMMAND — /stats ─────────────────────────────────────────
+  // ── APPLICATION_COMMAND ───────────────────────────────────────────────────
   if (body.type === 2) {
+    // /site — return website link
+    if (body.data?.name === "site") {
+      return res.status(200).json({
+        type: 4,
+        data: { content: "🏀 **Partix Basketball** — https://partixbasketball.vercel.app/" },
+      });
+    }
+
     if (body.data?.name !== "stats") {
       return res.status(200).json({ type: 4, data: { content: "Unknown command.", flags: 64 } });
     }
