@@ -167,13 +167,13 @@ function BidTab({ auctions, teamId, contracts, onRefresh }: {
   const TOTAL_CAP = 25000;
   const MAX_VIABILITY = 20000;
 
-  const existingTotal = contracts.reduce((s, c) => s + c.amount, 0);
-  const maxExisting = contracts.reduce((m, c) => Math.max(m, c.amount), 0);
+  const existingTotal = (contracts ?? []).reduce((s, c) => s + c.amount, 0);
+  const maxExisting = (contracts ?? []).reduce((m, c) => Math.max(m, c.amount), 0);
 
   const myBids = (auction: Auction) =>
-    auction.auction_bids.filter((b) => b.is_valid && b.team_id === teamId);
+    (auction.auction_bids ?? []).filter((b) => b.is_valid && b.team_id === teamId);
   const topBid = (auction: Auction) =>
-    auction.auction_bids
+    (auction.auction_bids ?? [])
       .filter((b) => b.is_valid)
       .reduce((best: Bid | null, b) => (!best || b.effective_value > best.effective_value ? b : best), null);
 
