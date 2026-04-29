@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { supabase } from "../../../lib/supabase";
 import { getSessionDiscordId, isAdminId } from "../../../lib/ownerAuth";
-import { sendWebhook, getWebhookUrl } from "../../../lib/discordWebhook";
+import { sendWebhookEmbed, getWebhookUrl } from "../../../lib/discordWebhook";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../auth/[...nextauth]";
 
@@ -140,7 +140,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { data: bid, error: bidErr } = await supabase
     .from("auction_bids")
     .insert([{ auction_id, team_id, amount, is_two_season, effective_value: effectiveValue, is_valid: true, performed_by_discord_id: discordId, performed_by_name: performerName }])
-    .select("*, teams(id, name, abbreviation, color2)")
+    .select("*, teams(id, name, abbreviation, color2, logo_url)")
     .single();
   if (bidErr) return res.status(500).json({ error: bidErr.message });
 
@@ -153,15 +153,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       ? `Your team has already signed ${signingsThisPhase} players this phase. You can bid but cannot win until next phase.`
       : null;
 
-  const playerName = (auction as any).players?.mc_username ?? auction.mc_uuid;
-  const teamName = (bid as any).teams?.name ?? (bid as any).teams?.abbreviation ?? team_id;
   const LEAGUE_LABELS: Record<string, string> = { pba: "MBA", pcaa: "MCAA", pbgl: "MBGL" };
+  const LEAGUE_COLORS: Record<string, number>  = { pba: 0xC8102E, pcaa: 0x003087, pbgl: 0xBB3430 };
+  const LEAGUE_LOGOS:  Record<string, string>  = { pba: "/logos/mba.webp", pcaa: "/logos/mcaa.webp", pbgl: "/logos/MBGL.png" };
+  const BASE_URL = process.env.NEXTAUTH_URL ?? "https://partixbasketball.com";
+
+  const playerName = (auction as any).players?.mc_username ?? auction.mc_uuid;
+  const playerUuid = (auction as any).players?.mc_uuid ?? auction.mc_uuid;
+  const bidTeam = (bid as any).teams;
   const leagueDisplay = LEAGUE_LABELS[auction.league] ?? auction.league.toUpperCase();
-  const twoSeasonLabel = is_two_season ? " (2-season)" : "";
-  await sendWebhook(
-    getWebhookUrl(auction.league, "bid"),
-    `🏷️ **[${leagueDisplay}] New Bid**\n**Player:** ${playerName}\n**Team:** ${teamName}\n**Bid:** $${amount.toLocaleString()} → eff. $${effectiveValue.toLocaleString()}${twoSeasonLabel}`
-  );
+  const twoSeasonLabel = is_two_season ? " (2-season 🔁)" : "";
+
+  const embed: Record<string, unknown> = {
+    color: LEAGUE_COLORS[auction.league] ?? 0x5865F2,
+    author: bidTeam?.logo_url
+      ? { name: bidTeam.name, icon_url: bidTeam.logo_url }
+      : { name: bidTeam?.name ?? "Unknown Team" },
+    title: "🏷️ New Bid",
+    description: `**${playerName}** — bid by **${bidTeam?.name ?? "Unknown"}**\n**Amount:** $${amount.toLocaleString()} → eff. $${effectiveValue.toLocaleString()}${twoSeasonLabel}`,
+    thumbnail: { url: `https://mc-heads.net/avatar/${playerUuid}/128` },
+    footer: { text: leagueDisplay, icon_url: `${BASE_URL}${LEAGUE_LOGOS[auction.league] ?? ""}` },
+    timestamp: new Date().toISOString(),
+  };
+
+  await sendWebhookEmbed(getWebhookUrl(auction.league, "bid"), embed);
 
   return res.status(200).json({ bid, closes_at: newClosesAt, warning });
 }
