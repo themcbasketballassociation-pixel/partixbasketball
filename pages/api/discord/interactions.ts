@@ -10,12 +10,12 @@ const LEAGUE_LABELS: Record<string, string> = { pba: "PBA", pcaa: "PCAA", pbgl: 
 
 // ── Signature verification ────────────────────────────────────────────────────
 
-function hexToUint8Array(hex: string): Uint8Array {
+function hexToUint8Array(hex: string): ArrayBuffer {
   const bytes = new Uint8Array(hex.length / 2);
   for (let i = 0; i < hex.length; i += 2) {
     bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16);
   }
-  return bytes;
+  return bytes.buffer as ArrayBuffer;
 }
 
 async function verifyDiscordRequest(req: NextApiRequest, rawBody: string): Promise<boolean> {
