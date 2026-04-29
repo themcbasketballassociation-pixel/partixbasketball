@@ -309,26 +309,59 @@ function PlayersTab({ league }: { league: string }) {
   // Search filter
   const [playerSearch, setPlayerSearch] = useState("");
 
-  // Inline Discord ID editing
-  const [editingDiscord, setEditingDiscord] = useState<string | null>(null); // mc_uuid being edited
-  const [editDiscordVal, setEditDiscordVal] = useState("");
+  // Inline Discord username search + ID save
+  const [editingDiscord, setEditingDiscord] = useState<string | null>(null);
+  const [discordQuery, setDiscordQuery] = useState("");
+  const [discordResults, setDiscordResults] = useState<{ id: string; username: string; display_name: string; avatar: string }[]>([]);
+  const [discordSearching, setDiscordSearching] = useState(false);
+  const [selectedDiscord, setSelectedDiscord] = useState<{ id: string; display_name: string } | null>(null);
   const [savingDiscord, setSavingDiscord] = useState(false);
+  const discordSearchTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const startEditDiscord = (p: Player) => {
     setEditingDiscord(p.mc_uuid);
-    setEditDiscordVal(p.discord_id ?? "");
+    setDiscordQuery("");
+    setDiscordResults([]);
+    setSelectedDiscord(p.discord_id ? { id: p.discord_id, display_name: p.discord_id } : null);
+  };
+
+  const handleDiscordSearch = (val: string) => {
+    setDiscordQuery(val);
+    setSelectedDiscord(null);
+    if (discordSearchTimer.current) clearTimeout(discordSearchTimer.current);
+    if (!val.trim()) { setDiscordResults([]); return; }
+    setDiscordSearching(true);
+    discordSearchTimer.current = setTimeout(async () => {
+      try {
+        const r = await fetch(`/api/discord/lookup-user?username=${encodeURIComponent(val.trim())}`);
+        const data = await r.json();
+        setDiscordResults(Array.isArray(data) ? data : []);
+      } catch { setDiscordResults([]); }
+      setDiscordSearching(false);
+    }, 400);
   };
 
   const saveDiscord = async (p: Player) => {
+    if (!selectedDiscord) return;
     setSavingDiscord(true);
     const r = await fetch("/api/players", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mc_uuid: p.mc_uuid, mc_username_override: p.mc_username, discord_id: editDiscordVal.trim() || null }),
+      body: JSON.stringify({ mc_uuid: p.mc_uuid, mc_username_override: p.mc_username, discord_id: selectedDiscord.id }),
     });
     setSavingDiscord(false);
-    if (r.ok) { setEditingDiscord(null); refresh(); }
-    else { const d = await r.json(); setErr(d.error ?? "Failed to save Discord ID"); }
+    if (r.ok) { setEditingDiscord(null); setDiscordResults([]); setDiscordQuery(""); setSelectedDiscord(null); refresh(); }
+    else { const d = await r.json(); setErr(d.error ?? "Failed to save Discord"); }
+  };
+
+  const clearDiscord = async (p: Player) => {
+    if (!confirm(`Remove Discord link from ${p.mc_username}?`)) return;
+    const r = await fetch("/api/players", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mc_uuid: p.mc_uuid, mc_username_override: p.mc_username, discord_id: null }),
+    });
+    if (r.ok) refresh();
   };
 
   const [refreshingNames, setRefreshingNames] = useState(false);
@@ -515,25 +548,57 @@ function PlayersTab({ league }: { league: string }) {
                       <button className={btnDanger} onClick={() => deletePlayer(p.mc_uuid)}>Delete</button>
                     </div>
                   </div>
-                  {/* Discord ID display / inline edit */}
+                  {/* Discord link display / inline search */}
                   {editingDiscord === p.mc_uuid ? (
-                    <div className="flex items-center gap-2 mt-2">
-                      <input
-                        className={`${input} flex-1 text-xs`}
-                        placeholder="Discord User ID (e.g. 123456789012345678)"
-                        value={editDiscordVal}
-                        onChange={(e) => setEditDiscordVal(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter") saveDiscord(p); if (e.key === "Escape") setEditingDiscord(null); }}
-                        autoFocus
-                      />
-                      <button className={btnPrimary} style={{ fontSize: 12, padding: "2px 12px" }} onClick={() => saveDiscord(p)} disabled={savingDiscord}>
-                        {savingDiscord ? "Saving…" : "Save"}
-                      </button>
-                      <button className={btnSecondary} style={{ fontSize: 12, padding: "2px 10px" }} onClick={() => setEditingDiscord(null)}>Cancel</button>
+                    <div className="mt-2 space-y-1.5">
+                      <div className="relative">
+                        <input
+                          className={`${input} w-full text-sm`}
+                          placeholder="Type Discord username…"
+                          value={discordQuery}
+                          onChange={(e) => handleDiscordSearch(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Escape") { setEditingDiscord(null); setDiscordResults([]); } }}
+                          autoFocus
+                        />
+                        {discordSearching && (
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs animate-pulse">searching…</span>
+                        )}
+                      </div>
+                      {/* Search results dropdown */}
+                      {discordResults.length > 0 && !selectedDiscord && (
+                        <div className="rounded-lg border border-slate-700 bg-slate-950 divide-y divide-slate-800 max-h-48 overflow-y-auto">
+                          {discordResults.map((u) => (
+                            <button
+                              key={u.id}
+                              className="w-full flex items-center gap-3 px-3 py-2 hover:bg-slate-800 transition text-left"
+                              onClick={() => { setSelectedDiscord({ id: u.id, display_name: u.display_name }); setDiscordQuery(u.display_name); setDiscordResults([]); }}
+                            >
+                              <img src={u.avatar} alt="" className="w-6 h-6 rounded-full flex-shrink-0" />
+                              <span className="text-white text-sm font-medium">{u.display_name}</span>
+                              <span className="text-slate-500 text-xs">@{u.username}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {/* Selected user confirmation */}
+                      {selectedDiscord && (
+                        <div className="flex items-center gap-2 rounded-lg bg-slate-800 border border-slate-600 px-3 py-2">
+                          <span className="text-emerald-400 text-sm flex-1">✓ {selectedDiscord.display_name}</span>
+                          <span className="text-slate-500 text-xs font-mono">{selectedDiscord.id}</span>
+                        </div>
+                      )}
+                      <div className="flex gap-2">
+                        <button className={btnPrimary} style={{ fontSize: 12, padding: "3px 14px" }} onClick={() => saveDiscord(p)} disabled={savingDiscord || !selectedDiscord}>
+                          {savingDiscord ? "Saving…" : "Save"}
+                        </button>
+                        <button className={btnSecondary} style={{ fontSize: 12, padding: "3px 10px" }} onClick={() => { setEditingDiscord(null); setDiscordResults([]); setDiscordQuery(""); setSelectedDiscord(null); }}>Cancel</button>
+                      </div>
                     </div>
                   ) : p.discord_id ? (
-                    <div className="mt-1 text-xs text-slate-500 font-mono pl-1">
-                      <span className="text-emerald-500">✓</span> Discord linked: {p.discord_id}
+                    <div className="mt-1 flex items-center gap-2 pl-1">
+                      <span className="text-xs text-emerald-500">✓ Discord linked</span>
+                      <span className="text-xs text-slate-500 font-mono">{p.discord_id}</span>
+                      <button className="text-xs text-red-500 hover:text-red-400 ml-1" onClick={() => clearDiscord(p)}>remove</button>
                     </div>
                   ) : (
                     <div className="mt-1 text-xs text-slate-600 pl-1">No Discord linked</div>
