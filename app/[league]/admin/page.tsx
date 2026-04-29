@@ -4291,6 +4291,18 @@ function AuctionAdminTab({ league }: { league: string }) {
     }
   };
 
+  const cancelExpiredAuctions = async () => {
+    if (!confirm("Cancel all expired test auctions so you can re-launch fresh?")) return;
+    const r = await fetch("/api/auction/cancel-expired", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ league }),
+    });
+    const d = await r.json().catch(() => ({})) as { cancelled?: number; error?: string };
+    if (r.ok) { setLaunchMsg(`✓ Cancelled ${d.cancelled ?? 0} expired auction(s)`); loadAuctions(); }
+    else setLaunchMsg(`Error: ${d.error ?? "failed"}`);
+  };
+
   // ── Auctions tab state ────────────────────────────────────────────────────────
   const [auctions, setAuctions] = useState<AuctionRow[]>([]);
   const [filterStatus, setFilterStatus] = useState("active");
@@ -4535,6 +4547,15 @@ function AuctionAdminTab({ league }: { league: string }) {
               >
                 {launching ? "Launching…" : launchTestMode ? `🧪 Test Launch (${launchTestMinutes}m)` : `Launch ${priceSeason} (${pricedCount})`}
               </button>
+              {launchTestMode && (
+                <button
+                  onClick={cancelExpiredAuctions}
+                  className="rounded-lg px-3 py-2 text-xs font-bold transition border bg-red-950 hover:bg-red-900 text-red-300 border-red-800"
+                  title="Cancel all expired test auctions so you can re-launch"
+                >
+                  🗑 Clear Expired
+                </button>
+              )}
             </div>
           </div>
 
