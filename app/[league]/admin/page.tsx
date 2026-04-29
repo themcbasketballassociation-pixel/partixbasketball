@@ -4261,19 +4261,30 @@ function AuctionAdminTab({ league }: { league: string }) {
     );
   };
 
+  const [launchTestMode, setLaunchTestMode] = useState(false);
+  const [launchTestMinutes, setLaunchTestMinutes] = useState("5");
+
   const launchSeasonAuction = async () => {
-    if (!confirm(`Launch ${priceSeason} auction for all priced players?`)) return;
+    const label = launchTestMode
+      ? `TEST launch ${priceSeason} auction (closes in ${launchTestMinutes} min) for all priced players?`
+      : `Launch ${priceSeason} auction for all priced players?`;
+    if (!confirm(label)) return;
     setLaunching(true);
     setLaunchMsg("");
     const r = await fetch("/api/auction/launch-season", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ league, season: priceSeason, phase: parseInt(launchPhase) || 1 }),
+      body: JSON.stringify({
+        league,
+        season: priceSeason,
+        phase: parseInt(launchPhase) || 1,
+        ...(launchTestMode && { duration_minutes: parseInt(launchTestMinutes) || 5 }),
+      }),
     });
     const d = await r.json().catch(() => ({})) as { created?: number; skipped?: number; error?: string };
     setLaunching(false);
     if (r.ok) {
-      setLaunchMsg(`✓ Launched ${d.created} auction${d.created !== 1 ? "s" : ""}${(d.skipped ?? 0) > 0 ? ` · ${d.skipped} skipped (already exist)` : ""}`);
+      setLaunchMsg(`✓ Launched ${d.created} auction${d.created !== 1 ? "s" : ""}${launchTestMode ? ` (test — closes in ${launchTestMinutes}m)` : ""}${(d.skipped ?? 0) > 0 ? ` · ${d.skipped} skipped` : ""}`);
       loadAuctions();
     } else {
       setLaunchMsg(`Error: ${d.error ?? "launch failed"}`);
@@ -4481,7 +4492,30 @@ function AuctionAdminTab({ league }: { league: string }) {
               </button>
             )}
 
-            <div className="ml-auto flex items-center gap-2">
+            <div className="ml-auto flex items-center gap-2 flex-wrap">
+              {/* Test mode toggle */}
+              <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                <div
+                  className={`relative w-8 h-4 rounded-full transition-colors ${launchTestMode ? "bg-yellow-500" : "bg-slate-700"}`}
+                  onClick={() => setLaunchTestMode(v => !v)}
+                >
+                  <div className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${launchTestMode ? "translate-x-4" : ""}`} />
+                </div>
+                <span className={`text-xs font-semibold ${launchTestMode ? "text-yellow-400" : "text-slate-500"}`}>🧪 Test</span>
+              </label>
+              {launchTestMode && (
+                <div className="flex items-center gap-1">
+                  <input
+                    className={input}
+                    type="number"
+                    min="1"
+                    value={launchTestMinutes}
+                    onChange={(e) => setLaunchTestMinutes(e.target.value)}
+                    style={{ width: 55 }}
+                  />
+                  <span className="text-slate-500 text-xs">min</span>
+                </div>
+              )}
               <input
                 className={input}
                 type="number"
@@ -4493,9 +4527,13 @@ function AuctionAdminTab({ league }: { league: string }) {
               <button
                 onClick={launchSeasonAuction}
                 disabled={launching || pricedCount === 0}
-                className="rounded-lg px-4 py-2 text-sm font-bold transition bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                className={`rounded-lg px-4 py-2 text-sm font-bold transition border disabled:opacity-40 disabled:cursor-not-allowed ${
+                  launchTestMode
+                    ? "bg-yellow-800 hover:bg-yellow-700 text-yellow-100 border-yellow-600"
+                    : "bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border-cyan-700"
+                }`}
               >
-                {launching ? "Launching…" : `Launch ${priceSeason} (${pricedCount})`}
+                {launching ? "Launching…" : launchTestMode ? `🧪 Test Launch (${launchTestMinutes}m)` : `Launch ${priceSeason} (${pricedCount})`}
               </button>
             </div>
           </div>
