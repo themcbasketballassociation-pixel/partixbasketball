@@ -68,12 +68,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     null
   );
 
-  // Must beat the current top effective value (or meet min_price if no bids yet)
-  const minEffective = topBid ? topBid.effective_value + 1 : auction.min_price;
+  // Bid must be within $500 of the current top effective value (or meet min_price if no bids yet)
+  const minEffective = topBid
+    ? Math.max(auction.min_price, topBid.effective_value - 500)
+    : auction.min_price;
   if (effectiveValue < minEffective) {
     const msg = topBid
-      ? `Must beat current top effective value of ${topBid.effective_value}`
-      : `Opening bid must be at least ${auction.min_price}`;
+      ? `Bid must be within $500 of the current top (${topBid.effective_value.toLocaleString()}). Minimum: ${minEffective.toLocaleString()}`
+      : `Opening bid must be at least ${auction.min_price.toLocaleString()}`;
     return res.status(400).json({ error: msg });
   }
 
