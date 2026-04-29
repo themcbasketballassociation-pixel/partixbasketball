@@ -23,33 +23,41 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!prices || prices.length === 0)
     return res.status(400).json({ error: "No prices set for this season. Set prices in the Prices tab first." });
 
-  // 2a. In test mode: cancel ALL pending/active/player_choice auctions so every priced player re-appears fresh
-  if (duration_minutes) {
+  const isTest = !!duration_minutes;
+
+  // 2a. In test mode: cancel ALL previous auctions for this league so every priced player re-appears fresh
+  if (isTest) {
     await supabase
       .from("auctions")
       .update({ status: "cancelled" })
       .eq("league", league)
-      .in("status", ["active", "pending", "player_choice"]);
+      .in("status", ["active", "pending", "player_choice", "signed"]);
   }
 
-  // 2b. Fetch existing auctions for this league that are still live (not cancelled/expired)
-  const { data: existing } = await supabase
-    .from("auctions")
-    .select("mc_uuid, status")
-    .eq("league", league)
-    .in("status", ["active", "pending", "player_choice", "signed"]);
-  const existingSet = new Set((existing ?? []).map((a) => a.mc_uuid));
+  // 2b. In real mode: skip players already in a live auction
+  let existingSet = new Set<string>();
+  if (!isTest) {
+    const { data: existing } = await supabase
+      .from("auctions")
+      .select("mc_uuid")
+      .eq("league", league)
+      .in("status", ["active", "pending", "player_choice", "signed"]);
+    existingSet = new Set((existing ?? []).map((a) => a.mc_uuid));
+  }
 
-  // 3. Fetch players who already have an active contract (manually added to a team before launch)
-  const { data: existingContracts } = await supabase
-    .from("contracts")
-    .select("mc_uuid")
-    .eq("league", league)
-    .in("status", ["active", "pending_approval"]);
-  const contractedSet = new Set((existingContracts ?? []).map((c) => c.mc_uuid));
+  // 3. In real mode: skip players who already have an active contract
+  let contractedSet = new Set<string>();
+  if (!isTest) {
+    const { data: existingContracts } = await supabase
+      .from("contracts")
+      .select("mc_uuid")
+      .eq("league", league)
+      .in("status", ["active", "pending_approval"]);
+    contractedSet = new Set((existingContracts ?? []).map((c) => c.mc_uuid));
+  }
 
   // 4. Create active auctions for all priced players not already in auction or contracted
-  const durationMs = duration_minutes ? Number(duration_minutes) * 60 * 1000 : 12 * 60 * 60 * 1000;
+  const durationMs = isTest ? Number(duration_minutes) * 60 * 1000 : 12 * 60 * 60 * 1000;
   const closesAt = new Date(Date.now() + durationMs).toISOString();
   let created = 0;
   let skipped = 0;
