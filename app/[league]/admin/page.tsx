@@ -4174,7 +4174,7 @@ function AuctionAdminTab({ league }: { league: string }) {
   }, [league, statsFilterSeason]);
 
   // ── Prices tab state ──────────────────────────────────────────────────────────
-  const [priceSeason, setPriceSeason] = useState(SEASONS[SEASONS.length - 1]);
+  const [priceSeason, setPriceSeason] = useState(REGULAR_SEASONS[REGULAR_SEASONS.length - 1]);
   const [playerPrices, setPlayerPrices] = useState<Record<string, number>>({});
   const [editingPriceMap, setEditingPriceMap] = useState<Record<string, string>>({});
   const [savingPriceUuid, setSavingPriceUuid] = useState<string | null>(null);
@@ -4472,7 +4472,7 @@ function AuctionAdminTab({ league }: { league: string }) {
               value={priceSeason}
               onChange={(e) => { setPriceSeason(e.target.value); setEditingPriceMap({}); setPriceMsg(""); setLaunchMsg(""); }}
             >
-              {SEASONS.map((s) => <option key={s} value={s}>{s}</option>)}
+              {REGULAR_SEASONS.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
 
             {/* Stats eligibility filter */}
