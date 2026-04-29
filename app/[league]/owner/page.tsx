@@ -222,13 +222,13 @@ function BidTab({ auctions, teamId, contracts, onRefresh }: {
           <div key={auction.id} style={{ background: "#0d0d0d", border: `1px solid ${iAmTop ? "#164e63" : "#1a1a1a"}`, borderRadius: 12, padding: "16px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
               <img
-                src={`https://minotar.net/avatar/${auction.players.mc_username}/40`}
+                src={`https://minotar.net/avatar/${auction.players?.mc_username ?? "MHF_Steve"}/40`}
                 style={{ width: 40, height: 40, borderRadius: 8, border: "1px solid #222" }}
                 onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/40"; }}
                 alt=""
               />
               <div style={{ flex: 1 }}>
-                <div style={{ color: "#fff", fontWeight: 700, fontSize: 16 }}>{auction.players.mc_username}</div>
+                <div style={{ color: "#fff", fontWeight: 700, fontSize: 16 }}>{auction.players?.mc_username ?? auction.mc_uuid.slice(0, 8)}</div>
                 <div style={{ color: "#555", fontSize: 12 }}>Phase {auction.phase}{auction.season ? ` · S${auction.season}` : ""} · Closes in <span style={{ color: "#f97316" }}><Countdown closesAt={auction.closes_at} /></span></div>
               </div>
               {iAmTop && <span style={{ color: "#22d3ee", fontSize: 12, background: "#0a1a1f", border: "1px solid #164e63", borderRadius: 6, padding: "2px 8px" }}>You're leading</span>}

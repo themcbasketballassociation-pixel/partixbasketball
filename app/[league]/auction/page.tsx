@@ -71,13 +71,13 @@ function AuctionCard({ auction }: { auction: Auction }) {
       {/* Header */}
       <div style={{ padding: "16px 20px", borderBottom: "1px solid #1a1a1a", display: "flex", alignItems: "center", gap: 12 }}>
         <img
-          src={`https://minotar.net/avatar/${auction.players.mc_username}/48`}
-          alt={auction.players.mc_username}
+          src={`https://minotar.net/avatar/${auction.players?.mc_username ?? "MHF_Steve"}/48`}
+          alt={auction.players?.mc_username ?? "Unknown"}
           style={{ width: 48, height: 48, borderRadius: 8, border: "2px solid #222", flexShrink: 0 }}
           onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/48"; }}
         />
         <div style={{ flex: 1 }}>
-          <div style={{ color: "#fff", fontWeight: 700, fontSize: 18 }}>{auction.players.mc_username}</div>
+          <div style={{ color: "#fff", fontWeight: 700, fontSize: 18 }}>{auction.players?.mc_username ?? "Unknown Player"}</div>
           <div style={{ display: "flex", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
             {auction.season && <span style={{ background: "#1a1a1a", border: "1px solid #2a2a2a", color: "#888", fontSize: 11, padding: "1px 8px", borderRadius: 6 }}>Season {auction.season}</span>}
             <span style={{ background: "#1a1a1a", border: "1px solid #2a2a2a", color: "#888", fontSize: 11, padding: "1px 8px", borderRadius: 6 }}>Phase {auction.phase}</span>
