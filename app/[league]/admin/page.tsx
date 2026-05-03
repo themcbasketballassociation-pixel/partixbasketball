@@ -5729,6 +5729,98 @@ function PressPortalView({ league, isAdmin, isCrewMember, onBack }: { league: st
   );
 }
 
+// ─── Searchable Player Select ─────────────────────────────────────────────────
+
+type _BPPlayerRow = { mc_uuid: string; mc_username: string };
+
+function SearchablePlayerSelect({
+  value, options, onChange, placeholder = "— Select player —",
+}: {
+  value: string;
+  options: _BPPlayerRow[];
+  onChange: (uuid: string) => void;
+  placeholder?: string;
+}) {
+  const [search, setSearch] = useState("");
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const filtered = options.filter(p =>
+    p.mc_username.toLowerCase().includes(search.toLowerCase())
+  );
+  const selected = options.find(p => p.mc_uuid === value);
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setSearch("");
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  return (
+    <div ref={containerRef} style={{ position: "relative", flex: 1, minWidth: 0 }}>
+      <button
+        type="button"
+        onClick={() => { setOpen(v => !v); setSearch(""); }}
+        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-left transition focus:border-purple-500 focus:outline-none flex items-center justify-between gap-2"
+      >
+        <span className={selected ? "text-white truncate" : "text-slate-500"}>
+          {selected ? selected.mc_username : placeholder}
+        </span>
+        <span className="text-slate-600 text-xs flex-shrink-0">{open ? "▴" : "▾"}</span>
+      </button>
+
+      {open && (
+        <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 200, background: "#0c0f18", border: "1px solid #334155", borderRadius: 8, overflow: "hidden", boxShadow: "0 8px 28px rgba(0,0,0,0.6)" }}>
+          <div className="p-2 border-b border-slate-800">
+            <input
+              autoFocus
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search players…"
+              className="w-full rounded-md bg-slate-800 border border-slate-700 px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+            />
+          </div>
+          <div style={{ maxHeight: 220, overflowY: "auto" }}>
+            {value && (
+              <div
+                className="flex items-center gap-2 px-3 py-2 text-xs text-slate-500 cursor-pointer hover:bg-slate-800"
+                onClick={() => { onChange(""); setOpen(false); setSearch(""); }}
+              >
+                ✕ Clear selection
+              </div>
+            )}
+            {filtered.length === 0 ? (
+              <div className="px-3 py-4 text-sm text-slate-600 text-center">No players match "{search}"</div>
+            ) : (
+              filtered.map(p => (
+                <div
+                  key={p.mc_uuid}
+                  className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-slate-800"
+                  style={{ background: value === p.mc_uuid ? "#1e293b" : undefined }}
+                  onClick={() => { onChange(p.mc_uuid); setOpen(false); setSearch(""); }}
+                >
+                  <img
+                    src={`https://minotar.net/avatar/${p.mc_username}/16`}
+                    className="w-4 h-4 rounded flex-shrink-0"
+                    alt=""
+                    onError={e => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/16"; }}
+                  />
+                  <span style={{ color: value === p.mc_uuid ? "#fff" : "#ccc" }}>{p.mc_username}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Board Portal View ────────────────────────────────────────────────────────
 
 function BoardPortalView({ league, isAdmin, onBack }: { league: string; isAdmin?: boolean; onBack?: () => void }) {
@@ -5778,25 +5870,18 @@ function BoardPortalView({ league, isAdmin, onBack }: { league: string; isAdmin?
       });
   }, [league, ballotSeason]);
 
-  // Load players per season
+  // Load ALL players (not filtered to teams, so any player can be voted on)
   useEffect(() => {
     setLoading(true);
-    fetch(`/api/teams/players?league=${league}&season=${encodeURIComponent(ballotSeason)}`)
+    fetch(`/api/players`)
       .then(r => r.json())
-      .then(pt => {
-        const seen = new Set<string>();
-        const ps: PlayerRow[] = [];
-        for (const entry of (Array.isArray(pt) ? pt : [])) {
-          if (entry.players && !seen.has(entry.mc_uuid)) {
-            seen.add(entry.mc_uuid);
-            ps.push({ mc_uuid: entry.mc_uuid, mc_username: entry.players.mc_username });
-          }
-        }
-        ps.sort((a, b) => a.mc_username.localeCompare(b.mc_username));
+      .then(data => {
+        const ps: PlayerRow[] = Array.isArray(data) ? data : [];
         setPlayers(ps);
         setLoading(false);
-      });
-  }, [league, ballotSeason]);
+      })
+      .catch(() => setLoading(false));
+  }, []);
 
   // Load my existing votes when season changes
   useEffect(() => {
@@ -6035,15 +6120,11 @@ function BoardPortalView({ league, isAdmin, onBack }: { league: string; isAdmin?
                   {playerRanks.map((val, i) => (
                     <div key={i} className="flex items-center gap-2">
                       <span className="text-slate-500 text-xs font-mono w-7 text-right flex-shrink-0">{ordinal(i)}</span>
-                      <select
-                        className="flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-purple-500 focus:outline-none"
+                      <SearchablePlayerSelect
                         value={val}
-                        onChange={e => { const n = [...playerRanks]; n[i] = e.target.value; setPlayerRanks(n); }}>
-                        <option value="">— Select player —</option>
-                        {playerOpts(playerRanks, val).map(p => (
-                          <option key={p.mc_uuid} value={p.mc_uuid}>{p.mc_username}</option>
-                        ))}
-                      </select>
+                        options={playerOpts(playerRanks, val)}
+                        onChange={uuid => { const n = [...playerRanks]; n[i] = uuid; setPlayerRanks(n); }}
+                      />
                       <span className="text-xs font-bold text-purple-400 w-10 flex-shrink-0 text-right">{val ? `+${boardPlayerPts(i + 1)}` : ""}</span>
                     </div>
                   ))}
@@ -6097,15 +6178,11 @@ function BoardPortalView({ league, isAdmin, onBack }: { league: string; isAdmin?
                           return (
                             <div key={rank} className="flex items-center gap-2">
                               <span className="text-slate-500 text-xs w-6 flex-shrink-0">{ordinal(rank - 1)}</span>
-                              <select
-                                className="flex-1 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-white focus:border-purple-500 focus:outline-none"
+                              <SearchablePlayerSelect
                                 value={val}
-                                onChange={e => setAwardVotes(prev => ({ ...prev, [award.key]: { ...(prev[award.key] ?? {}), [String(rank)]: e.target.value } }))}>
-                                <option value="">— Select player —</option>
-                                {awardPlayerOpts(award.key, String(rank)).map(p => (
-                                  <option key={p.mc_uuid} value={p.mc_uuid}>{p.mc_username}</option>
-                                ))}
-                              </select>
+                                options={awardPlayerOpts(award.key, String(rank))}
+                                onChange={uuid => setAwardVotes(prev => ({ ...prev, [award.key]: { ...(prev[award.key] ?? {}), [String(rank)]: uuid } }))}
+                              />
                               {val && <span className="text-xs text-purple-400 font-bold w-8 flex-shrink-0 text-right">+{boardAwardPts(rank)}</span>}
                             </div>
                           );
