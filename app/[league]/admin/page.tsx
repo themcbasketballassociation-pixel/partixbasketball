@@ -2457,13 +2457,6 @@ function ArticlesTab({ league }: { league: string }) {
   const [posting, setPosting] = useState(false);
   const [approveMsg, setApproveMsg] = useState<Record<string, string>>({});
 
-  // Press member management
-  type PressMemberRow = { id: string; discord_id: string; name: string | null; added_at: string };
-  const [pressMembers, setPressMembers] = useState<PressMemberRow[]>([]);
-  const [newPressDiscord, setNewPressDiscord] = useState("");
-  const [newPressName, setNewPressName] = useState("");
-  const [pressErr, setPressErr] = useState("");
-
   const discordChannelLabel: Record<string, string> = {
     pba: "#mba-media", pcaa: "#mcaa-media", pbgl: "#mbgl-media",
   };
@@ -2476,20 +2469,14 @@ function ArticlesTab({ league }: { league: string }) {
     setPendingArticles(allArr.filter((a) => a.status === "pending_approval"));
   }, [league]);
 
-  const refreshPress = useCallback(async () => {
-    const d = await fetch(`/api/press-members?league=${league}`).then((r) => r.json());
-    setPressMembers(Array.isArray(d) ? d : []);
-  }, [league]);
-
   useEffect(() => {
     refresh();
-    refreshPress();
     // Check if Discord webhook is configured server-side
     fetch(`/api/articles?league=${league}&check=discord`)
       .then((r) => r.json())
       .then((d) => setDiscordConfigured(!!d.configured))
       .catch(() => setDiscordConfigured(false));
-  }, [refresh, refreshPress, league]);
+  }, [refresh, league]);
 
   const approveArticle = async (id: string, approve: boolean, article: FullArticle) => {
     const status = approve ? "published" : "rejected";
@@ -2501,23 +2488,6 @@ function ArticlesTab({ league }: { league: string }) {
     if (!r.ok) { const d = await r.json(); setApproveMsg((m) => ({ ...m, [id]: d.error })); return; }
     setApproveMsg((m) => ({ ...m, [id]: approve ? "✓ Published" : "✗ Rejected" }));
     refresh();
-  };
-
-  const addPressMember = async () => {
-    setPressErr("");
-    if (!newPressDiscord.trim()) return setPressErr("Discord ID required");
-    const r = await fetch("/api/press-members", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ discord_id: newPressDiscord.trim(), league, name: newPressName.trim() || null }),
-    });
-    if (!r.ok) { const d = await r.json(); return setPressErr(d.error); }
-    setNewPressDiscord(""); setNewPressName(""); refreshPress();
-  };
-
-  const removePressMember = async (id: string) => {
-    await fetch(`/api/press-members?id=${id}`, { method: "DELETE" });
-    refreshPress();
   };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2700,30 +2670,6 @@ function ArticlesTab({ league }: { league: string }) {
         )}
       </div>
 
-      {/* Press member management */}
-      <div className={card}>
-        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-4">Press Members</h3>
-        <div className="flex gap-2 mb-3 flex-wrap">
-          <input className={input} placeholder="Discord ID" value={newPressDiscord} onChange={(e) => setNewPressDiscord(e.target.value)} style={{ flex: 1, minWidth: 140 }} />
-          <input className={input} placeholder="Display name (opt)" value={newPressName} onChange={(e) => setNewPressName(e.target.value)} style={{ flex: 1, minWidth: 140 }} />
-          <button className={btnPrimary} onClick={addPressMember}>Add</button>
-        </div>
-        <ErrMsg msg={pressErr} />
-        {pressMembers.length === 0 ? (
-          <p className="text-slate-600 text-sm">No press members yet.</p>
-        ) : (
-          <div className="flex flex-col gap-1.5 mt-2">
-            {pressMembers.map((m) => (
-              <div key={m.id} className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2">
-                <span className="text-emerald-400 text-xs font-mono flex-shrink-0">{m.discord_id}</span>
-                <span className="text-white text-sm flex-1">{m.name ?? "—"}</span>
-                <span className="text-slate-600 text-xs">{new Date(m.added_at).toLocaleDateString()}</span>
-                <button className={btnDanger} style={{ padding: "2px 10px", fontSize: 12 }} onClick={() => removePressMember(m.id)}>Remove</button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
     </div>
   );
 }
@@ -5215,14 +5161,78 @@ function BoardMembersTab({ league }: { league: string }) {
   );
 }
 
+// ─── PressMembersTab ─────────────────────────────────────────────────────────
+
+function PressMembersTab({ league }: { league: string }) {
+  type PressMemberRow = { id: string; discord_id: string; name: string | null; added_at: string };
+  const [members, setMembers] = useState<PressMemberRow[]>([]);
+  const [discordId, setDiscordId] = useState("");
+  const [name, setName] = useState("");
+  const [err, setErr] = useState("");
+
+  const refresh = useCallback(async () => {
+    const data = await fetch(`/api/press-members?league=${league}`).then(r => r.json());
+    setMembers(Array.isArray(data) ? data : []);
+  }, [league]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const add = async () => {
+    setErr("");
+    if (!discordId.trim()) return setErr("Discord ID required");
+    const r = await fetch("/api/press-members", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ discord_id: discordId.trim(), league, name: name.trim() || null }),
+    });
+    if (!r.ok) { const d = await r.json(); return setErr(d.error); }
+    setDiscordId(""); setName(""); refresh();
+  };
+
+  const remove = async (id: string) => {
+    await fetch(`/api/press-members?id=${id}`, { method: "DELETE" });
+    refresh();
+  };
+
+  return (
+    <div>
+      <div className={card} style={{ marginBottom: 16 }}>
+        <div className="text-sm font-semibold text-slate-300 mb-4">Add Press Member</div>
+        <div className="flex gap-3 flex-wrap mb-2">
+          <input className={input} placeholder="Discord User ID" value={discordId} onChange={e => setDiscordId(e.target.value)} style={{ flex: 2, minWidth: 160 }} />
+          <input className={input} placeholder="Display name (optional)" value={name} onChange={e => setName(e.target.value)} style={{ flex: 2, minWidth: 140 }} />
+          <button className={btnPrimary} onClick={add}>Add</button>
+        </div>
+        <ErrMsg msg={err} />
+        <p className="text-xs text-slate-500 mt-2">Use Developer Mode in Discord to copy the numeric User ID.</p>
+      </div>
+      {members.length === 0 ? (
+        <div className="text-slate-600 text-sm text-center py-6">No press members yet.</div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {members.map(m => (
+            <div key={m.id} className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-950 px-4 py-3">
+              <div className="flex-1">
+                <div className="text-white font-medium text-sm">{m.name ?? "Unnamed"}</div>
+                <div className="text-slate-500 text-xs font-mono">{m.discord_id}</div>
+              </div>
+              <span className="text-slate-600 text-xs">{new Date(m.added_at).toLocaleDateString()}</span>
+              <button className={btnDanger} onClick={() => remove(m.id)}>Remove</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Press Portal View ────────────────────────────────────────────────────────
 
 function PressPortalView({ league, isAdmin, isCrewMember, onBack }: { league: string; isAdmin?: boolean; isCrewMember?: boolean; onBack?: () => void }) {
   type PressArticle = { id: string; league: string; title: string; body: string; status: string; created_at: string; image_url?: string | null; submitted_by?: string | null; submitted_by_name?: string | null };
-  type PressMemberRow = { id: string; discord_id: string; name: string | null; added_at: string };
   type GameRow = { id: string; scheduled_at: string; home_team_id: string; away_team_id: string; status: string; home_team?: { name: string; abbreviation: string } | null; away_team?: { name: string; abbreviation: string } | null };
   type CrewClaimRow = { id: string; game_id: string; discord_id: string; discord_name: string; role: string; claimed_at: string };
-  type PressTab = "submit" | "mine" | "review" | "members" | "crew";
+  type PressTab = "submit" | "mine" | "review" | "crew";
 
   const { data: session } = useSession();
   const myDiscordId = (session?.user as any)?.id as string | undefined;
@@ -5245,12 +5255,6 @@ function PressPortalView({ league, isAdmin, isCrewMember, onBack }: { league: st
 
   // Approve/reject state (admin)
   const [approveMsg, setApproveMsg] = useState<Record<string, string>>({});
-
-  // Press members state (admin only)
-  const [pressMembers, setPressMembers] = useState<PressMemberRow[]>([]);
-  const [newPressDiscord, setNewPressDiscord] = useState("");
-  const [newPressName, setNewPressName] = useState("");
-  const [pressErr, setPressErr] = useState("");
 
   // Crew state (crew members + admins)
   const [games, setGames] = useState<GameRow[]>([]);
@@ -5275,11 +5279,6 @@ function PressPortalView({ league, isAdmin, isCrewMember, onBack }: { league: st
     setPendingArticles(arr.filter((a) => a.status === "pending_approval"));
     setArticles(arr.filter((a) => a.status === "published" || !a.status));
     setLoading(false);
-  }, [league]);
-
-  const loadPressMembers = useCallback(async () => {
-    const d = await fetch(`/api/press-members?league=${league}`).then((r) => r.json());
-    setPressMembers(Array.isArray(d) ? d : []);
   }, [league]);
 
   const loadCrew = useCallback(async () => {
@@ -5312,14 +5311,13 @@ function PressPortalView({ league, isAdmin, isCrewMember, onBack }: { league: st
     if (isAdmin || isCrewMember || true) {
       // only load articles/press if user is a press member or admin
       if (isAdmin || (!isCrewMember)) loadArticles();
-      if (isAdmin) { loadPressMembers(); }
       if (isAdmin || isCrewMember) loadCrew();
       fetch(`/api/articles?league=${league}&check=discord`)
         .then((r) => r.json())
         .then((d) => setDiscordConfigured(!!d.configured))
         .catch(() => setDiscordConfigured(false));
     }
-  }, [loadArticles, loadPressMembers, loadCrew, isAdmin, isCrewMember, league]);
+  }, [loadArticles, loadCrew, isAdmin, isCrewMember, league]);
 
   // For press members who are NOT crew, still load articles
   useEffect(() => {
@@ -5414,23 +5412,6 @@ function PressPortalView({ league, isAdmin, isCrewMember, onBack }: { league: st
     loadArticles();
   };
 
-  const addPressMember = async () => {
-    setPressErr("");
-    if (!newPressDiscord.trim()) return setPressErr("Discord ID required");
-    const r = await fetch("/api/press-members", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ discord_id: newPressDiscord.trim(), league, name: newPressName.trim() || null }),
-    });
-    if (!r.ok) { const d = await r.json(); return setPressErr(d.error); }
-    setNewPressDiscord(""); setNewPressName(""); loadPressMembers();
-  };
-
-  const removePressMember = async (id: string) => {
-    await fetch(`/api/press-members?id=${id}`, { method: "DELETE" });
-    loadPressMembers();
-  };
-
   const claimSpot = async (gameId: string, role: string) => {
     const key = `${gameId}-${role}`;
     setClaimMsg((m) => ({ ...m, [key]: "" }));
@@ -5465,9 +5446,6 @@ function PressPortalView({ league, isAdmin, isCrewMember, onBack }: { league: st
     ...(showArticleTabs ? [
       { id: "submit" as PressTab, label: isAdmin ? "Post Article" : "Submit Article" },
       { id: "mine" as PressTab,   label: isAdmin ? `Published (${articles.length})` : `My Articles (${articles.length + pendingArticles.length})` },
-    ] : []),
-    ...(isAdmin ? [
-      { id: "members" as PressTab, label: "Press Members" },
     ] : []),
     ...(showCrewTab ? [
       { id: "crew" as PressTab, label: "Press Row" },
@@ -5711,32 +5689,6 @@ function PressPortalView({ league, isAdmin, isCrewMember, onBack }: { league: st
                     </div>
                     {a.image_url && <img src={a.image_url} alt="" className="mb-2 max-h-24 rounded-lg object-contain border border-slate-800" />}
                     <p className="text-slate-400 text-sm line-clamp-3">{a.body}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Press Members tab — admin only */}
-        {tab === "members" && isAdmin && (
-          <div>
-            <div className="flex gap-2 mb-4 flex-wrap">
-              <input className={input} placeholder="Discord ID" value={newPressDiscord} onChange={(e) => setNewPressDiscord(e.target.value)} style={{ flex: 1, minWidth: 140 }} />
-              <input className={input} placeholder="Display name (opt)" value={newPressName} onChange={(e) => setNewPressName(e.target.value)} style={{ flex: 1, minWidth: 140 }} />
-              <button className={btnPrimary} onClick={addPressMember}>Add</button>
-            </div>
-            {pressErr && <p className="text-red-400 text-sm mb-3 rounded-lg bg-red-950 border border-red-900 px-3 py-2">{pressErr}</p>}
-            {pressMembers.length === 0 ? (
-              <p className="text-slate-600 text-sm">No press members yet.</p>
-            ) : (
-              <div className="flex flex-col gap-1.5">
-                {pressMembers.map((m) => (
-                  <div key={m.id} className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2">
-                    <span className="text-emerald-400 text-xs font-mono flex-shrink-0">{m.discord_id}</span>
-                    <span className="text-white text-sm flex-1">{m.name ?? "—"}</span>
-                    <span className="text-slate-600 text-xs">{new Date(m.added_at).toLocaleDateString()}</span>
-                    <button className={btnDanger} style={{ padding: "2px 10px", fontSize: 12 }} onClick={() => removePressMember(m.id)}>Remove</button>
                   </div>
                 ))}
               </div>
@@ -6744,10 +6696,10 @@ const TAB_GROUPS = {
   Teams:        ["Teams", "Owners", "Draft Picks"],
   Games:        ["Schedule", "Box Scores", "Stats", "Playoffs"],
   Transactions: ["Auction", "Trades", "Signings", "Cuts", "Portal"],
-  Content:      ["Accolades", "Champions", "Articles", "Board"],
+  Content:      ["Accolades", "Champions", "Articles", "Board", "Press Members"],
 } as const;
 type MainTab = keyof typeof TAB_GROUPS | "Backup";
-type Tab = "Players" | "Teams" | "Owners" | "Draft Picks" | "Schedule" | "Box Scores" | "Stats" | "Playoffs" | "Auction" | "Trades" | "Signings" | "Cuts" | "Portal" | "Accolades" | "Champions" | "Articles" | "Board" | "Backup";
+type Tab = "Players" | "Teams" | "Owners" | "Draft Picks" | "Schedule" | "Box Scores" | "Stats" | "Playoffs" | "Auction" | "Trades" | "Signings" | "Cuts" | "Portal" | "Accolades" | "Champions" | "Articles" | "Board" | "Press Members" | "Backup";
 const SEASONS = ["Season 1","Season 1 Playoffs","Season 2","Season 2 Playoffs","Season 3","Season 3 Playoffs","Season 4","Season 4 Playoffs","Season 5","Season 5 Playoffs","Season 6","Season 6 Playoffs","Season 7","Season 7 Playoffs"];
 
 export default function AdminPage({ params }: { params?: Promise<{ league?: string }> }) {
@@ -7084,6 +7036,7 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
         {activeTab === "Cuts" && <CutsAdminTab league={league} />}
         {activeTab === "Portal" && <PortalAdminTab league={league} />}
         {activeTab === "Board" && <BoardMembersTab league={league} />}
+        {activeTab === "Press Members" && <PressMembersTab league={league} />}
         {activeTab === "Backup" && (session as any)?.user?.id?.toString() === SUPER_ADMIN_ID && <BackupTab />}
       </div>
     </div>
