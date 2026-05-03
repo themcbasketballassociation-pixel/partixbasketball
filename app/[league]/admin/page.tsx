@@ -5731,9 +5731,14 @@ function PressPortalView({ league, isAdmin, isCrewMember, onBack }: { league: st
 
 // ─── Board Portal View ────────────────────────────────────────────────────────
 
-function BoardPortalView({ league, onBack }: { league: string; onBack?: () => void }) {
+function BoardPortalView({ league, isAdmin, onBack }: { league: string; isAdmin?: boolean; onBack?: () => void }) {
   type PlayerRow = { mc_uuid: string; mc_username: string };
   type TeamRow   = { id: string; name: string; abbreviation: string };
+  type RawVote   = {
+    id: string; board_member_id: string; vote_type: string; category: string | null;
+    rank: number; mc_uuid: string | null; team_id: string | null;
+    board_members: { discord_id: string; name: string | null } | null;
+  };
 
   const [ballotSeason, setBallotSeason] = useState(BOARD_SEASONS[BOARD_SEASONS.length - 1]);
   const [boardTab, setBoardTab] = useState<"players" | "teams" | "awards">("players");
@@ -5755,6 +5760,12 @@ function BoardPortalView({ league, onBack }: { league: string; onBack?: () => vo
   // Results
   const [results, setResults]             = useState<any>(null);
   const [resultsLoading, setResultsLoading] = useState(false);
+
+  // Admin: all ballots
+  const [showAdminReview, setShowAdminReview] = useState(false);
+  const [allBallots, setAllBallots]           = useState<RawVote[]>([]);
+  const [ballotsLoading, setBallotsLoading]   = useState(false);
+  const [deletingMember, setDeletingMember]   = useState<string | null>(null);
 
   // Load teams per season (season-aware)
   useEffect(() => {
@@ -5825,6 +5836,17 @@ function BoardPortalView({ league, onBack }: { league: string; onBack?: () => vo
 
   useEffect(() => { loadResults(); }, [loadResults]);
 
+  const loadAllBallots = useCallback(() => {
+    if (!isAdmin) return;
+    setBallotsLoading(true);
+    fetch(`/api/board-votes?league=${league}&season=${encodeURIComponent(ballotSeason)}&all=true`)
+      .then(r => r.json())
+      .then(d => { setAllBallots(Array.isArray(d) ? d : []); setBallotsLoading(false); })
+      .catch(() => setBallotsLoading(false));
+  }, [isAdmin, league, ballotSeason]);
+
+  useEffect(() => { if (showAdminReview) loadAllBallots(); }, [showAdminReview, loadAllBallots]);
+
   const saveBallot = async () => {
     setSaving(true); setSaveMsg("");
     const votes: any[] = [];
@@ -5844,6 +5866,15 @@ function BoardPortalView({ league, onBack }: { league: string; onBack?: () => vo
     else { const d = await r.json(); setSaveMsg(d.error ?? "Error saving"); }
     setSaving(false);
     setTimeout(() => setSaveMsg(""), 4000);
+  };
+
+  const deleteMemberBallot = async (boardMemberId: string) => {
+    if (!confirm("Remove this member's entire ballot? This cannot be undone.")) return;
+    setDeletingMember(boardMemberId);
+    await fetch(`/api/board-votes?board_member_id=${boardMemberId}&season=${encodeURIComponent(ballotSeason)}`, { method: "DELETE" });
+    setDeletingMember(null);
+    loadAllBallots();
+    loadResults();
   };
 
   function playerOpts(selectedUuids: string[], thisVal: string) {
@@ -6095,6 +6126,142 @@ function BoardPortalView({ league, onBack }: { league: string; onBack?: () => vo
           </div>
 
         </div>
+
+        {/* ── Admin Ballot Review ── */}
+        {isAdmin && (
+          <div className="mt-6 border-t border-slate-800 pt-5">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <div className="text-sm font-bold text-white">Admin Ballot Review</div>
+                <div className="text-xs text-slate-500 mt-0.5">View all submitted ballots for {ballotSeason}. Remove any ballot that looks like griefing.</div>
+              </div>
+              <button
+                onClick={() => { setShowAdminReview(v => !v); }}
+                className="rounded-lg px-4 py-2 text-xs font-semibold transition bg-slate-800 hover:bg-slate-700 text-slate-300">
+                {showAdminReview ? "Hide Ballots" : "Show All Ballots"}
+              </button>
+            </div>
+
+            {showAdminReview && (
+              ballotsLoading ? (
+                <div className="py-8 text-center text-slate-500 text-sm">Loading ballots…</div>
+              ) : allBallots.length === 0 ? (
+                <div className="py-8 text-center text-slate-500 text-sm">No ballots submitted yet for {ballotSeason}.</div>
+              ) : (() => {
+                // Group votes by board_member_id
+                const byMember = new Map<string, { name: string | null; discordId: string; votes: RawVote[] }>();
+                for (const v of allBallots) {
+                  if (!byMember.has(v.board_member_id)) {
+                    byMember.set(v.board_member_id, { name: v.board_members?.name ?? null, discordId: v.board_members?.discord_id ?? v.board_member_id, votes: [] });
+                  }
+                  byMember.get(v.board_member_id)!.votes.push(v);
+                }
+
+                return (
+                  <div className="flex flex-col gap-4">
+                    {[...byMember.entries()].map(([memberId, { name, discordId, votes }]) => {
+                      const playerVotes = votes.filter(v => v.vote_type === "player").sort((a, b) => a.rank - b.rank);
+                      const teamVotes   = votes.filter(v => v.vote_type === "team").sort((a, b) => a.rank - b.rank);
+                      const awardVotes_ = votes.filter(v => v.vote_type === "award");
+                      const isDeleting  = deletingMember === memberId;
+
+                      return (
+                        <div key={memberId} className="rounded-xl border border-slate-700 bg-slate-950 overflow-hidden">
+                          {/* Voter header */}
+                          <div className="flex items-center justify-between px-4 py-3 bg-slate-900 border-b border-slate-800">
+                            <div>
+                              <div className="text-sm font-bold text-white">{name ?? "Board Member"}</div>
+                              <div className="text-xs text-slate-500 font-mono">{discordId}</div>
+                            </div>
+                            <button
+                              onClick={() => deleteMemberBallot(memberId)}
+                              disabled={isDeleting}
+                              className="rounded-lg px-3 py-1.5 text-xs font-semibold transition bg-red-900/60 hover:bg-red-800 text-red-300 disabled:opacity-50">
+                              {isDeleting ? "Removing…" : "Remove Ballot"}
+                            </button>
+                          </div>
+
+                          <div className="p-4 grid gap-4 sm:grid-cols-3">
+                            {/* Player rankings */}
+                            <div>
+                              <div className="text-xs font-semibold text-purple-400 uppercase tracking-wider mb-2">Player Rankings</div>
+                              {playerVotes.length === 0 ? (
+                                <div className="text-xs text-slate-600">—</div>
+                              ) : (
+                                <div className="flex flex-col gap-1">
+                                  {playerVotes.map(v => {
+                                    const p = players.find(pl => pl.mc_uuid === v.mc_uuid);
+                                    return (
+                                      <div key={v.rank} className="flex items-center gap-2 text-xs">
+                                        <span className="text-slate-600 w-5 flex-shrink-0 text-right font-mono">#{v.rank}</span>
+                                        {p && <img src={`https://minotar.net/avatar/${p.mc_username}/16`} className="w-4 h-4 rounded flex-shrink-0" alt="" onError={e => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/16"; }} />}
+                                        <span className="text-slate-300">{p?.mc_username ?? v.mc_uuid?.slice(0, 8)}</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Team rankings */}
+                            <div>
+                              <div className="text-xs font-semibold text-purple-400 uppercase tracking-wider mb-2">Team Rankings</div>
+                              {teamVotes.length === 0 ? (
+                                <div className="text-xs text-slate-600">—</div>
+                              ) : (
+                                <div className="flex flex-col gap-1">
+                                  {teamVotes.map(v => {
+                                    const t = teams.find(tm => tm.id === v.team_id);
+                                    return (
+                                      <div key={v.rank} className="flex items-center gap-2 text-xs">
+                                        <span className="text-slate-600 w-5 flex-shrink-0 text-right font-mono">#{v.rank}</span>
+                                        <span className="text-slate-300">{t ? `${t.name} (${t.abbreviation})` : v.team_id?.slice(0, 8)}</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Awards */}
+                            <div>
+                              <div className="text-xs font-semibold text-purple-400 uppercase tracking-wider mb-2">Award Votes</div>
+                              {awardVotes_.length === 0 ? (
+                                <div className="text-xs text-slate-600">—</div>
+                              ) : (
+                                <div className="flex flex-col gap-2">
+                                  {BOARD_AWARDS.map(award => {
+                                    const avs = awardVotes_.filter(v => v.category === award.key).sort((a, b) => a.rank - b.rank);
+                                    if (avs.length === 0) return null;
+                                    return (
+                                      <div key={award.key}>
+                                        <div className="text-[10px] font-semibold text-slate-500 mb-0.5">{award.label}</div>
+                                        {avs.map(v => {
+                                          const p = players.find(pl => pl.mc_uuid === v.mc_uuid);
+                                          return (
+                                            <div key={v.rank} className="flex items-center gap-2 text-xs">
+                                              <span className="text-slate-600 w-5 flex-shrink-0 text-right font-mono">#{v.rank}</span>
+                                              <span className="text-slate-300">{p?.mc_username ?? v.mc_uuid?.slice(0, 8)}</span>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()
+            )}
+          </div>
+        )}
+
       </div>
     </div>
   );
@@ -6898,7 +7065,7 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
 
   // ── Board portal ───────────────────────────────────────────────────────────
   if (portal === "board") {
-    return <BoardPortalView league={league} onBack={() => setPortal(null)} />;
+    return <BoardPortalView league={league} isAdmin={isAdmin} onBack={() => setPortal(null)} />;
   }
 
   // ── Press portal ───────────────────────────────────────────────────────────

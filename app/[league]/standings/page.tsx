@@ -17,7 +17,7 @@ function TeamLogo({ team, size = 28 }: { team: Team; size?: number }) {
       style={{ objectFit: "contain", borderRadius: 4, flexShrink: 0, width: size, height: size }} />
   );
   return (
-    <div style={{ width: size, height: size, borderRadius: 4, background: "#1e1e1e", border: "1px solid #2a2a2a", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 9, fontWeight: 700, color: "#888" }}>
+    <div style={{ width: size, height: size, borderRadius: 4, background: "#1c2028", border: "1px solid #272c36", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 9, fontWeight: 700, color: "#888" }}>
       {team.abbreviation}
     </div>
   );
@@ -66,7 +66,7 @@ function StandingsTable({ rows, games, accent }: { rows: StandingRow[]; games: G
     <div style={{ overflowX: "auto" }}>
       <table style={{ width: "100%", fontSize: "0.875rem", borderCollapse: "collapse" }}>
         <thead>
-          <tr style={{ borderBottom: "1px solid #1e1e1e" }}>
+          <tr style={{ borderBottom: "1px solid #1c2028" }}>
             {["#", "Team", "W", "L", "PCT", "GB", "CONF", "DIFF"].map((h) => (
               <th key={h} style={{
                 padding: "10px 12px",
@@ -83,7 +83,7 @@ function StandingsTable({ rows, games, accent }: { rows: StandingRow[]; games: G
             const isFirst = i === 0;
             return (
               <tr key={row.team.id} style={{
-                borderTop: "1px solid #1a1a1a",
+                borderTop: "1px solid #171b26",
                 background: isFirst ? "rgba(255,255,255,0.02)" : undefined,
                 transition: "background 0.1s",
               }}>
@@ -184,16 +184,16 @@ export default function StandingsPage({ params }: { params?: Promise<{ league?: 
   const [viewAll, setViewAll] = React.useState(false);
 
   return (
-    <div style={{ borderRadius: "1rem", border: "1px solid #1e1e1e", background: "#111", overflow: "hidden" }}>
+    <div style={{ borderRadius: "1rem", border: "1px solid #1c2028", background: "#101318", overflow: "hidden" }}>
       {/* Header */}
-      <div style={{ padding: "20px 24px", borderBottom: "1px solid #1e1e1e", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+      <div style={{ padding: "20px 24px", borderBottom: "1px solid #1c2028", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
         <div>
           <h2 style={{ fontSize: "1.5rem", fontWeight: 700, color: "#fff", margin: 0 }}>Standings</h2>
           <p style={{ color: "#888", fontSize: "0.875rem", margin: "2px 0 0" }}>{leagueDisplay} · {season}</p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {hasDivisions && (
-            <div style={{ display: "flex", background: "#0d0d0d", border: "1px solid #2a2a2a", borderRadius: "0.6rem", overflow: "hidden" }}>
+            <div style={{ display: "flex", background: "#0a0d12", border: "1px solid #272c36", borderRadius: "0.6rem", overflow: "hidden" }}>
               {(["Conferences", "All"] as const).map((label) => {
                 const active = label === "All" ? viewAll : !viewAll;
                 return (
@@ -206,7 +206,7 @@ export default function StandingsPage({ params }: { params?: Promise<{ league?: 
             </div>
           )}
           <select value={season} onChange={(e) => { setSeason(e.target.value); setLoading(true); }}
-            style={{ background: "#0d0d0d", border: "1px solid #2a2a2a", color: "#fff", borderRadius: "0.75rem", padding: "6px 14px", fontSize: "0.875rem", outline: "none", cursor: "pointer" }}>
+            style={{ background: "#0a0d12", border: "1px solid #272c36", color: "#fff", borderRadius: "0.75rem", padding: "6px 14px", fontSize: "0.875rem", outline: "none", cursor: "pointer" }}>
             {seasons.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
@@ -220,8 +220,8 @@ export default function StandingsPage({ params }: { params?: Promise<{ league?: 
         /* Conference standings — two panels side by side */
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0 }}>
           {/* West */}
-          <div style={{ borderRight: "1px solid #1e1e1e" }}>
-            <div style={{ padding: "12px 20px", borderBottom: "1px solid #1e1e1e", display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ borderRight: "1px solid #1c2028" }}>
+            <div style={{ padding: "12px 20px", borderBottom: "1px solid #1c2028", display: "flex", alignItems: "center", gap: 8 }}>
               <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#ef4444", flexShrink: 0 }} />
               <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#ef4444", textTransform: "uppercase", letterSpacing: "0.12em" }}>Western Conference</span>
             </div>
@@ -229,7 +229,7 @@ export default function StandingsPage({ params }: { params?: Promise<{ league?: 
           </div>
           {/* East */}
           <div>
-            <div style={{ padding: "12px 20px", borderBottom: "1px solid #1e1e1e", display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ padding: "12px 20px", borderBottom: "1px solid #1c2028", display: "flex", alignItems: "center", gap: 8 }}>
               <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#3b82f6", flexShrink: 0 }} />
               <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#3b82f6", textTransform: "uppercase", letterSpacing: "0.12em" }}>Eastern Conference</span>
             </div>
@@ -242,7 +242,7 @@ export default function StandingsPage({ params }: { params?: Promise<{ league?: 
       )}
 
       {!loading && allRows.length > 0 && (
-        <div style={{ padding: "10px 20px", borderTop: "1px solid #1e1e1e", fontSize: "0.7rem", color: "#383838" }}>
+        <div style={{ padding: "10px 20px", borderTop: "1px solid #1c2028", fontSize: "0.7rem", color: "#383838" }}>
           Tiebreakers: Wins → Win % → Conf Record → H2H → Point Diff
         </div>
       )}

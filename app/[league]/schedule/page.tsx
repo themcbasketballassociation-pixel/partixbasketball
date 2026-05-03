@@ -291,21 +291,21 @@ export default function SchedulePage({ params }: { params?: Promise<{ league?: s
   const weekKeys = Object.keys(grouped).sort();
 
   return (
-    <div style={{ borderRadius: "1rem", border: "1px solid #1e1e1e", background: "#111", overflow: "hidden" }}>
+    <div style={{ borderRadius: "1rem", border: "1px solid #1c2028", background: "#101318", overflow: "hidden" }}>
       {/* Header */}
-      <div style={{ padding: "20px 24px", borderBottom: "1px solid #1e1e1e", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+      <div style={{ padding: "20px 24px", borderBottom: "1px solid #1c2028", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
         <div>
           <h2 style={{ fontSize: "1.5rem", fontWeight: 700, color: "#fff", margin: 0 }}>Schedule</h2>
           <p style={{ color: "#888", fontSize: "0.875rem", margin: "2px 0 0" }}>{leagueDisplay}</p>
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
           {/* Tab toggle */}
-          <div style={{ display:"flex", borderRadius:8, overflow:"hidden", border:"1px solid #2a2a2a" }}>
+          <div style={{ display:"flex", borderRadius:8, overflow:"hidden", border:"1px solid #272c36" }}>
             {(["schedule","bracket"] as const).map(t => (
               <button key={t} onClick={()=>setTab(t)}
                 style={{ padding:"6px 16px", fontSize:"0.8rem", fontWeight:700, cursor:"pointer", border:"none",
-                  borderRight: t==="schedule" ? "1px solid #2a2a2a" : "none",
-                  background: tab===t ? "#2563eb" : "#161616",
+                  borderRight: t==="schedule" ? "1px solid #272c36" : "none",
+                  background: tab===t ? "#2563eb" : "#13161e",
                   color: tab===t ? "#fff" : "#666" }}>
                 {t==="schedule" ? "📅 Schedule" : "🏆 Bracket"}
               </button>
@@ -313,7 +313,7 @@ export default function SchedulePage({ params }: { params?: Promise<{ league?: s
           </div>
           {seasons.length > 0 && (
             <select value={season} onChange={(e) => setSeason(e.target.value)}
-              style={{ background: "#111", border: "1px solid #1e1e1e", color: "#fff", borderRadius: "0.75rem", padding: "6px 12px", fontSize: "0.875rem", outline: "none", cursor: "pointer" }}>
+              style={{ background: "#101318", border: "1px solid #1c2028", color: "#fff", borderRadius: "0.75rem", padding: "6px 12px", fontSize: "0.875rem", outline: "none", cursor: "pointer" }}>
               {seasons.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
           )}
@@ -338,19 +338,19 @@ export default function SchedulePage({ params }: { params?: Promise<{ league?: s
               return acc;
             }, {});
             return (
-              <div key={weekKey} style={{ borderRadius: "0.75rem", border: "1px solid #1e1e1e", background: "#161616", overflow: "hidden" }}>
-                <div style={{ padding: "10px 20px", borderBottom: "1px solid #1e1e1e", background: "#111", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div key={weekKey} style={{ borderRadius: "0.75rem", border: "1px solid #1c2028", background: "#13161e", overflow: "hidden" }}>
+                <div style={{ padding: "10px 20px", borderBottom: "1px solid #1c2028", background: "#101318", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <span style={{ fontWeight: 700, color: "#fff", fontSize: "0.875rem", letterSpacing: "0.05em" }}>WEEK {wi + 1}</span>
                   <span style={{ color: "#555", fontSize: "0.75rem" }}>{new Date(weekKey + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", timeZone: "Etc/GMT+5" })} week</span>
                 </div>
                 {Object.keys(byDay).map((day) => (
                   <div key={day}>
-                    <div style={{ padding: "6px 20px", borderBottom: "1px solid #1e1e1e", background: "rgba(17,17,17,0.5)" }}>
+                    <div style={{ padding: "6px 20px", borderBottom: "1px solid #1c2028", background: "rgba(17,17,17,0.5)" }}>
                       <span style={{ fontSize: "0.7rem", fontWeight: 600, color: "#555", textTransform: "uppercase", letterSpacing: "0.1em" }}>{day}</span>
                     </div>
                     <div>
                       {byDay[day].map((g, gi) => (
-                        <div key={g.id} style={{ padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, borderTop: gi > 0 ? "1px solid #1e1e1e" : undefined }}>
+                        <div key={g.id} style={{ padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, borderTop: gi > 0 ? "1px solid #1c2028" : undefined }}>
                           <span style={{ color: "#555", fontSize: "0.875rem", width: 80, flexShrink: 0 }}>
                             {new Date(g.scheduled_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "Etc/GMT+5" })} EST
                           </span>
@@ -362,7 +362,7 @@ export default function SchedulePage({ params }: { params?: Promise<{ league?: s
                               </div>
                               {getLogo(g.home_team)
                                 ? <img src={getLogo(g.home_team)!} alt="" style={{ width: 32, height: 32, objectFit: "contain", flexShrink: 0 }} />
-                                : <div style={{ width: 32, height: 32, borderRadius: 6, background: "#1a1a1a", border: "1px solid #333", display: "flex", alignItems: "center", justifyContent: "center", color: "#555", fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{g.home_team?.abbreviation ?? "?"}</div>
+                                : <div style={{ width: 32, height: 32, borderRadius: 6, background: "#171b26", border: "1px solid #333", display: "flex", alignItems: "center", justifyContent: "center", color: "#555", fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{g.home_team?.abbreviation ?? "?"}</div>
                               }
                             </div>
                             {g.status === "completed" ? (
@@ -376,7 +376,7 @@ export default function SchedulePage({ params }: { params?: Promise<{ league?: s
                             <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 130 }}>
                               {getLogo(g.away_team)
                                 ? <img src={getLogo(g.away_team)!} alt="" style={{ width: 32, height: 32, objectFit: "contain", flexShrink: 0 }} />
-                                : <div style={{ width: 32, height: 32, borderRadius: 6, background: "#1a1a1a", border: "1px solid #333", display: "flex", alignItems: "center", justifyContent: "center", color: "#555", fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{g.away_team?.abbreviation ?? "?"}</div>
+                                : <div style={{ width: 32, height: 32, borderRadius: 6, background: "#171b26", border: "1px solid #333", display: "flex", alignItems: "center", justifyContent: "center", color: "#555", fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{g.away_team?.abbreviation ?? "?"}</div>
                               }
                               <div style={{ textAlign: "left" }}>
                                 <div style={{ fontWeight: 600, color: "#fff" }}>{g.away_team?.name ?? "?"}</div>

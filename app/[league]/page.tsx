@@ -45,16 +45,16 @@ function LeaderCard({ cat, stats }: { cat: typeof LEADER_CATS[number]; stats: St
   const leader = top5[0];
 
   return (
-    <div style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: 14, overflow: "hidden" }}>
+    <div style={{ background: "#101318", border: "1px solid #1c2028", borderRadius: 14, overflow: "hidden" }}>
       {/* Category header */}
-      <div style={{ background: "#0d0d0d", borderBottom: "1px solid #1e1e1e", padding: "8px 12px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div style={{ background: "#0a0d12", borderBottom: "1px solid #1c2028", padding: "8px 12px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <span style={{ color: cat.color, fontSize: 11, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" }}>
           {cat.label} Leaders{cat.minGames ? <span style={{ color: "#444", fontSize: 10, fontWeight: 600, textTransform: "none", letterSpacing: 0, marginLeft: 5 }}>min. {cat.minGames} GP</span> : null}
         </span>
         <span style={{ color: cat.color, fontSize: 13, fontWeight: 800 }}>{cat.fmt((leader[cat.key] as number))}</span>
       </div>
       {/* Leader spotlight */}
-      <div style={{ padding: "10px 12px", display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid #1a1a1a" }}>
+      <div style={{ padding: "10px 12px", display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid #171b26" }}>
         <img
           src={`https://minotar.net/avatar/${leader.mc_username}/40`}
           alt={leader.mc_username}
@@ -69,7 +69,7 @@ function LeaderCard({ cat, stats }: { cat: typeof LEADER_CATS[number]; stats: St
       </div>
       {/* Rows 2–5 */}
       {top5.slice(1).map((s, i) => (
-        <div key={s.mc_uuid} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", borderBottom: i < top5.length - 2 ? "1px solid #141414" : undefined }}>
+        <div key={s.mc_uuid} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", borderBottom: i < top5.length - 2 ? "1px solid #111520" : undefined }}>
           <span style={{ color: "#333", fontSize: 11, fontWeight: 700, width: 14, textAlign: "right", flexShrink: 0 }}>{i + 2}</span>
           <img
             src={`https://minotar.net/avatar/${s.mc_username}/24`}
@@ -152,7 +152,7 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
     <main className="min-h-screen" style={{ background: "#08090e" }}>
       <div className="mx-auto px-4 sm:px-6 py-10" style={{ maxWidth: 1280 }}>
         {/* Hero */}
-        <div className="rounded-2xl overflow-hidden mb-8" style={{ background: "linear-gradient(135deg, #111 0%, #1a1a1a 100%)", border: "1px solid #1e1e1e" }}>
+        <div className="rounded-2xl overflow-hidden mb-8" style={{ background: "linear-gradient(135deg, #101318 0%, #171b26 100%)", border: "1px solid #1c2028" }}>
           <div className="px-8 py-8">
             <div className="flex items-center gap-3 mb-2">
               <span className="text-2xl">🏀</span>
@@ -173,11 +173,11 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
                 <h2 className="text-xs font-bold tracking-widest uppercase mb-3" style={{ color: "#555" }}>Recent Results</h2>
                 <div className="flex flex-col gap-2">
                   {recentGames.map((g) => (
-                    <a key={g.id} href={`/${slug}/boxscores?game=${g.id}`}
+                    <a key={g.id} href={`/${slug}/boxscores/${g.id}`}
                       className="rounded-xl px-5 py-3 flex items-center justify-between gap-4 transition-colors"
-                      style={{ background: "#111", border: "1px solid #1e1e1e", textDecoration: "none", display: "flex", cursor: "pointer" }}
-                      onMouseEnter={(e) => (e.currentTarget.style.borderColor = "#333")}
-                      onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#1e1e1e")}
+                      style={{ background: "#101318", border: "1px solid #1c2028", textDecoration: "none", display: "flex", cursor: "pointer" }}
+                      onMouseEnter={(e) => (e.currentTarget.style.borderColor = "#3a4055")}
+                      onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#1c2028")}
                     >
                       <div className="flex items-center gap-3 flex-1 justify-end">
                         {g.home_team?.logo_url && <img src={g.home_team.logo_url} alt="" style={{ width: 24, height: 24, objectFit: "contain", borderRadius: 4 }} />}
@@ -205,13 +205,13 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
               {loading ? (
                 <div className="py-20 text-center" style={{ color: "#444" }}>Loading...</div>
               ) : articles.length === 0 ? (
-                <div className="py-20 text-center rounded-2xl" style={{ background: "#111", border: "1px solid #1e1e1e", color: "#444" }}>
+                <div className="py-20 text-center rounded-2xl" style={{ background: "#101318", border: "1px solid #1c2028", color: "#444" }}>
                   No articles yet for the {label}.
                 </div>
               ) : (
                 <div className="space-y-4">
                   {articles.map((a) => (
-                    <article key={a.id} className="rounded-2xl p-6 transition-all duration-150 hover:scale-[1.005]" style={{ background: "#111", border: "1px solid #1e1e1e" }}>
+                    <article key={a.id} className="rounded-2xl p-6 transition-all duration-150 hover:scale-[1.005]" style={{ background: "#101318", border: "1px solid #1c2028" }}>
                       <div className="flex items-center gap-2 mb-3 flex-wrap">
                         <span className="text-[10px] font-black tracking-widest uppercase px-2 py-0.5 rounded-md" style={{ background: leagueColor[a.league] ?? "#333", color: "white" }}>
                           {leagueLabel[a.league] ?? a.league.toUpperCase()}

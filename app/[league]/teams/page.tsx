@@ -158,11 +158,11 @@ function TeamDetailModal({ team, league, seasons, defaultSeason, onClose }: {
       style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.88)", display: "flex", alignItems: "flex-start", justifyContent: "center", overflowY: "auto", padding: "24px 16px" }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div style={{ width: "100%", maxWidth: 880, background: "#111", borderRadius: "1.25rem", border: "1px solid #1e1e1e", borderTop: `3px solid ${accent}`, overflow: "hidden" }}>
+      <div style={{ width: "100%", maxWidth: 880, background: "#101318", borderRadius: "1.25rem", border: "1px solid #1c2028", borderTop: `3px solid ${accent}`, overflow: "hidden" }}>
 
         {/* Header */}
-        <div style={{ padding: "20px 24px", borderBottom: "1px solid #1e1e1e", display: "flex", alignItems: "center", gap: 16 }}>
-          <div style={{ width: 60, height: 60, borderRadius: 10, background: "#161616", border: "1px solid #2a2a2a", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" }}>
+        <div style={{ padding: "20px 24px", borderBottom: "1px solid #1c2028", display: "flex", alignItems: "center", gap: 16 }}>
+          <div style={{ width: 60, height: 60, borderRadius: 10, background: "#13161e", border: "1px solid #272c36", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" }}>
             {team.logo_url
               ? <img src={team.logo_url} alt={team.abbreviation} style={{ width: 50, height: 50, objectFit: "contain" }} />
               : <span style={{ fontSize: "1rem", fontWeight: 800, color: "#666" }}>{team.abbreviation}</span>
@@ -172,7 +172,7 @@ function TeamDetailModal({ team, league, seasons, defaultSeason, onClose }: {
             <div style={{ fontWeight: 700, color: "#fff", fontSize: "1.4rem", lineHeight: 1.2 }}>{team.name}</div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 5, flexWrap: "wrap" }}>
               <span style={{ fontSize: "0.75rem", color: "#555", fontFamily: "monospace" }}>{team.abbreviation}</span>
-              {team.division && <span style={{ fontSize: "0.72rem", color: "#444", border: "1px solid #2a2a2a", borderRadius: 4, padding: "1px 6px" }}>{team.division}</span>}
+              {team.division && <span style={{ fontSize: "0.72rem", color: "#444", border: "1px solid #272c36", borderRadius: 4, padding: "1px 6px" }}>{team.division}</span>}
               {!loadingStatic && championships.length > 0 && (
                 <span style={{ fontSize: "0.8rem", color: "#fbbf24", fontWeight: 700 }}>
                   🏆 {championships.length}× Finals Champion
@@ -191,10 +191,10 @@ function TeamDetailModal({ team, league, seasons, defaultSeason, onClose }: {
         </div>
 
         {/* Season selector */}
-        <div style={{ padding: "12px 24px", borderBottom: "1px solid #1e1e1e", display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ padding: "12px 24px", borderBottom: "1px solid #1c2028", display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ color: "#555", fontSize: "0.8rem" }}>Season</span>
           <select value={modalSeason} onChange={e => setModalSeason(e.target.value)}
-            style={{ background: "#0d0d0d", border: "1px solid #2a2a2a", color: "#fff", borderRadius: "0.6rem", padding: "5px 12px", fontSize: "0.85rem", outline: "none", cursor: "pointer" }}>
+            style={{ background: "#0a0d12", border: "1px solid #272c36", color: "#fff", borderRadius: "0.6rem", padding: "5px 12px", fontSize: "0.85rem", outline: "none", cursor: "pointer" }}>
             {allSeasons.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
@@ -211,7 +211,7 @@ function TeamDetailModal({ team, league, seasons, defaultSeason, onClose }: {
                 <Empty text="No roster data for this season." />
               ) : (
                 <>
-                  <div style={{ border: "1px solid #1e1e1e", borderRadius: "0.75rem", overflow: "hidden", marginBottom: 14 }}>
+                  <div style={{ border: "1px solid #1c2028", borderRadius: "0.75rem", overflow: "hidden", marginBottom: 14 }}>
                     {(contracts.length > 0 ? contracts : seasonRoster).map((row, i, arr) => {
                       const isContract = "amount" in row;
                       const c = row as ContractFull;
@@ -220,8 +220,8 @@ function TeamDetailModal({ team, league, seasons, defaultSeason, onClose }: {
                       return (
                         <div key={isContract ? c.mc_uuid : pt.mc_uuid} style={{
                           display: "flex", alignItems: "center", gap: 12, padding: "10px 16px",
-                          borderBottom: i < arr.length - 1 ? "1px solid #1a1a1a" : "none",
-                          background: "#0d0d0d",
+                          borderBottom: i < arr.length - 1 ? "1px solid #171b26" : "none",
+                          background: "#0a0d12",
                         }}>
                           <img
                             src={`https://minotar.net/avatar/${username}/24`} alt=""
@@ -262,7 +262,7 @@ function TeamDetailModal({ team, league, seasons, defaultSeason, onClose }: {
                     </thead>
                     <tbody>
                       {teamStats.map((s, i) => (
-                        <tr key={s.mc_uuid} style={{ borderBottom: "1px solid #141414", background: i % 2 === 0 ? "#0d0d0d" : "transparent" }}>
+                        <tr key={s.mc_uuid} style={{ borderBottom: "1px solid #111520", background: i % 2 === 0 ? "#0a0d12" : "transparent" }}>
                           <td style={{ padding: "8px 10px", color: "#ddd", fontWeight: 500 }}>{s.mc_username ?? s.mc_uuid}</td>
                           <td style={{ padding: "8px 10px", color: "#666", textAlign: "center" }}>{s.gp ?? "—"}</td>
                           <td style={{ padding: "8px 10px", color: "#fff", textAlign: "center", fontWeight: 600 }}>{fmt(s.ppg)}</td>
@@ -275,7 +275,7 @@ function TeamDetailModal({ team, league, seasons, defaultSeason, onClose }: {
                         </tr>
                       ))}
                       {totals && (
-                        <tr style={{ borderTop: "2px solid #2a2a2a", background: "#161616" }}>
+                        <tr style={{ borderTop: "2px solid #272c36", background: "#13161e" }}>
                           <td style={{ padding: "9px 10px", color: "#fff", fontWeight: 700 }}>TEAM AVG</td>
                           <td style={{ padding: "9px 10px", color: "#666", textAlign: "center" }}>{totals.gp}</td>
                           <td style={{ padding: "9px 10px", color: "#22c55e", textAlign: "center", fontWeight: 700 }}>{fmt(totals.ppg)}</td>
@@ -343,7 +343,7 @@ function TeamDetailModal({ team, league, seasons, defaultSeason, onClose }: {
                                 else { result = "T"; }
                               }
                               return (
-                                <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "#0d0d0d", border: "1px solid #1a1a1a", borderRadius: "0.6rem", flexWrap: "wrap" }}>
+                                <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "#0a0d12", border: "1px solid #171b26", borderRadius: "0.6rem", flexWrap: "wrap" }}>
                                   <span style={{ color: "#555", fontSize: "0.75rem", minWidth: 120 }}>{date} · {time}</span>
                                   <span style={{ color: "#444", fontSize: "0.72rem", minWidth: 14, textAlign: "center" }}>{isHome ? "vs" : "@"}</span>
                                   <span style={{ color: "#ccc", fontWeight: 600, fontSize: "0.875rem", flex: 1 }}>{opponent?.name ?? "TBD"}</span>
@@ -378,7 +378,7 @@ function SectionHeader({ title }: { title: string }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
       <h3 style={{ fontSize: "0.7rem", fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.12em", margin: 0 }}>{title}</h3>
-      <div style={{ flex: 1, height: 1, background: "#1e1e1e" }} />
+      <div style={{ flex: 1, height: 1, background: "#1c2028" }} />
     </div>
   );
 }
@@ -391,7 +391,7 @@ function CapBar({ capUsed }: { capUsed: number }) {
   const pct = Math.min(100, (capUsed / TOTAL_CAP) * 100);
   const barColor = capUsed > TOTAL_CAP ? "#ef4444" : pct > 80 ? "#f59e0b" : "#22c55e";
   return (
-    <div style={{ background: "#161616", border: "1px solid #1e1e1e", borderRadius: "0.75rem", padding: "12px 16px" }}>
+    <div style={{ background: "#13161e", border: "1px solid #1c2028", borderRadius: "0.75rem", padding: "12px 16px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
         <span style={{ color: "#555", fontSize: "0.78rem" }}>Salary cap</span>
         <span style={{ fontSize: "0.78rem", fontWeight: 700 }}>
@@ -400,7 +400,7 @@ function CapBar({ capUsed }: { capUsed: number }) {
           <span style={{ color: "#444" }}>${TOTAL_CAP.toLocaleString()}</span>
         </span>
       </div>
-      <div style={{ background: "#111", borderRadius: 4, height: 5, overflow: "hidden" }}>
+      <div style={{ background: "#101318", borderRadius: 4, height: 5, overflow: "hidden" }}>
         <div style={{ height: "100%", borderRadius: 4, width: `${pct}%`, background: barColor, transition: "width 0.3s" }} />
       </div>
       <div style={{ color: capUsed > TOTAL_CAP ? "#ef4444" : "#22c55e", fontSize: "0.72rem", marginTop: 5, textAlign: "right" }}>
@@ -418,17 +418,17 @@ function TeamCard({ team, players, capUsed, onClick, showCap }: { team: Team; pl
     <div
       onClick={onClick}
       style={{
-        borderRadius: "0.875rem", border: "1px solid #1e1e1e", background: "#161616",
+        borderRadius: "0.875rem", border: "1px solid #1c2028", background: "#13161e",
         overflow: "hidden", display: "flex", flexDirection: "column",
-        borderLeft: accent ? `3px solid ${accent}` : "1px solid #1e1e1e",
+        borderLeft: accent ? `3px solid ${accent}` : "1px solid #1c2028",
         cursor: "pointer", transition: "border-color 0.15s, background 0.15s",
       }}
-      onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = "#1a1a1a"; }}
-      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = "#161616"; }}
+      onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = "#171b26"; }}
+      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = "#13161e"; }}
     >
       {/* Logo + name */}
-      <div style={{ borderBottom: "1px solid #1e1e1e", padding: "16px 18px", display: "flex", alignItems: "center", gap: 14 }}>
-        <div style={{ width: 48, height: 48, borderRadius: 8, background: "#111", border: "1px solid #2a2a2a", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" }}>
+      <div style={{ borderBottom: "1px solid #1c2028", padding: "16px 18px", display: "flex", alignItems: "center", gap: 14 }}>
+        <div style={{ width: 48, height: 48, borderRadius: 8, background: "#101318", border: "1px solid #272c36", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" }}>
           {team.logo_url
             ? <img src={team.logo_url} alt={team.abbreviation} style={{ width: 40, height: 40, objectFit: "contain" }} />
             : <span style={{ fontSize: "0.8rem", fontWeight: 800, color: "#666" }}>{team.abbreviation}</span>
@@ -463,7 +463,7 @@ function TeamCard({ team, players, capUsed, onClick, showCap }: { team: Team; pl
 
       {/* Cap bar */}
       {showCap && (
-        <div style={{ padding: "10px 18px 14px", borderTop: "1px solid #1e1e1e" }}>
+        <div style={{ padding: "10px 18px 14px", borderTop: "1px solid #1c2028" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
             <span style={{ color: "#555", fontSize: "0.72rem" }}>Cap used</span>
             <span style={{ fontSize: "0.72rem", fontWeight: 700 }}>
@@ -472,7 +472,7 @@ function TeamCard({ team, players, capUsed, onClick, showCap }: { team: Team; pl
               <span style={{ color: "#444" }}>{TOTAL_CAP.toLocaleString()}</span>
             </span>
           </div>
-          <div style={{ background: "#111", borderRadius: 4, height: 4, overflow: "hidden" }}>
+          <div style={{ background: "#101318", borderRadius: 4, height: 4, overflow: "hidden" }}>
             <div style={{
               height: "100%", width: `${Math.min(100, (capUsed / TOTAL_CAP) * 100)}%`,
               background: capUsed > TOTAL_CAP ? "#ef4444" : capUsed / TOTAL_CAP > 0.8 ? "#f59e0b" : "#22c55e",
@@ -505,7 +505,7 @@ function ConferenceSection({ title, teams, players, capByTeam, accent, onTeamCli
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
         <div style={{ width: 10, height: 10, borderRadius: "50%", background: accent, flexShrink: 0 }} />
         <h3 style={{ fontSize: "0.72rem", fontWeight: 700, color: accent, textTransform: "uppercase", letterSpacing: "0.12em", margin: 0 }}>{title}</h3>
-        <div style={{ flex: 1, height: 1, background: "#1e1e1e" }} />
+        <div style={{ flex: 1, height: 1, background: "#1c2028" }} />
         <span style={{ fontSize: "0.7rem", color: "#444" }}>{teams.length} team{teams.length !== 1 ? "s" : ""}</span>
       </div>
       <EvenGrid teams={teams} players={players} capByTeam={capByTeam} onTeamClick={onTeamClick} showCap={showCap} />
@@ -599,16 +599,16 @@ export default function TeamsPage({ params }: { params?: Promise<{ league?: stri
         />
       )}
 
-      <div style={{ borderRadius: "1rem", border: "1px solid #1e1e1e", background: "#111", overflow: "hidden" }}>
+      <div style={{ borderRadius: "1rem", border: "1px solid #1c2028", background: "#101318", overflow: "hidden" }}>
         {/* Header */}
-        <div style={{ padding: "20px 24px", borderBottom: "1px solid #1e1e1e", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+        <div style={{ padding: "20px 24px", borderBottom: "1px solid #1c2028", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
           <div>
             <h2 style={{ fontSize: "1.5rem", fontWeight: 700, color: "#fff", margin: 0 }}>Teams</h2>
             <p style={{ color: "#888", fontSize: "0.875rem", margin: "2px 0 0" }}>{leagueDisplay} · {season} · {teams.length} teams · click a team to view details</p>
           </div>
           {seasons.length > 0 && (
             <select value={season} onChange={e => setSeason(e.target.value)}
-              style={{ background: "#0d0d0d", border: "1px solid #2a2a2a", color: "#fff", borderRadius: "0.75rem", padding: "6px 14px", fontSize: "0.875rem", outline: "none", cursor: "pointer" }}>
+              style={{ background: "#0a0d12", border: "1px solid #272c36", color: "#fff", borderRadius: "0.75rem", padding: "6px 14px", fontSize: "0.875rem", outline: "none", cursor: "pointer" }}>
               {seasons.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           )}

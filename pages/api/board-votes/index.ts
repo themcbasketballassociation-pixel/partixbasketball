@@ -83,5 +83,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({ success: true, count: rows.length });
   }
 
+  // Admin-only: delete a specific voter's entire ballot for a season
+  if (req.method === "DELETE") {
+    const admin = await requireAdmin(req, res);
+    if (!admin) return;
+    const { board_member_id, season } = req.query;
+    if (!board_member_id || !season)
+      return res.status(400).json({ error: "board_member_id and season required" });
+    const { error } = await supabase
+      .from("board_votes")
+      .delete()
+      .eq("board_member_id", board_member_id as string)
+      .eq("season", season as string);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json({ success: true });
+  }
+
   return res.status(405).json({ error: "Method not allowed" });
 }
