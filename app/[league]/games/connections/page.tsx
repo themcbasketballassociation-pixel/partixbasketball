@@ -555,15 +555,15 @@ export default function ConnectionsPage({ params }: { params?: Promise<{ league?
                     <button
                       key={p.mc_uuid}
                       onClick={() => toggleTile(p.mc_uuid)}
-                      className={`rounded-xl border-2 flex flex-col items-center justify-center gap-1.5 p-2 min-h-[80px] transition
+                      className={`rounded-xl border-2 flex flex-col items-center justify-center gap-2 p-2 min-h-[92px] transition
                         ${isSel
                           ? "border-blue-500 bg-blue-950 ring-2 ring-blue-400"
-                          : "border-slate-700 bg-slate-950 hover:border-slate-500 hover:bg-slate-800"
+                          : "border-slate-700 bg-slate-950 hover:border-slate-500 hover:bg-slate-800/60"
                         }`}
                     >
-                      <img src={`https://minotar.net/avatar/${p.mc_username}/28`} className="w-7 h-7 rounded"
-                        onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/28"; }} />
-                      <span className="text-[10px] font-semibold text-white text-center leading-tight break-all line-clamp-2">
+                      <img src={`https://minotar.net/avatar/${p.mc_username}/32`} className="w-8 h-8 rounded-lg"
+                        onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/32"; }} />
+                      <span className="text-[11px] font-semibold text-white text-center leading-tight break-all line-clamp-2 px-0.5">
                         {p.mc_username}
                       </span>
                     </button>

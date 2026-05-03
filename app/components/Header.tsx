@@ -49,7 +49,7 @@ export default function Header() {
   const section = parts.length >= 3 ? `/${parts[2]}` : "";
 
   return (
-    <header className="sticky top-0 z-40" style={{ background: "#0e0e0e", borderBottom: "1px solid #1e1e1e" }}>
+    <header className="sticky top-0 z-40" style={{ background: "#0c0f18", borderBottom: "1px solid #1c2028" }}>
       {/* Top bar */}
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 sm:px-6 h-16">
         {/* Logo + league name */}
@@ -71,7 +71,7 @@ export default function Header() {
         </div>
 
         {/* League switcher */}
-        <div className="flex items-center gap-0.5 rounded-xl p-1" style={{ background: "#161616", border: "1px solid #252525" }}>
+        <div className="flex items-center gap-0.5 rounded-xl p-1" style={{ background: "#13161e", border: "1px solid #232838" }}>
           {leagues.map((l) => (
             <button
               key={l.slug}
@@ -94,7 +94,7 @@ export default function Header() {
       </div>
 
       {/* Nav tabs */}
-      <div className="overflow-x-auto" style={{ background: "#0a0a0a", borderTop: "1px solid #181818" }}>
+      <div className="overflow-x-auto" style={{ background: "#090c14", borderTop: "1px solid #171b26" }}>
         <div className="mx-auto max-w-7xl px-4 sm:px-6 flex">
           {tabs.filter((tab) => !tab.only || tab.only.includes(selected)).map((tab) => {
             const href = tab.global ? tab.path : `/${selected}${tab.path}`;

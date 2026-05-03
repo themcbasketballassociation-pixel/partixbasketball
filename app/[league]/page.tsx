@@ -149,7 +149,7 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
   }, [slug]);
 
   return (
-    <main className="min-h-screen" style={{ background: "#080808" }}>
+    <main className="min-h-screen" style={{ background: "#08090e" }}>
       <div className="mx-auto px-4 sm:px-6 py-10" style={{ maxWidth: 1280 }}>
         {/* Hero */}
         <div className="rounded-2xl overflow-hidden mb-8" style={{ background: "linear-gradient(135deg, #111 0%, #1a1a1a 100%)", border: "1px solid #1e1e1e" }}>

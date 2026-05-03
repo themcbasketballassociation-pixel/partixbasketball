@@ -435,11 +435,11 @@ function GridCell({
 }) {
   if (cell.status === "correct") {
     return (
-      <div className="rounded-xl border-2 border-green-700 bg-green-950 flex flex-col items-center justify-center gap-1 p-1.5 min-h-[90px]">
+      <div className="rounded-xl border-2 border-green-700 bg-green-950 flex flex-col items-center justify-center gap-1.5 p-2 min-h-[108px]">
         <img
-          src={`https://minotar.net/avatar/${cell.player.mc_username}/36`}
-          className="w-9 h-9 rounded-lg ring-2 ring-green-700"
-          onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/36"; }}
+          src={`https://minotar.net/avatar/${cell.player.mc_username}/40`}
+          className="w-10 h-10 rounded-lg ring-2 ring-green-700"
+          onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/40"; }}
         />
         <span className="text-[10px] font-bold text-green-200 text-center leading-tight w-full break-all line-clamp-2 px-0.5">
           {cell.player.mc_username}
@@ -450,17 +450,17 @@ function GridCell({
 
   return (
     <button
-      className={`rounded-xl border-2 flex flex-col items-center justify-center min-h-[90px] transition
+      className={`rounded-xl border-2 flex flex-col items-center justify-center min-h-[108px] transition
         ${flash
           ? "border-red-600 bg-red-950"
           : disabled
             ? "border-slate-800 bg-slate-950 opacity-40 cursor-not-allowed"
-            : "border-slate-700 bg-slate-950 hover:border-blue-500 hover:bg-slate-800/60 cursor-pointer"
+            : "border-slate-700 bg-slate-950 hover:border-blue-500 hover:bg-slate-800/40 cursor-pointer"
         }`}
       onClick={onClick}
       disabled={disabled}
     >
-      <span className="text-2xl text-slate-700">+</span>
+      <span className="text-4xl font-thin text-slate-600">?</span>
     </button>
   );
 }
@@ -902,11 +902,27 @@ export default function GridPage({ params }: { params?: Promise<{ league?: strin
               </div>
             )}
 
-            {!isDone && (
-              <p className="mt-3 text-xs text-slate-600 text-center">
-                Click any empty cell and pick a player matching <em>both</em> the row and column. Wrong guesses still count. Each player can only be used once.
+            {/* How to Play */}
+            <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950 p-4">
+              <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest mb-2.5">How to Play</p>
+              <ul className="space-y-1.5">
+                {[
+                  ["🎯", "You have 9 guesses to complete the grid"],
+                  ["🔍", "Find a player that matches both the row and column criteria"],
+                  ["🚫", "Each player can only be used once per grid"],
+                  ["✅", "Green = Correct  |  ❌ Red = Wrong (still costs a guess)"],
+                  ["🏆", "Complete all 9 cells to finish the puzzle!"],
+                ].map(([icon, text], i) => (
+                  <li key={i} className="flex items-start gap-2 text-xs text-slate-500">
+                    <span className="flex-shrink-0 leading-relaxed">{icon}</span>
+                    <span className="leading-relaxed">{text}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-[10px] text-slate-700 mt-3 text-center font-semibold">
+                🌟 One puzzle per day • Resets at 10 AM EST
               </p>
-            )}
+            </div>
           </div>
         )}
       </div>
