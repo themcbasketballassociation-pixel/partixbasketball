@@ -489,11 +489,25 @@ function TeamCard({ team, players, capUsed, onClick, showCap }: { team: Team; pl
 }
 
 function EvenGrid({ teams, players, capByTeam, onTeamClick, showCap }: { teams: Team[]; players: PlayerTeam[]; capByTeam: Map<string, number>; onTeamClick: (t: Team) => void; showCap: boolean }) {
-  const cols = Math.max(2, Math.ceil(teams.length / 2));
+  const n = teams.length;
+  // Pick columns so rows are as balanced as possible.
+  // Last partial row is centered automatically by justify-content: center.
+  const cols =
+    n <= 1 ? 1 :
+    n <= 2 ? 2 :
+    n <= 3 ? 3 :   // single row
+    n <= 4 ? 2 :   // 2 × 2
+    n <= 6 ? 3 :   // 3+2 or 3+3
+    n <= 8 ? 4 :   // 4+3 or 4+4
+    4;
+  // flex-basis per card accounts for (cols-1) gaps of 14 px spread across cols cards
+  const basis = `calc(${(100 / cols).toFixed(4)}% - ${(14 * (cols - 1) / cols).toFixed(2)}px)`;
   return (
-    <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 14 }}>
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 14, justifyContent: "center" }}>
       {teams.map(t => (
-        <TeamCard key={t.id} team={t} players={players.filter(pt => pt.team_id === t.id)} capUsed={capByTeam.get(t.id) ?? 0} onClick={() => onTeamClick(t)} showCap={showCap} />
+        <div key={t.id} style={{ flex: `0 0 ${basis}`, minWidth: 0 }}>
+          <TeamCard team={t} players={players.filter(pt => pt.team_id === t.id)} capUsed={capByTeam.get(t.id) ?? 0} onClick={() => onTeamClick(t)} showCap={showCap} />
+        </div>
       ))}
     </div>
   );
