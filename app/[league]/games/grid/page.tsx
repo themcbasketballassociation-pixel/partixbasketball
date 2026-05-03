@@ -466,17 +466,8 @@ function GridCell({
 }
 
 function CategoryHeader({ cat }: { cat: Category }) {
-  const cls =
-    cat.type === "division" && cat.division === "East" ? "bg-orange-950 border-orange-800 text-orange-300" :
-    cat.type === "division" && cat.division === "West" ? "bg-blue-950 border-blue-800 text-blue-300" :
-    cat.type === "rings"    || cat.type === "accolade" ? "bg-yellow-950 border-yellow-800 text-yellow-300" :
-    cat.type === "team"                                ? "bg-slate-900 border-slate-700 text-white" :
-    cat.type === "played_with"                         ? "bg-purple-950 border-purple-800 text-purple-200" :
-    cat.type === "career_pts" || cat.type === "career_reb" || cat.type === "career_ast"
-                                                       ? "bg-cyan-950 border-cyan-800 text-cyan-300" :
-                                                         "bg-green-950 border-green-800 text-green-300";
   return (
-    <div className={`rounded-xl border flex flex-col items-center justify-center text-center px-1.5 py-2 min-h-[56px] gap-1 ${cls}`}>
+    <div className="rounded-xl border border-slate-700 bg-slate-800 flex flex-col items-center justify-center text-center px-2 py-2.5 min-h-[64px] gap-1">
       {cat.type === "played_with" && (
         <img
           src={`https://minotar.net/avatar/${cat.refName}/20`}
@@ -485,7 +476,7 @@ function CategoryHeader({ cat }: { cat: Category }) {
           alt=""
         />
       )}
-      <span className="text-[11px] font-semibold leading-tight">{cat.label}</span>
+      <span className="text-[11px] font-bold text-white leading-tight">{cat.label}</span>
     </div>
   );
 }
@@ -514,54 +505,61 @@ function PlayerModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/70 backdrop-blur-sm"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden">
-        <div className="px-5 pt-4 pb-3 border-b border-slate-800">
+      <div className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+        <div className="px-5 pt-4 pb-3 border-b border-slate-800 flex-shrink-0">
           <button className="float-right text-slate-500 hover:text-white text-lg leading-none" onClick={onClose}>✕</button>
-          <p className="text-xs text-slate-500 uppercase tracking-widest mb-1.5">Pick a player who…</p>
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="rounded-lg bg-orange-950 border border-orange-800 text-orange-300 text-xs font-semibold px-2 py-1">{row.label}</span>
-            <span className="text-slate-500 text-xs font-bold">+</span>
-            <span className="rounded-lg bg-blue-950 border border-blue-800 text-blue-300 text-xs font-semibold px-2 py-1">{col.label}</span>
-          </div>
+          <p className="text-xs text-slate-500 uppercase tracking-widest mb-2">Select: <span className="text-slate-300 font-bold">{row.label}</span> + <span className="text-slate-300 font-bold">{col.label}</span></p>
         </div>
-        <div className="px-4 py-2.5 border-b border-slate-800">
+        <div className="px-4 py-2.5 border-b border-slate-800 flex-shrink-0">
           <input
             ref={inputRef}
-            className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
+            className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
             placeholder="Search player..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <div className="max-h-72 overflow-y-auto divide-y divide-slate-800">
+        <div className="overflow-y-auto flex-1 divide-y divide-slate-800/60">
           {filtered.length === 0 ? (
-            <div className="px-4 py-4 text-sm text-slate-500">No players found</div>
+            <div className="px-4 py-6 text-sm text-slate-500 text-center">No players found</div>
           ) : (
-            filtered.map(p => (
-              <button
-                key={p.mc_uuid}
-                className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-left hover:bg-slate-800 transition"
-                onClick={() => {
-                  const correct =
-                    playerFits(p.mc_uuid, row, ptMap, statsMap, ringMap, accoladeMap) &&
-                    playerFits(p.mc_uuid, col, ptMap, statsMap, ringMap, accoladeMap);
-                  onSelect(p, correct);
-                }}
-              >
-                <img
-                  src={`https://minotar.net/avatar/${p.mc_username}/28`}
-                  className="w-7 h-7 rounded ring-1 ring-slate-700 flex-shrink-0"
-                  onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/28"; }}
-                />
-                <span className="text-white font-medium">{p.mc_username}</span>
-                {(ringMap[p.mc_uuid] ?? 0) > 0 && (
-                  <span className="text-yellow-500 text-xs ml-auto">{"🏆".repeat(Math.min(ringMap[p.mc_uuid], 3))}</span>
-                )}
-              </button>
-            ))
+            filtered.map(p => {
+              const s = statsMap[p.mc_uuid];
+              return (
+                <button
+                  key={p.mc_uuid}
+                  className="flex items-center gap-3 w-full px-4 py-3 text-left hover:bg-slate-800/70 transition"
+                  onClick={() => {
+                    const correct =
+                      playerFits(p.mc_uuid, row, ptMap, statsMap, ringMap, accoladeMap) &&
+                      playerFits(p.mc_uuid, col, ptMap, statsMap, ringMap, accoladeMap);
+                    onSelect(p, correct);
+                  }}
+                >
+                  <img
+                    src={`https://minotar.net/avatar/${p.mc_username}/36`}
+                    className="w-9 h-9 rounded-lg ring-1 ring-slate-700 flex-shrink-0"
+                    onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/36"; }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-white font-semibold text-sm truncate">{p.mc_username}</div>
+                    {s && (
+                      <div className="flex gap-3 mt-0.5 text-xs text-slate-500 font-mono">
+                        {s.ppg != null && <span>{s.ppg.toFixed(1)} PPG</span>}
+                        {s.rpg != null && <span>{s.rpg.toFixed(1)} RPG</span>}
+                        {s.apg != null && <span>{s.apg.toFixed(1)} APG</span>}
+                      </div>
+                    )}
+                  </div>
+                  {(ringMap[p.mc_uuid] ?? 0) > 0 && (
+                    <span className="text-yellow-500 text-xs flex-shrink-0">{"🏆".repeat(Math.min(ringMap[p.mc_uuid], 3))}</span>
+                  )}
+                </button>
+              );
+            })
           )}
         </div>
       </div>

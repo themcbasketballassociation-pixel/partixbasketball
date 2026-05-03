@@ -4,7 +4,17 @@ import { requireAdmin } from "../../../lib/adminAuth";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === "GET") {
-    const { game_id } = req.query;
+    const { game_id, mc_uuid } = req.query;
+
+    if (mc_uuid && !game_id) {
+      const { data, error } = await supabase
+        .from("game_stats")
+        .select("*")
+        .eq("mc_uuid", mc_uuid as string);
+      if (error) return res.status(500).json({ error: error.message });
+      return res.status(200).json(data);
+    }
+
     if (!game_id) return res.status(400).json({ error: "game_id required" });
     const { data, error } = await supabase.from("game_stats").select("*, players(mc_uuid, mc_username)").eq("game_id", game_id as string);
     if (error) return res.status(500).json({ error: error.message });

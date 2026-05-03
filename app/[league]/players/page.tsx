@@ -1,5 +1,6 @@
 "use client";
 import React from "react";
+import Link from "next/link";
 
 const leagueNames: Record<string, string> = {
   mba: "Minecraft Basketball Association",
@@ -10,251 +11,62 @@ const leagueNames: Record<string, string> = {
 type Player = { mc_uuid: string; mc_username: string; discord_id: string | null };
 type Team = { id: string; name: string; abbreviation: string };
 type StatRow = {
-  mc_uuid: string;
-  mc_username: string;
-  team: Team | null;
-  gp: number | null;
-  ppg: number | null;
-  rpg: number | null;
-  apg: number | null;
-  spg: number | null;
-  bpg: number | null;
-  fg_pct: number | null;
-  three_pt_made: number | null;
-  tppg: number | null;
-  three_pt_pct: number | null;
+  mc_uuid: string; mc_username: string; team: Team | null;
+  gp: number | null; ppg: number | null; rpg: number | null; apg: number | null;
 };
-type Accolade = {
-  id: string; type: string; season: string; description: string | null;
-  mc_uuid: string; players: { mc_uuid: string; mc_username: string };
-};
+type Accolade = { id: string; type: string; mc_uuid: string };
 type PlayerTeam = { mc_uuid: string; team_id: string; season: string | null };
 type TeamRecord = { team_id: string; wins: number; losses: number };
-type StatType = "regular" | "playoffs" | "combined";
 
-const na = (v: number | null | undefined, suffix = "") =>
-  v == null ? "—" : `${v}${suffix}`;
-
-function PlayerCard({
-  player,
-  statsRegular,
-  statsPlayoffs,
-  statsCombined,
-  accolades,
-  allTimeRecord,
-  onClose,
-}: {
-  player: Player;
-  statsRegular: StatRow | null;
-  statsPlayoffs: StatRow | null;
-  statsCombined: StatRow | null;
-  accolades: Accolade[];
-  allTimeRecord: { wins: number; losses: number };
-  onClose: () => void;
-}) {
-  const [statType, setStatType] = React.useState<StatType>("regular");
-  const stats = statType === "regular" ? statsRegular : statType === "playoffs" ? statsPlayoffs : statsCombined;
-  const rings = accolades.filter((a) => a.mc_uuid === player.mc_uuid && a.type === "Finals Champion");
-  const otherAccolades = accolades.filter((a) => a.mc_uuid === player.mc_uuid && a.type !== "Finals Champion");
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden">
-        {/* Header */}
-        <div className="relative bg-slate-950 px-6 pt-6 pb-4 border-b border-slate-800">
-          <button
-            onClick={onClose}
-            className="absolute top-4 right-4 text-slate-500 hover:text-white transition text-lg leading-none"
-          >
-            ✕
-          </button>
-          <div className="flex items-center gap-4">
-            <img
-              src={`https://minotar.net/avatar/${player.mc_username}/64`}
-              alt={player.mc_username}
-              className="w-16 h-16 rounded-xl ring-2 ring-slate-700 flex-shrink-0"
-              onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/64"; }}
-            />
-            <div className="min-w-0">
-              <h2 className="text-xl font-bold text-white truncate">{player.mc_username}</h2>
-              {stats?.team && (
-                <p className="text-slate-400 text-sm">{stats.team.name}</p>
-              )}
-              {/* Rings */}
-              {rings.length > 0 && (
-                <div className="flex items-center gap-1 mt-1 flex-wrap">
-                  {rings.map((r) => (
-                    <span
-                      key={r.id}
-                      title={`${r.season} Finals Champion`}
-                      className="inline-flex items-center gap-1 rounded-full bg-yellow-950 border border-yellow-700 px-2 py-0.5 text-xs text-yellow-300"
-                    >
-                      🏆 {r.season}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="overflow-y-auto max-h-[60vh]">
-          {/* All-time record */}
-          <div className="px-6 py-4 border-b border-slate-800">
-            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">All-Time Record</h3>
-            {allTimeRecord.wins === 0 && allTimeRecord.losses === 0 ? (
-              <p className="text-slate-600 text-sm">No record data.</p>
-            ) : (
-              <div className="flex items-center gap-3">
-                <span className="text-2xl font-bold text-white tabular-nums">
-                  {allTimeRecord.wins}-{allTimeRecord.losses}
-                </span>
-                {allTimeRecord.wins + allTimeRecord.losses > 0 && (
-                  <span className="text-slate-400 text-sm">
-                    ({Math.round(allTimeRecord.wins / (allTimeRecord.wins + allTimeRecord.losses) * 1000) / 10}% win rate)
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* All-time stats */}
-          <div className="px-6 py-4 border-b border-slate-800">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest">All-Time Stats</h3>
-              <div className="flex rounded-lg overflow-hidden border border-slate-700 text-xs">
-                {(["regular", "playoffs", "combined"] as StatType[]).map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setStatType(t)}
-                    className={`px-2.5 py-1 transition ${statType === t ? "bg-blue-600 text-white font-semibold" : "bg-slate-800 text-slate-400 hover:text-white"}`}
-                  >
-                    {t === "regular" ? "Regular" : t === "playoffs" ? "Playoffs" : "Combined"}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {!stats ? (
-              <p className="text-slate-600 text-sm">No stats recorded.</p>
-            ) : (
-              <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
-                {[
-                  { label: "GP",   value: na(stats.gp) },
-                  { label: "PPG",  value: na(stats.ppg) },
-                  { label: "RPG",  value: na(stats.rpg) },
-                  { label: "APG",  value: na(stats.apg) },
-                  { label: "SPG",  value: na(stats.spg) },
-                  { label: "BPG",  value: na(stats.bpg) },
-                  { label: "FG%",  value: stats.fg_pct == null ? "—" : `${stats.fg_pct}%` },
-                  { label: "3s",   value: na(stats.three_pt_made) },
-                  { label: "3PPG", value: na(stats.tppg) },
-                  { label: "3FG%", value: stats.three_pt_pct == null ? "—" : `${stats.three_pt_pct}%` },
-                ].map(({ label, value }) => (
-                  <div key={label} className="rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 text-center">
-                    <div className="text-xs text-slate-500 mb-0.5">{label}</div>
-                    <div className="text-sm font-bold text-white tabular-nums">{value}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Finals */}
-          <div className="px-6 py-4 border-b border-slate-800">
-            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Finals</h3>
-            {rings.length === 0 ? (
-              <p className="text-slate-600 text-sm">No championships.</p>
-            ) : (
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-yellow-400 font-bold text-lg">{rings.length}×</span>
-                <span className="text-yellow-300 text-sm">Finals Champion</span>
-                <div className="flex gap-1 flex-wrap">
-                  {rings.map((r) => (
-                    <span key={r.id} className="text-xs text-yellow-500 bg-yellow-950 border border-yellow-800 rounded-full px-2 py-0.5">
-                      {r.season}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Accolades */}
-          <div className="px-6 py-4">
-            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Accolades</h3>
-            {otherAccolades.length === 0 ? (
-              <p className="text-slate-600 text-sm">No accolades yet.</p>
-            ) : (
-              <div className="space-y-2">
-                {otherAccolades.map((a) => (
-                  <div key={a.id} className="flex items-center justify-between rounded-lg bg-slate-950 border border-slate-800 px-3 py-2">
-                    <span className="font-semibold text-zinc-300 text-sm">{a.type}</span>
-                    <div className="text-right">
-                      <div className="text-xs text-slate-500">{a.season}</div>
-                      {a.description && <div className="text-xs text-slate-600">{a.description}</div>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+const na = (v: number | null | undefined, dec = 0) =>
+  v == null ? "—" : dec > 0 ? v.toFixed(dec) : String(Math.round(v));
 
 export default function PlayersPage({ params }: { params?: Promise<{ league?: string }> }) {
   const resolved = React.use(params ?? Promise.resolve({})) as { league?: string };
   const slug = resolved.league ?? "";
   const leagueDisplay = leagueNames[slug] ?? slug.toUpperCase();
 
-  const [players, setPlayers] = React.useState<Player[]>([]);
-  const [statsMapRegular, setStatsMapRegular] = React.useState<Record<string, StatRow>>({});
-  const [statsMapPlayoffs, setStatsMapPlayoffs] = React.useState<Record<string, StatRow>>({});
-  const [statsMapCombined, setStatsMapCombined] = React.useState<Record<string, StatRow>>({});
+  const [statsMap, setStatsMap] = React.useState<Record<string, StatRow>>({});
   const [accolades, setAccolades] = React.useState<Accolade[]>([]);
   const [recordMap, setRecordMap] = React.useState<Record<string, { wins: number; losses: number }>>({});
   const [playerTeams, setPlayerTeams] = React.useState<PlayerTeam[]>([]);
+  const [sorted, setSorted] = React.useState<Player[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const [selected, setSelected] = React.useState<Player | null>(null);
   const [search, setSearch] = React.useState("");
 
   React.useEffect(() => {
     if (!slug) return;
     Promise.all([
-      fetch("/api/players").then((r) => r.json()),
-      fetch(`/api/stats?league=${slug}&season=all&type=regular`).then((r) => r.json()),
-      fetch(`/api/stats?league=${slug}&season=all&type=playoffs`).then((r) => r.json()),
-      fetch(`/api/stats?league=${slug}&season=all&type=combined`).then((r) => r.json()),
-      fetch(`/api/accolades?league=${slug}`).then((r) => r.json()),
-      fetch(`/api/teams/records?league=${slug}`).then((r) => r.json()),
-      fetch(`/api/teams/players?league=${slug}`).then((r) => r.json()),
-    ]).then(([p, sReg, sPly, sCom, a, rec, pt]) => {
-      setPlayers(Array.isArray(p) ? p : []);
-      const toMap = (rows: StatRow[]) => {
-        const map: Record<string, StatRow> = {};
-        if (Array.isArray(rows)) rows.forEach((row) => { map[row.mc_uuid] = row; });
-        return map;
-      };
-      setStatsMapRegular(toMap(sReg));
-      setStatsMapPlayoffs(toMap(sPly));
-      setStatsMapCombined(toMap(sCom));
-      setAccolades(Array.isArray(a) ? a : []);
+      fetch("/api/players").then(r => r.json()),
+      fetch(`/api/stats?league=${slug}&season=all&type=regular`).then(r => r.json()),
+      fetch(`/api/accolades?league=${slug}`).then(r => r.json()),
+      fetch(`/api/teams/records?league=${slug}`).then(r => r.json()),
+      fetch(`/api/teams/players?league=${slug}`).then(r => r.json()),
+    ]).then(([players, stats, accs, records, pt]) => {
+      const playersArr: Player[] = Array.isArray(players) ? players : [];
+      const statsArr: StatRow[] = Array.isArray(stats) ? stats : [];
+      const sm: Record<string, StatRow> = {};
+      statsArr.forEach(s => { sm[s.mc_uuid] = s; });
+      setStatsMap(sm);
+      setAccolades(Array.isArray(accs) ? accs : []);
+
       const rmap: Record<string, { wins: number; losses: number }> = {};
-      if (Array.isArray(rec)) rec.forEach((r: TeamRecord) => { rmap[r.team_id] = { wins: r.wins, losses: r.losses }; });
+      if (Array.isArray(records)) records.forEach((r: TeamRecord) => { rmap[r.team_id] = { wins: r.wins, losses: r.losses }; });
       setRecordMap(rmap);
-      setPlayerTeams(Array.isArray(pt) ? pt : []);
+
+      const ptArr: PlayerTeam[] = Array.isArray(pt) ? pt : [];
+      setPlayerTeams(ptArr);
+
+      const leagueUuids = new Set(ptArr.map(p => p.mc_uuid));
+      const leaguePlayers = playersArr.filter(p => leagueUuids.has(p.mc_uuid) || sm[p.mc_uuid]);
+      const s2 = [...leaguePlayers].sort((a, b) => (sm[b.mc_uuid]?.ppg ?? 0) - (sm[a.mc_uuid]?.ppg ?? 0));
+      setSorted(s2);
       setLoading(false);
     });
   }, [slug]);
 
-  // Compute all-time W/L for a player
   const getRecord = (uuid: string) => {
-    const teams = playerTeams.filter((pt) => pt.mc_uuid === uuid);
+    const teams = playerTeams.filter(pt => pt.mc_uuid === uuid);
     let wins = 0, losses = 0;
     for (const pt of teams) {
       const rec = recordMap[pt.team_id];
@@ -264,104 +76,81 @@ export default function PlayersPage({ params }: { params?: Promise<{ league?: st
   };
 
   const filtered = search.trim()
-    ? players.filter((p) => p.mc_username.toLowerCase().includes(search.toLowerCase()))
-    : players;
-
-  const sorted = [...filtered].sort((a, b) => {
-    const as = statsMapRegular[a.mc_uuid];
-    const bs = statsMapRegular[b.mc_uuid];
-    if (!as && !bs) return 0;
-    if (!as) return 1;
-    if (!bs) return -1;
-    return (bs.ppg ?? 0) - (as.ppg ?? 0);
-  });
+    ? sorted.filter(p => p.mc_username.toLowerCase().includes(search.toLowerCase()))
+    : sorted;
 
   return (
-    <>
-      {selected && (
-        <PlayerCard
-          player={selected}
-          statsRegular={statsMapRegular[selected.mc_uuid] ?? null}
-          statsPlayoffs={statsMapPlayoffs[selected.mc_uuid] ?? null}
-          statsCombined={statsMapCombined[selected.mc_uuid] ?? null}
-          accolades={accolades}
-          allTimeRecord={getRecord(selected.mc_uuid)}
-          onClose={() => setSelected(null)}
-        />
-      )}
-
-      <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
-        <div className="px-6 py-5 border-b border-slate-800 flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h2 className="text-2xl font-bold text-white">Players</h2>
-            <p className="text-slate-400 text-sm mt-0.5">{leagueDisplay}</p>
-          </div>
-          <input
-            className="rounded-lg border border-slate-700 bg-slate-800 text-white text-sm px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-zinc-500 w-48"
-            placeholder="Search players..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+    <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
+      <div className="px-6 py-5 border-b border-slate-800 flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h2 className="text-2xl font-bold text-white">Players</h2>
+          <p className="text-slate-400 text-sm mt-0.5">{leagueDisplay}</p>
         </div>
+        <input
+          className="rounded-lg border border-slate-700 bg-slate-800 text-white text-sm px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 w-48"
+          placeholder="Search players..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+      </div>
 
-        {loading ? (
-          <div className="p-10 text-center text-slate-500">Loading players...</div>
-        ) : sorted.length === 0 ? (
-          <div className="p-10 text-center text-slate-500">No players found.</div>
-        ) : (
-          <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-            {sorted.map((p) => {
-              const st = statsMapRegular[p.mc_uuid];
-              const rings = accolades.filter((a) => a.mc_uuid === p.mc_uuid && a.type === "Finals Champion");
-              const rec = getRecord(p.mc_uuid);
-              return (
-                <button
-                  key={p.mc_uuid}
-                  onClick={() => setSelected(p)}
-                  className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-4 text-left hover:border-slate-500 hover:bg-slate-800/50 transition group"
-                >
-                  <div className="flex items-center gap-3 mb-3">
-                    <img
-                      src={`https://minotar.net/avatar/${p.mc_username}/48`}
-                      alt={p.mc_username}
-                      className="w-12 h-12 rounded-lg ring-1 ring-slate-700 flex-shrink-0 group-hover:ring-slate-500 transition"
-                      onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/48"; }}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="font-semibold text-white truncate">{p.mc_username}</div>
-                      <div className="text-xs text-slate-500 truncate">{st?.team?.name ?? "—"}</div>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        {(rec.wins > 0 || rec.losses > 0) && (
-                          <span className="text-xs text-slate-400 tabular-nums">{rec.wins}-{rec.losses}</span>
-                        )}
-                        {rings.length > 0 && (
-                          <span className="text-sm">{rings.map(() => "🏆").join("")}</span>
-                        )}
-                      </div>
+      {loading ? (
+        <div className="p-10 text-center text-slate-500">Loading players...</div>
+      ) : filtered.length === 0 ? (
+        <div className="p-10 text-center text-slate-500">No players found.</div>
+      ) : (
+        <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+          {filtered.map(p => {
+            const st = statsMap[p.mc_uuid];
+            const rings = accolades.filter(a => a.mc_uuid === p.mc_uuid && a.type === "Finals Champion");
+            const rec = getRecord(p.mc_uuid);
+            return (
+              <Link
+                key={p.mc_uuid}
+                href={`/${slug}/players/${encodeURIComponent(p.mc_username)}`}
+                className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-4 text-left hover:border-slate-500 hover:bg-slate-800/50 transition group block"
+              >
+                <div className="flex items-center gap-3 mb-3">
+                  <img
+                    src={`https://minotar.net/avatar/${p.mc_username}/48`}
+                    alt={p.mc_username}
+                    className="w-12 h-12 rounded-lg ring-1 ring-slate-700 flex-shrink-0 group-hover:ring-slate-500 transition"
+                    onError={e => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/48"; }}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-semibold text-white truncate">{p.mc_username}</div>
+                    <div className="text-xs text-slate-500 truncate">{st?.team?.name ?? "—"}</div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      {(rec.wins > 0 || rec.losses > 0) && (
+                        <span className="text-xs text-slate-400 tabular-nums">{rec.wins}-{rec.losses}</span>
+                      )}
+                      {rings.length > 0 && (
+                        <span className="text-sm">{rings.map(() => "🏆").join("")}</span>
+                      )}
                     </div>
                   </div>
-                  {st ? (
-                    <div className="grid grid-cols-3 gap-1.5 text-center">
-                      {[
-                        { label: "PPG", value: na(st.ppg) },
-                        { label: "RPG", value: na(st.rpg) },
-                        { label: "APG", value: na(st.apg) },
-                      ].map(({ label, value }) => (
-                        <div key={label} className="rounded-md bg-slate-900 border border-slate-800 py-1.5">
-                          <div className="text-xs text-slate-500">{label}</div>
-                          <div className="text-sm font-bold text-white tabular-nums">{value}</div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-xs text-slate-600 text-center py-1">No stats yet</div>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </>
+                </div>
+                {st ? (
+                  <div className="grid grid-cols-3 gap-1.5 text-center">
+                    {[
+                      { label: "PPG", value: na(st.ppg, 1) },
+                      { label: "RPG", value: na(st.rpg, 1) },
+                      { label: "APG", value: na(st.apg, 1) },
+                    ].map(({ label, value }) => (
+                      <div key={label} className="rounded-md bg-slate-900 border border-slate-800 py-1.5">
+                        <div className="text-xs text-slate-500">{label}</div>
+                        <div className="text-sm font-bold text-white tabular-nums">{value}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-xs text-slate-600 text-center py-1">No stats yet</div>
+                )}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
