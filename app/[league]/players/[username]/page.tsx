@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 type Player = { mc_uuid: string; mc_username: string; discord_id: string | null };
 type Team = { id: string; name: string; abbreviation: string; logo_url: string | null };
@@ -50,9 +51,11 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
   const [notFound, setNotFound] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [statType, setStatType] = useState<StatType>("regular");
+  const [playerTeamIds, setPlayerTeamIds] = useState<Set<string>>(new Set());
   const [seasons, setSeasons] = useState<string[]>([]);
   const [selectedSeason, setSelectedSeason] = useState("all");
   const [statsLoading, setStatsLoading] = useState(false);
+  const router = useRouter();
 
   // Initial load: player info, accolades, records, team
   useEffect(() => {
@@ -76,6 +79,7 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
       const teamsArr: Team[] = Array.isArray(teams) ? teams : [];
 
       const mine = ptArr.filter(pt => pt.mc_uuid === found.mc_uuid);
+      setPlayerTeamIds(new Set(mine.map(pt => pt.team_id)));
       if (mine.length > 0) {
         const sorted = [...mine].sort((a, b) => {
           const na = a.season ? parseInt(a.season.replace(/\D/g, "") || "0") : -1;
@@ -390,23 +394,52 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
                   <tbody>
                     {gameLogs.map(({ game, stat }) => {
                       const reb = (stat.rebounds_off ?? 0) + (stat.rebounds_def ?? 0);
-                      const isHome = game.home_team_id === currentTeam?.id;
-                      const opponent = isHome ? game.away_team?.abbreviation : game.home_team?.abbreviation;
-                      const opponentLogo = isHome ? game.away_team?.logo_url : game.home_team?.logo_url;
-                      const score = game.home_score != null ? `${game.home_score}-${game.away_score}` : null;
+                      // Use all historical team IDs (not just current team) to correctly determine home/away
+                      const playerIsHome = playerTeamIds.has(game.home_team_id);
+                      const playerIsAway = playerTeamIds.has(game.away_team_id);
+                      // If matched to both or neither, assume away (show home team as opponent)
+                      const effectivelyHome = playerIsHome && !playerIsAway;
+                      const myTeam = effectivelyHome ? game.home_team : game.away_team;
+                      const opponent = effectivelyHome ? game.away_team : game.home_team;
+                      const myScore = effectivelyHome ? game.home_score : game.away_score;
+                      const oppScore = effectivelyHome ? game.away_score : game.home_score;
+                      const won = myScore != null && oppScore != null && myScore > oppScore;
+                      const lost = myScore != null && oppScore != null && myScore < oppScore;
                       return (
-                        <tr key={stat.id} className="border-b border-slate-800/50 hover:bg-slate-800/30 transition">
-                          <td className="px-3 py-3 text-slate-500">
+                        <tr
+                          key={stat.id}
+                          className="border-b border-slate-800/50 hover:bg-slate-700/30 transition cursor-pointer"
+                          onClick={() => router.push(`/${slug}/boxscores/${game.id}`)}
+                        >
+                          <td className="px-3 py-3 text-slate-500 whitespace-nowrap">
                             {new Date(game.scheduled_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                           </td>
                           <td className="px-3 py-3">
                             <div className="flex items-center gap-2">
-                              {opponentLogo
-                                ? <img src={opponentLogo} className="w-5 h-5 object-contain flex-shrink-0" alt="" />
+                              {/* Player's team logo */}
+                              {myTeam?.logo_url
+                                ? <img src={myTeam.logo_url} className="w-5 h-5 object-contain flex-shrink-0" alt="" />
                                 : <div className="w-5 h-5 rounded bg-slate-800 flex-shrink-0" />}
-                              <span className="text-slate-500 text-[10px]">{isHome ? "vs" : "@"}</span>
-                              <span className="font-semibold text-white">{opponent ?? "?"}</span>
-                              {score && <span className="text-slate-600 ml-1">{score}</span>}
+                              {/* vs / @ */}
+                              <span className="text-slate-600 text-[10px] font-semibold">{effectivelyHome ? "vs" : "@"}</span>
+                              {/* Opponent logo */}
+                              {opponent?.logo_url
+                                ? <img src={opponent.logo_url} className="w-5 h-5 object-contain flex-shrink-0" alt="" />
+                                : <div className="w-5 h-5 rounded bg-slate-800 flex-shrink-0" />}
+                              {/* Opponent abbreviation */}
+                              <span className="font-bold text-white">{opponent?.abbreviation ?? "?"}</span>
+                              {/* Score */}
+                              {myScore != null && (
+                                <span className={`ml-1 tabular-nums font-semibold ${won ? "text-green-400" : lost ? "text-red-400" : "text-slate-500"}`}>
+                                  {myScore}-{oppScore}
+                                </span>
+                              )}
+                              {/* Win/Loss badge */}
+                              {myScore != null && (
+                                <span className={`text-[9px] font-black px-1 py-0.5 rounded ${won ? "bg-green-950 text-green-400" : lost ? "bg-red-950 text-red-400" : "bg-slate-800 text-slate-500"}`}>
+                                  {won ? "W" : lost ? "L" : "—"}
+                                </span>
+                              )}
                             </div>
                           </td>
                           <td className="px-3 py-3 text-right font-black text-white tabular-nums">{stat.points ?? "—"}</td>
