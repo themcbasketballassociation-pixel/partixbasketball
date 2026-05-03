@@ -81,7 +81,13 @@ export default function Header() {
               title="Your Profile"
             >
               {session.user?.image ? (
-                <img src={session.user.image} className="w-7 h-7 rounded-full ring-1 ring-slate-600" alt="" />
+                <img
+                  src={session.user.image}
+                  referrerPolicy="no-referrer"
+                  className="w-7 h-7 rounded-full ring-1 ring-slate-600"
+                  alt=""
+                  onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                />
               ) : (
                 <div className="w-7 h-7 rounded-full bg-indigo-800 flex items-center justify-center text-xs text-white font-bold">
                   {session.user?.name?.[0] ?? "?"}
