@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 
 type Player = { mc_uuid: string; mc_username: string; discord_id: string | null };
@@ -50,27 +50,25 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
   const [notFound, setNotFound] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [statType, setStatType] = useState<StatType>("regular");
+  const [seasons, setSeasons] = useState<string[]>([]);
+  const [selectedSeason, setSelectedSeason] = useState("all");
+  const [statsLoading, setStatsLoading] = useState(false);
 
+  // Initial load: player info, accolades, records, team
   useEffect(() => {
     if (!slug || !username) return;
     Promise.all([
       fetch("/api/players").then(r => r.json()),
-      fetch(`/api/stats?league=${slug}&season=all&type=regular`).then(r => r.json()),
-      fetch(`/api/stats?league=${slug}&season=all&type=playoffs`).then(r => r.json()),
-      fetch(`/api/stats?league=${slug}&season=all&type=combined`).then(r => r.json()),
       fetch(`/api/accolades?league=${slug}`).then(r => r.json()),
       fetch(`/api/teams/records?league=${slug}`).then(r => r.json()),
       fetch(`/api/teams/players?league=${slug}`).then(r => r.json()),
       fetch(`/api/teams?league=${slug}`).then(r => r.json()),
-    ]).then(([players, sReg, sPly, sCom, accs, records, playerTeams, teams]) => {
+    ]).then(([players, accs, records, playerTeams, teams]) => {
       const playersArr: Player[] = Array.isArray(players) ? players : [];
       const found = playersArr.find(p => p.mc_username.toLowerCase() === username.toLowerCase());
       if (!found) { setNotFound(true); setLoading(false); return; }
       setPlayer(found);
 
-      if (Array.isArray(sReg)) setStatsRegular(sReg.find((s: StatRow) => s.mc_uuid === found.mc_uuid) ?? null);
-      if (Array.isArray(sPly)) setStatsPlayoffs(sPly.find((s: StatRow) => s.mc_uuid === found.mc_uuid) ?? null);
-      if (Array.isArray(sCom)) setStatsCombined(sCom.find((s: StatRow) => s.mc_uuid === found.mc_uuid) ?? null);
       if (Array.isArray(accs)) setAccolades(accs.filter((a: Accolade) => a.mc_uuid === found.mc_uuid));
 
       const ptArr: PlayerTeam[] = Array.isArray(playerTeams) ? playerTeams : [];
@@ -97,6 +95,43 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
     });
   }, [slug, username]);
 
+  // Fetch available seasons
+  useEffect(() => {
+    if (!slug) return;
+    fetch(`/api/stats/seasons?league=${slug}`)
+      .then(r => r.json())
+      .then((data: { season: string }[]) => {
+        if (Array.isArray(data)) {
+          const reg = [...new Set(
+            data.map(d => d.season).filter(s => s && !s.toLowerCase().includes("playoff"))
+          )].sort((a, b) => b.localeCompare(a));
+          setSeasons(reg);
+        }
+      })
+      .catch(() => {});
+  }, [slug]);
+
+  // Re-fetch stats whenever player or selected season changes
+  const fetchStats = useCallback(async (p: Player, league: string, season: string) => {
+    setStatsLoading(true);
+    const enc = encodeURIComponent(season);
+    const [sReg, sPly, sCom] = await Promise.all([
+      fetch(`/api/stats?league=${league}&season=${enc}&type=regular`).then(r => r.json()),
+      fetch(`/api/stats?league=${league}&season=${enc}&type=playoffs`).then(r => r.json()),
+      fetch(`/api/stats?league=${league}&season=${enc}&type=combined`).then(r => r.json()),
+    ]);
+    setStatsRegular(Array.isArray(sReg) ? sReg.find((s: StatRow) => s.mc_uuid === p.mc_uuid) ?? null : null);
+    setStatsPlayoffs(Array.isArray(sPly) ? sPly.find((s: StatRow) => s.mc_uuid === p.mc_uuid) ?? null : null);
+    setStatsCombined(Array.isArray(sCom) ? sCom.find((s: StatRow) => s.mc_uuid === p.mc_uuid) ?? null : null);
+    setStatsLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (!player || !slug) return;
+    fetchStats(player, slug, selectedSeason);
+  }, [player, slug, selectedSeason, fetchStats]);
+
+  // Game log
   useEffect(() => {
     if (!player || !slug) return;
     Promise.all([
@@ -151,24 +186,24 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
           ← Players
         </Link>
 
-        <div className="flex items-end gap-6 flex-wrap">
-          {/* Minecraft body render */}
-          <div className="flex-shrink-0 self-end">
+        <div className="flex items-center gap-6 flex-wrap">
+          {/* Big Minecraft head */}
+          <div className="flex-shrink-0">
             <img
-              src={`https://minotar.net/body/${player.mc_username}/120`}
+              src={`https://minotar.net/helm/${player.mc_username}/160`}
               alt={player.mc_username}
-              className="h-44 w-auto object-contain drop-shadow-2xl"
-              onError={e => { (e.target as HTMLImageElement).src = "https://minotar.net/body/MHF_Steve/120"; }}
+              className="w-28 h-28 rounded-2xl object-contain drop-shadow-2xl"
+              style={{ imageRendering: "pixelated" }}
+              onError={e => { (e.target as HTMLImageElement).src = "https://minotar.net/helm/MHF_Steve/160"; }}
             />
           </div>
 
           {/* Player info */}
-          <div className="flex-1 min-w-[180px] pb-1">
+          <div className="flex-1 min-w-[180px]">
             <h1 className="text-4xl font-black text-white leading-tight">{player.mc_username}</h1>
-            <p className="text-slate-500 text-sm mt-0.5">@{player.mc_username.toLowerCase()}</p>
 
             {rings.length > 0 && (
-              <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+              <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                 {rings.map(r => (
                   <span key={r.id} className="inline-flex items-center gap-1 rounded-full bg-yellow-950 border border-yellow-700 px-2.5 py-0.5 text-xs text-yellow-300 font-semibold">
                     🏆 {r.season}
@@ -177,7 +212,7 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
               </div>
             )}
 
-            <div className="mt-4 rounded-xl border border-slate-700 bg-slate-900/80 px-4 py-3 flex items-center gap-3 max-w-[260px]">
+            <div className="mt-3 rounded-xl border border-slate-700 bg-slate-900/80 px-4 py-3 flex items-center gap-3 max-w-[260px]">
               {currentTeam?.logo_url
                 ? <img src={currentTeam.logo_url} className="w-8 h-8 object-contain flex-shrink-0" alt="" />
                 : <div className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 flex-shrink-0" />}
@@ -187,24 +222,40 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
               </div>
             </div>
 
-            <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-blue-950 border border-blue-800 px-3 py-1 text-xs text-blue-300 font-semibold">
+            <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-blue-950 border border-blue-800 px-3 py-1 text-xs text-blue-300 font-semibold">
               Player
             </span>
           </div>
 
-          {/* Stats cards 2×2 */}
-          <div className="grid grid-cols-2 gap-2 flex-shrink-0 self-end pb-1">
-            {[
-              { label: "GP",   value: fmt(statsRegular?.gp),  color: "text-white" },
-              { label: "W",    value: String(record.wins),    color: "text-green-400" },
-              { label: "L",    value: String(record.losses),  color: "text-red-400" },
-              { label: "WIN%", value: winPct,                 color: "text-yellow-400" },
-            ].map(({ label, value, color }) => (
-              <div key={label} className="rounded-xl border border-slate-700 bg-slate-900/80 px-5 py-3 text-center min-w-[80px]">
-                <div className={`text-2xl font-black leading-none ${color}`}>{value}</div>
-                <div className="text-[9px] text-slate-600 uppercase tracking-widest mt-1 font-bold">{label}</div>
-              </div>
-            ))}
+          {/* Right side: season picker + stat cards */}
+          <div className="flex flex-col gap-2 flex-shrink-0 self-start pt-1">
+            {/* Season selector */}
+            <div className="flex items-center gap-2 justify-end">
+              <span className="text-xs text-slate-500 font-medium">Season</span>
+              <select
+                value={selectedSeason}
+                onChange={e => setSelectedSeason(e.target.value)}
+                className="rounded-lg border border-slate-700 bg-slate-800 text-white text-xs px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+              >
+                <option value="all">Career</option>
+                {seasons.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+
+            {/* Stat cards 2×2 */}
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { label: "GP",   value: statsLoading ? "…" : fmt(statsRegular?.gp),  color: "text-white" },
+                { label: "W",    value: String(record.wins),    color: "text-green-400" },
+                { label: "L",    value: String(record.losses),  color: "text-red-400" },
+                { label: "WIN%", value: winPct,                 color: "text-yellow-400" },
+              ].map(({ label, value, color }) => (
+                <div key={label} className="rounded-xl border border-slate-700 bg-slate-900/80 px-5 py-3 text-center min-w-[80px]">
+                  <div className={`text-2xl font-black leading-none ${color}`}>{value}</div>
+                  <div className="text-[9px] text-slate-600 uppercase tracking-widest mt-1 font-bold">{label}</div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -280,8 +331,10 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
         {/* Statistics */}
         {activeTab === "stats" && (
           <div className="rounded-xl border border-slate-800 bg-slate-950 p-5">
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-sm font-bold text-white">Career Statistics</h3>
+            <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
+              <h3 className="text-sm font-bold text-white">
+                {selectedSeason === "all" ? "Career" : selectedSeason} Statistics
+              </h3>
               <div className="flex rounded-lg overflow-hidden border border-slate-700 text-xs">
                 {(["regular", "playoffs", "combined"] as StatType[]).map(t => (
                   <button key={t} onClick={() => setStatType(t)}
@@ -291,7 +344,9 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
                 ))}
               </div>
             </div>
-            {!activeStats ? (
+            {statsLoading ? (
+              <p className="text-slate-600 text-sm text-center py-6">Loading stats…</p>
+            ) : !activeStats ? (
               <p className="text-slate-600 text-sm text-center py-6">No stats recorded.</p>
             ) : (
               <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
