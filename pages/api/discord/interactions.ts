@@ -303,7 +303,7 @@ async function buildRosterEmbed(league: string, teamId: string, season: string) 
 
   if (!team) return null;
   const t = team as { id: string; name: string; abbreviation: string; color2: string | null };
-  const cs = (contracts ?? []) as { mc_uuid: string; amount: number; players: { mc_username: string } }[];
+  const cs = (contracts ?? []) as unknown as { mc_uuid: string; amount: number; players: { mc_username: string } }[];
   const os = (owners ?? []) as { owner_name: string | null; discord_id: string | null; role: string | null }[];
 
   const totalCap = cs.reduce((s, c) => s + (c.amount ?? 0), 0);

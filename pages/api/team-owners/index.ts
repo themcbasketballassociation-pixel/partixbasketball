@@ -74,7 +74,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "PATCH") {
     const { getServerSession } = await import("next-auth");
     const { authOptions } = await import("../auth/[...nextauth]");
-    const session = await getServerSession(req, res, authOptions as Parameters<typeof getServerSession>[2]);
+    const session = await getServerSession(req, res, authOptions as any);
     if (!session) return res.status(401).json({ error: "Unauthorized" });
 
     const discordId = ((session as { user?: { id?: string } }).user as { id?: string })?.id;
@@ -108,7 +108,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "DELETE") {
     const { getServerSession } = await import("next-auth");
     const { authOptions } = await import("../auth/[...nextauth]");
-    const session = await getServerSession(req, res, authOptions as Parameters<typeof getServerSession>[2]);
+    const session = await getServerSession(req, res, authOptions as any);
     if (!session) return res.status(401).json({ error: "Unauthorized" });
     const discordId = ((session as { user?: { id?: string } }).user as { id?: string })?.id;
     const isAdmin = process.env.ADMIN_DISCORD_IDS?.split(",").map((s) => s.trim()).includes(discordId ?? "");
