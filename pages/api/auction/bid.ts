@@ -11,6 +11,7 @@ const MAX_PLAYER_VALUE = 12000;
 const MIN_PLAYER_VALUE = 1000;
 const TWO_SEASON_BONUS = 500;
 const TWO_SEASON_MIN = 5000;
+const TWO_SEASON_MAX = 8000;
 const BID_INCREMENT = 250;
 // Roster viability: top-2 salaries ≤ court_cap − 2 minimum roster spots
 const VIABILITY_MAX = COURT_CAP - 2 * MIN_PLAYER_VALUE; // 20,000
@@ -47,6 +48,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: `Bid must be a multiple of ${BID_INCREMENT}` });
   if (is_two_season && amount < TWO_SEASON_MIN)
     return res.status(400).json({ error: `2-season contracts require a minimum bid of ${TWO_SEASON_MIN}` });
+  if (is_two_season && amount >= TWO_SEASON_MAX)
+    return res.status(400).json({ error: `2-season contracts are not allowed on bids of ${TWO_SEASON_MAX.toLocaleString()} or more` });
 
   const effectiveValue = amount + (is_two_season ? TWO_SEASON_BONUS : 0);
 

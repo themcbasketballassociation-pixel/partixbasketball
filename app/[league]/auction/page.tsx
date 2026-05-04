@@ -306,7 +306,7 @@ export default function AuctionPage() {
           {[
             { title: "Salary Caps (per team)", items: ["Total cap: 25,000 per team", "Court cap: 22,000 per team", "Max per player: 12,000", "Min bid: 1,000", "Pending bids hold cap until player signs"] },
             { title: "Bid Rules", items: ["Increments of 250 only", "Must beat current effective value", "Bidding closes 72 hours after the auction launches", "After bidding closes, the player accepts a team's offer"] },
-            { title: "2-Season Contracts", items: ["Available on bids ≥ 5,000", "Adds +500 effective value", "Must declare at time of bid", "Cap hit = actual bid only"] },
+            { title: "2-Season Contracts", items: ["Available on bids 5,000 – 7,750", "Not allowed on bids ≥ 8,000", "Adds +500 effective value", "Must declare at time of bid", "Cap hit = actual bid only"] },
             { title: "Player Choice", items: ["If any bid within 500 of top", "Player picks their team", "Based on effective values", "All qualifying bids eligible"] },
             { title: "Roster Viability", items: ["Owner's contract + highest bid ≤ 20,000", "Must fit 2 more min-salary players", "Invalid bids are void", "Clock doesn't reset on void bids"] },
             { title: "Trades & Retention", items: ["Retention = the trading team reduces a player's contract amount", "Max 10% off any single contract", "Max 2 contracts retained per team total", "Retained amount stays on the sending team's cap"] },
