@@ -210,6 +210,7 @@ function CommentsSection({ gameId, slug }: { gameId: string; slug: string }) {
   const [commentText, setCommentText]       = useState("");
   const [posting, setPosting]               = useState(false);
   const [postErr, setPostErr]               = useState("");
+  const [replyingTo, setReplyingTo]         = useState<string | null>(null); // mc_username or discord_name
 
   // @ mention autocomplete
   const [allPlayers, setAllPlayers]         = useState<{ mc_username: string }[]>([]);
@@ -240,6 +241,7 @@ function CommentsSection({ gameId, slug }: { gameId: string; slug: string }) {
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setCommentText(val);
+    if (!val.trim()) setReplyingTo(null);
     const cursor = e.target.selectionStart ?? val.length;
     const before = val.slice(0, cursor);
     const m = before.match(/@(\w*)$/);
@@ -276,6 +278,20 @@ function CommentsSection({ gameId, slug }: { gameId: string; slug: string }) {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) postComment();
   };
 
+  const handleReply = (username: string) => {
+    const mention = `@${username} `;
+    setReplyingTo(username);
+    setCommentText(mention);
+    setMentionQuery(null);
+    setTimeout(() => {
+      const ta = textareaRef.current;
+      if (!ta) return;
+      ta.focus();
+      ta.setSelectionRange(mention.length, mention.length);
+      ta.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 50);
+  };
+
   const postComment = async () => {
     if (!commentText.trim()) return;
     setPosting(true); setPostErr("");
@@ -285,7 +301,7 @@ function CommentsSection({ gameId, slug }: { gameId: string; slug: string }) {
       body: JSON.stringify({ game_id: gameId, content: commentText.trim() }),
     });
     setPosting(false);
-    if (r.ok) { setCommentText(""); setMentionQuery(null); loadComments(); }
+    if (r.ok) { setCommentText(""); setMentionQuery(null); setReplyingTo(null); loadComments(); }
     else { const d = await r.json(); setPostErr(d.error ?? "Failed to post"); }
   };
 
@@ -349,6 +365,14 @@ function CommentsSection({ gameId, slug }: { gameId: string; slug: string }) {
                         {" · "}
                         {new Date(c.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
                       </span>
+                      {session && (
+                        <button
+                          onClick={() => handleReply(c.mc_username ?? c.discord_name ?? "user")}
+                          className="opacity-0 group-hover:opacity-100 text-[10px] text-slate-500 hover:text-blue-400 transition font-semibold"
+                        >
+                          Reply
+                        </button>
+                      )}
                       {isOwn && (
                         <button
                           onClick={() => deleteComment(c.id)}
@@ -383,6 +407,17 @@ function CommentsSection({ gameId, slug }: { gameId: string; slug: string }) {
           </div>
         ) : (
           <div className="space-y-2">
+            {/* Replying-to pill */}
+            {replyingTo && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-950/50 border border-blue-800/50 w-fit">
+                <span className="text-blue-400 text-xs">↩ Replying to <span className="font-bold">@{replyingTo}</span></span>
+                <button
+                  onClick={() => { setReplyingTo(null); setCommentText(""); }}
+                  className="text-blue-600 hover:text-blue-300 text-xs leading-none transition"
+                  aria-label="Cancel reply"
+                >✕</button>
+              </div>
+            )}
             {/* Textarea with @ mention autocomplete */}
             <div className="relative">
               <textarea
