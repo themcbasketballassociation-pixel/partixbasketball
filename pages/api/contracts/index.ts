@@ -25,7 +25,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "POST") {
     const admin = await requireAdmin(req, res);
     if (!admin) return;
-    const { league: leagueRaw, mc_uuid, team_id, amount, is_two_season, season, phase } = req.body;
+    const { league: leagueRaw, mc_uuid, team_id, amount, is_two_season, season } = req.body;
     const league = resolveLeague(leagueRaw);
     if (!league || !mc_uuid || !team_id)
       return res.status(400).json({ error: "league, mc_uuid, team_id required" });
@@ -40,7 +40,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         amount: finalAmount,
         is_two_season: is_two_season ?? false,
         season: season ?? null,
-        phase: phase ?? 1,
         status: "active",
       }])
       .select("*, players(mc_uuid, mc_username), teams(id, name, abbreviation)")

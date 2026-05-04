@@ -31,7 +31,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "POST") {
     const admin = await requireAdmin(req, res);
     if (!admin) return;
-    const { league: leagueRaw, mc_uuid, min_price, season, phase, status: reqStatus, duration_minutes } = req.body;
+    const { league: leagueRaw, mc_uuid, min_price, season, status: reqStatus, duration_minutes } = req.body;
     const league = resolveLeague(leagueRaw);
     if (!league || !mc_uuid)
       return res.status(400).json({ error: "league and mc_uuid required" });
@@ -48,8 +48,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .maybeSingle();
     if (existing) return res.status(400).json({ error: "Player already has an active or pending auction" });
 
-    // duration_minutes overrides default 12h — used for test auctions
-    const durationMs = duration_minutes ? Number(duration_minutes) * 60 * 1000 : 12 * 60 * 60 * 1000;
+    // duration_minutes overrides default 72h — used for test auctions
+    const durationMs = duration_minutes ? Number(duration_minutes) * 60 * 1000 : 72 * 60 * 60 * 1000;
     const closesAt = isPending ? "9999-01-01T00:00:00.000Z" : new Date(Date.now() + durationMs).toISOString();
     const { data, error } = await supabase
       .from("auctions")
@@ -58,7 +58,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         mc_uuid,
         min_price: Number(min_price ?? 1000),
         season: season ?? null,
-        phase: Number(phase ?? 1),
         status: isPending ? "pending" : "active",
         closes_at: closesAt,
       }])

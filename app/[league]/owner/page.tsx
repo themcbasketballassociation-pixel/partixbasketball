@@ -243,7 +243,7 @@ function BidTab({ auctions, teamId, contracts, onRefresh }: {
               />
               <div style={{ flex: 1 }}>
                 <div style={{ color: "#fff", fontWeight: 700, fontSize: 16 }}>{auction.players?.mc_username ?? auction.mc_uuid.slice(0, 8)}</div>
-                <div style={{ color: "#555", fontSize: 12 }}>Phase {auction.phase}{auction.season ? ` · S${auction.season}` : ""} · Closes in <span style={{ color: "#f97316" }}><Countdown closesAt={auction.closes_at} /></span></div>
+                <div style={{ color: "#555", fontSize: 12 }}>{auction.season ? `S${auction.season} · ` : ""}Closes in <span style={{ color: "#f97316" }}><Countdown closesAt={auction.closes_at} /></span></div>
               </div>
               {iAmTop && <span style={{ color: "#22d3ee", fontSize: 12, background: "#0a1a1f", border: "1px solid #164e63", borderRadius: 6, padding: "2px 8px" }}>You're leading</span>}
             </div>

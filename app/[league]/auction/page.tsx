@@ -80,7 +80,6 @@ function AuctionCard({ auction }: { auction: Auction }) {
           <div style={{ color: "#fff", fontWeight: 700, fontSize: 18 }}>{auction.players?.mc_username ?? "Unknown Player"}</div>
           <div style={{ display: "flex", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
             {auction.season && <span style={{ background: "#1a1a1a", border: "1px solid #2a2a2a", color: "#888", fontSize: 11, padding: "1px 8px", borderRadius: 6 }}>Season {auction.season}</span>}
-            <span style={{ background: "#1a1a1a", border: "1px solid #2a2a2a", color: "#888", fontSize: 11, padding: "1px 8px", borderRadius: 6 }}>Phase {auction.phase}</span>
           </div>
         </div>
         <div style={{ textAlign: "right" }}>
@@ -306,7 +305,7 @@ export default function AuctionPage() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 16 }}>
           {[
             { title: "Salary Caps (per team)", items: ["Total cap: 25,000 per team", "Court cap: 22,000 per team", "Max per player: 12,000", "Min bid: 1,000", "Pending bids hold cap until player signs"] },
-            { title: "Bid Rules", items: ["Increments of 250 only", "Must beat current effective value", "After 12 hours of no new bids, the player can accept a team's offer", "Max 2 signings per phase"] },
+            { title: "Bid Rules", items: ["Increments of 250 only", "Must beat current effective value", "Bidding closes 72 hours after the auction launches", "After bidding closes, the player accepts a team's offer"] },
             { title: "2-Season Contracts", items: ["Available on bids ≥ 5,000", "Adds +500 effective value", "Must declare at time of bid", "Cap hit = actual bid only"] },
             { title: "Player Choice", items: ["If any bid within 500 of top", "Player picks their team", "Based on effective values", "All qualifying bids eligible"] },
             { title: "Roster Viability", items: ["Owner's contract + highest bid ≤ 20,000", "Must fit 2 more min-salary players", "Invalid bids are void", "Clock doesn't reset on void bids"] },

@@ -9,7 +9,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const admin = await requireAdmin(req, res);
   if (!admin) return;
 
-  const { league: leagueRaw, season, phase, duration_minutes } = req.body;
+  const { league: leagueRaw, season, duration_minutes } = req.body;
   const league = resolveLeague(leagueRaw);
   if (!league || !season) return res.status(400).json({ error: "league and season required" });
 
@@ -72,7 +72,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   // 4. Create active auctions for all priced players not already in auction or contracted
-  const durationMs = isTest ? Number(duration_minutes) * 60 * 1000 : 12 * 60 * 60 * 1000;
+  const durationMs = isTest ? Number(duration_minutes) * 60 * 1000 : 72 * 60 * 60 * 1000;
   const closesAt = new Date(Date.now() + durationMs).toISOString();
   let created = 0;
   let skipped = 0;
@@ -88,7 +88,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       mc_uuid,
       min_price: price,
       season: season ?? null,
-      phase: Number(phase ?? 1),
       status: "active",
       closes_at: closesAt,
     }]);

@@ -124,18 +124,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       error: `Roster viability check failed: owner's contract (${maxExisting}) + highest bid (${amount}) = ${maxExisting + amount} > ${VIABILITY_MAX}. No room for 2 more minimum-priced players.`,
     });
 
-  // ── Phase signing limit (can bid but flagged) ────────────────────────────────
-  // Only count active contracts for the same season AND phase — not old seasons or cuts
-  const { data: phaseSignings } = await supabase
-    .from("contracts")
-    .select("id")
-    .eq("team_id", team_id)
-    .eq("league", auction.league)
-    .eq("phase", auction.phase)
-    .eq("season", auction.season)
-    .eq("status", "active");
-  const signingsThisPhase = (phaseSignings ?? []).length;
-
   // ── Place bid ────────────────────────────────────────────────────────────────
   const { data: bid, error: bidErr } = await supabase
     .from("auction_bids")
@@ -143,15 +131,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     .select("*, teams(id, name, abbreviation, color2, logo_url)")
     .single();
   if (bidErr) return res.status(500).json({ error: bidErr.message });
-
-  // Reset the 12-hour clock
-  const newClosesAt = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();
-  await supabase.from("auctions").update({ closes_at: newClosesAt }).eq("id", auction_id);
-
-  const warning =
-    signingsThisPhase >= 2
-      ? `Your team has already signed ${signingsThisPhase} players this phase. You can bid but cannot win until next phase.`
-      : null;
 
   const LEAGUE_LABELS: Record<string, string> = { pba: "MBA", pcaa: "MCAA", pbgl: "MBGL" };
   const LEAGUE_COLORS: Record<string, number>  = { pba: 0xC8102E, pcaa: 0x003087, pbgl: 0xBB3430 };
@@ -178,5 +157,5 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   await sendWebhookEmbed(getWebhookUrl(auction.league, "bid"), embed);
 
-  return res.status(200).json({ bid, closes_at: newClosesAt, warning });
+  return res.status(200).json({ bid });
 }

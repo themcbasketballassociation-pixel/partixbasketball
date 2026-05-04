@@ -33,7 +33,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Special action: launch a pending auction → active
     if (action === "launch") {
       updates.status = "active";
-      updates.closes_at = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();
+      updates.closes_at = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
     } else if (action === "cancel") {
       updates.status = "cancelled";
     } else {

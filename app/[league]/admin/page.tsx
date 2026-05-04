@@ -3889,6 +3889,9 @@ function OwnersTab({ league }: { league: string }) {
   const [filterSeason, setFilterSeason] = useState("Season 7");
   const [err, setErr] = useState("");
   const [needsMigration, setNeedsMigration] = useState(false);
+  const [resetSeason, setResetSeason] = useState("Season 7");
+  const [resetMsg, setResetMsg] = useState("");
+  const [resetting, setResetting] = useState(false);
 
   const refresh = useCallback(async () => {
     const [o, t, p] = await Promise.all([
@@ -3926,6 +3929,20 @@ function OwnersTab({ league }: { league: string }) {
 
   const sorted = [...owners].sort((a, b) => (a.teams?.name ?? "").localeCompare(b.teams?.name ?? ""));
 
+  const resetOwnerContracts = async () => {
+    if (!confirm(`Reset contracts for ${resetSeason}? This will DELETE all non-owner contracts and create contracts for any team owner who doesn't have one.`)) return;
+    setResetting(true); setResetMsg("");
+    const r = await fetch("/api/admin/reset-owner-contracts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ league, season: resetSeason }),
+    });
+    const d = await r.json().catch(() => ({})) as { deleted?: number; created?: number; ownerCount?: number; error?: string };
+    setResetting(false);
+    if (r.ok) setResetMsg(`✓ Deleted ${d.deleted ?? 0} non-owner contracts · Created ${d.created ?? 0} owner contracts (${d.ownerCount ?? 0} owners total)`);
+    else setResetMsg(`Error: ${d.error ?? "failed"}`);
+  };
+
   return (
     <div>
       {needsMigration && (
@@ -3958,6 +3975,27 @@ function OwnersTab({ league }: { league: string }) {
         </div>
         <ErrMsg msg={err} />
         <p className="text-xs text-slate-500 mt-2">Discord ID is the numeric user ID. Use Developer Mode in Discord to copy it.</p>
+      </div>
+
+      {/* Reset to Owner Contracts */}
+      <div className="mb-4 rounded-xl border border-orange-900 bg-orange-950/30 px-4 py-3">
+        <div className="text-xs font-bold text-orange-400 uppercase tracking-widest mb-2">Reset Contracts for Auction</div>
+        <p className="text-xs text-orange-700 mb-3">Deletes all non-owner contracts for the selected season and creates contracts for each team owner who doesn&apos;t have one. Run this before launching the auction.</p>
+        <div className="flex items-center gap-3 flex-wrap">
+          <select className={input} value={resetSeason} onChange={(e) => setResetSeason(e.target.value)} style={{ minWidth: 140 }}>
+            {SEASONS.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <button
+            className="rounded-lg px-4 py-2 text-sm font-bold bg-orange-900 hover:bg-orange-800 text-orange-200 border border-orange-700 transition disabled:opacity-40"
+            onClick={resetOwnerContracts}
+            disabled={resetting}
+          >
+            {resetting ? "Resetting…" : "Reset to Owner Contracts Only"}
+          </button>
+        </div>
+        {resetMsg && (
+          <div className={`mt-2 text-xs rounded px-2 py-1 ${resetMsg.startsWith("Error") ? "text-red-400" : "text-green-400"}`}>{resetMsg}</div>
+        )}
       </div>
 
       <div className="flex items-center gap-3 mb-4">
@@ -4210,7 +4248,6 @@ function AuctionAdminTab({ league }: { league: string }) {
   const [showPaste, setShowPaste] = useState(false);
   const [pasteText, setPasteText] = useState("");
   const [pasteResult, setPasteResult] = useState("");
-  const [launchPhase, setLaunchPhase] = useState("1");
   const [launching, setLaunching] = useState(false);
   const [launchMsg, setLaunchMsg] = useState("");
   const [priceSearch, setPriceSearch] = useState("");
@@ -4305,7 +4342,6 @@ function AuctionAdminTab({ league }: { league: string }) {
       body: JSON.stringify({
         league,
         season: priceSeason,
-        phase: parseInt(launchPhase) || 1,
         ...(launchTestMode && { duration_minutes: parseInt(launchTestMinutes) || 5 }),
       }),
     });
@@ -4341,7 +4377,6 @@ function AuctionAdminTab({ league }: { league: string }) {
   const [filterStatus, setFilterStatus] = useState("active");
   const [nomUuid, setNomUuid] = useState("");
   const [nomMinPrice, setNomMinPrice] = useState("1000");
-  const [nomPhase, setNomPhase] = useState("1");
   const [nomSeason, setNomSeason] = useState("");
   const [nomErr, setNomErr] = useState("");
   const [testMode, setTestMode] = useState(false);
@@ -4371,7 +4406,6 @@ function AuctionAdminTab({ league }: { league: string }) {
       body: JSON.stringify({
         league, mc_uuid: nomUuid,
         min_price: parseInt(nomMinPrice) || 1000,
-        phase: parseInt(nomPhase) || 1,
         season: nomSeason || null,
         status: "active",
         ...(mins != null && { duration_minutes: mins }),
@@ -4412,7 +4446,7 @@ function AuctionAdminTab({ league }: { league: string }) {
     const cr = await fetch("/api/contracts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ league, mc_uuid: auction.mc_uuid, team_id: winnerTeam, amount: parseInt(winnerBid), is_two_season: winnerIs2s, phase: auction.phase, season: auction.season }),
+      body: JSON.stringify({ league, mc_uuid: auction.mc_uuid, team_id: winnerTeam, amount: parseInt(winnerBid), is_two_season: winnerIs2s, season: auction.season }),
     });
     if (!cr.ok) { const d = await cr.json(); return setCloseErr(d.error); }
     const ar = await fetch(`/api/auction/${auctionId}`, {
@@ -4561,14 +4595,6 @@ function AuctionAdminTab({ league }: { league: string }) {
                   <span className="text-slate-500 text-xs">min</span>
                 </div>
               )}
-              <input
-                className={input}
-                type="number"
-                placeholder="Phase"
-                value={launchPhase}
-                onChange={(e) => setLaunchPhase(e.target.value)}
-                style={{ width: 70 }}
-              />
               <button
                 onClick={launchSeasonAuction}
                 disabled={launching || pricedCount === 0}
@@ -4739,7 +4765,7 @@ function AuctionAdminTab({ league }: { league: string }) {
 
             {testMode && (
               <div className="mb-3 rounded-lg bg-yellow-950 border border-yellow-800 px-3 py-2 text-xs text-yellow-300">
-                Test mode creates a real auction that closes in a few minutes so you can verify the whole flow without waiting 12 hours.
+                Test mode creates a real auction that closes in a few minutes so you can verify the whole flow without waiting 72 hours.
               </div>
             )}
 
@@ -4748,7 +4774,6 @@ function AuctionAdminTab({ league }: { league: string }) {
                 <PlayerSearchSelect players={players} value={nomUuid} onChange={setNomUuid} placeholder="Search player…" />
               </div>
               <input className={input} type="number" placeholder="Min Price" value={nomMinPrice} onChange={(e) => setNomMinPrice(e.target.value)} style={{ flex: 1, minWidth: 100 }} />
-              <input className={input} type="number" placeholder="Phase" value={nomPhase} onChange={(e) => setNomPhase(e.target.value)} style={{ flex: 1, minWidth: 70 }} />
               <input className={input} placeholder="Season (opt)" value={nomSeason} onChange={(e) => setNomSeason(e.target.value)} style={{ flex: 1, minWidth: 100 }} />
               {testMode ? (
                 <div className="flex items-center gap-2">
@@ -4850,7 +4875,7 @@ function AuctionAdminTab({ league }: { league: string }) {
                       <img src={`https://minotar.net/avatar/${a.players.mc_username}/40`} className="w-10 h-10 rounded-lg border border-slate-700" onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/40"; }} alt="" />
                       <div className="flex-1">
                         <div className="text-white font-bold">{a.players.mc_username}</div>
-                        <div className="text-slate-500 text-xs">Phase {a.phase}{a.season ? ` · ${a.season}` : ""} · Min: {a.min_price.toLocaleString()}</div>
+                        <div className="text-slate-500 text-xs">{a.season ? `${a.season} · ` : ""}Min: {a.min_price.toLocaleString()}</div>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className={`text-xs px-2 py-0.5 rounded-full border font-semibold ${
