@@ -163,8 +163,8 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
           </div>
         </div>
 
-        {/* Two-column layout */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 24, alignItems: "start" }}>
+        {/* Two-column layout — single col on mobile, two-col on lg+ */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6" style={{ alignItems: "start" }}>
 
           {/* LEFT — recent results + articles */}
           <div style={{ minWidth: 0 }}>

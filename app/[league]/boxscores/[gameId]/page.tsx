@@ -525,14 +525,14 @@ export default function BoxscorePage({ params }: { params?: Promise<{ league?: s
 
       {/* Score header */}
       <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
-        <div className="grid items-center p-6 gap-4" style={{ gridTemplateColumns: "1fr auto 1fr" }}>
+        <div className="flex items-center justify-center p-6 gap-4" style={{ flexWrap: "wrap" }}>
 
           {/* Home team */}
-          <div className="flex flex-col items-end gap-2 text-right">
+          <div className="flex flex-col items-end gap-2 text-right" style={{ minWidth: 0 }}>
             {game.home_team.logo_url
               ? <img src={game.home_team.logo_url} className={`w-16 h-16 object-contain ${homeWon ? "" : "opacity-40"}`} alt="" />
               : <div className="w-16 h-16 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-500 font-bold">{game.home_team.abbreviation}</div>}
-            <div className={`text-xl font-black leading-tight ${homeWon ? "text-white" : "text-slate-500"}`}>{game.home_team.name}</div>
+            <div className={`text-xl font-black leading-tight ${homeWon ? "text-white" : "text-slate-500"}`} style={{ wordBreak: "break-word" }}>{game.home_team.name}</div>
             <div className="text-[10px] text-slate-600 uppercase tracking-widest font-bold">{game.home_team.abbreviation} · HOME</div>
           </div>
 
@@ -556,11 +556,11 @@ export default function BoxscorePage({ params }: { params?: Promise<{ league?: s
           </div>
 
           {/* Away team */}
-          <div className="flex flex-col items-start gap-2">
+          <div className="flex flex-col items-start gap-2" style={{ minWidth: 0 }}>
             {game.away_team.logo_url
               ? <img src={game.away_team.logo_url} className={`w-16 h-16 object-contain ${awayWon ? "" : "opacity-40"}`} alt="" />
               : <div className="w-16 h-16 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-500 font-bold">{game.away_team.abbreviation}</div>}
-            <div className={`text-xl font-black leading-tight ${awayWon ? "text-white" : "text-slate-500"}`}>{game.away_team.name}</div>
+            <div className={`text-xl font-black leading-tight ${awayWon ? "text-white" : "text-slate-500"}`} style={{ wordBreak: "break-word" }}>{game.away_team.name}</div>
             <div className="text-[10px] text-slate-600 uppercase tracking-widest font-bold">{game.away_team.abbreviation} · AWAY</div>
           </div>
         </div>

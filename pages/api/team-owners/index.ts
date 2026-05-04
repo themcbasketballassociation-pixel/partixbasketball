@@ -34,17 +34,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "POST") {
     const admin = await requireAdmin(req, res);
     if (!admin) return;
-    const { discord_id, team_id, league: leagueRaw, season, owner_name } = req.body;
+    const { discord_id, team_id, league: leagueRaw, season, owner_name, role } = req.body;
     const league = resolveLeague(leagueRaw);
     if (!discord_id || !team_id || !league)
       return res.status(400).json({ error: "discord_id, team_id, league required" });
 
-    // Remove any existing assignment for this owner+team+league
+    // Remove any existing assignment for this discord+team+league (owner or gm)
     await supabase.from("team_owners").delete().match({ discord_id, team_id, league });
 
     const payload: Record<string, string | null> = { discord_id, team_id, league };
     if (season) payload.season = season;
     if (owner_name !== undefined) payload.owner_name = owner_name || null;
+    if (role) payload.role = role;
 
     const { data, error } = await supabase
       .from("team_owners")
@@ -54,7 +55,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (error) {
       // If new columns don't exist yet, retry with only base fields
-      if (error.message.includes("season") || error.message.includes("owner_name")) {
+      if (error.message.includes("season") || error.message.includes("owner_name") || error.message.includes("role")) {
         const basePayload = { discord_id, team_id, league };
         const { data: d2, error: e2 } = await supabase
           .from("team_owners")
@@ -69,11 +70,68 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json(data);
   }
 
+  // PATCH — update role (owner promotes/demotes GM); must be team owner or admin
+  if (req.method === "PATCH") {
+    const { getServerSession } = await import("next-auth");
+    const { authOptions } = await import("../auth/[...nextauth]");
+    const session = await getServerSession(req, res, authOptions as Parameters<typeof getServerSession>[2]);
+    if (!session) return res.status(401).json({ error: "Unauthorized" });
+
+    const discordId = ((session as { user?: { id?: string } }).user as { id?: string })?.id;
+    const { id, role } = req.body;
+    if (!id || !role) return res.status(400).json({ error: "id and role required" });
+    if (!["owner", "gm"].includes(role)) return res.status(400).json({ error: "role must be owner or gm" });
+
+    // Verify the caller is either an admin or the owner of the same team/season
+    const isAdmin = process.env.ADMIN_DISCORD_IDS?.split(",").map((s) => s.trim()).includes(discordId ?? "");
+
+    if (!isAdmin) {
+      // Caller must be an owner (not gm) of the same team
+      const { data: target } = await supabase.from("team_owners").select("team_id, league, season").eq("id", id).maybeSingle();
+      if (!target) return res.status(404).json({ error: "Record not found" });
+      const { data: callerRecord } = await supabase.from("team_owners")
+        .select("role")
+        .eq("discord_id", discordId ?? "")
+        .eq("team_id", (target as { team_id: string }).team_id)
+        .eq("league", (target as { league: string }).league)
+        .maybeSingle();
+      if (!callerRecord || (callerRecord as { role: string }).role !== "owner") {
+        return res.status(403).json({ error: "Only the team owner can manage GMs" });
+      }
+    }
+
+    const { data, error } = await supabase.from("team_owners").update({ role }).eq("id", id).select().single();
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json(data);
+  }
+
   if (req.method === "DELETE") {
-    const admin = await requireAdmin(req, res);
-    if (!admin) return;
+    const { getServerSession } = await import("next-auth");
+    const { authOptions } = await import("../auth/[...nextauth]");
+    const session = await getServerSession(req, res, authOptions as Parameters<typeof getServerSession>[2]);
+    if (!session) return res.status(401).json({ error: "Unauthorized" });
+    const discordId = ((session as { user?: { id?: string } }).user as { id?: string })?.id;
+    const isAdmin = process.env.ADMIN_DISCORD_IDS?.split(",").map((s) => s.trim()).includes(discordId ?? "");
+
     const { id } = req.body;
     if (!id) return res.status(400).json({ error: "id required" });
+
+    if (!isAdmin) {
+      // Only allow owner to remove GMs from their own team
+      const { data: target } = await supabase.from("team_owners").select("team_id, league, role").eq("id", id).maybeSingle();
+      if (!target) return res.status(404).json({ error: "Not found" });
+      if ((target as { role: string }).role !== "gm") return res.status(403).json({ error: "Only admins can remove owners" });
+      const { data: callerRecord } = await supabase.from("team_owners")
+        .select("role")
+        .eq("discord_id", discordId ?? "")
+        .eq("team_id", (target as { team_id: string }).team_id)
+        .eq("league", (target as { league: string }).league)
+        .maybeSingle();
+      if (!callerRecord || (callerRecord as { role: string }).role !== "owner") {
+        return res.status(403).json({ error: "Only the team owner can remove GMs" });
+      }
+    }
+
     const { error } = await supabase.from("team_owners").delete().eq("id", id);
     if (error) return res.status(500).json({ error: error.message });
     return res.status(200).json({ success: true });

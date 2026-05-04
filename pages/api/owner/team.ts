@@ -29,14 +29,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const { data, error } = await supabase
     .from("team_owners")
-    .select("id, discord_id, league, season, teams(id, name, abbreviation, color2, division, logo_url)")
+    .select("id, discord_id, league, season, role, teams(id, name, abbreviation, color2, division, logo_url)")
     .eq("discord_id", discordId)
     .in("league", leagueValues);
 
   if (error) return res.status(500).json({ error: error.message });
   if (!data || data.length === 0) return res.status(200).json([]);
 
-  // Return the record(s) from the most recent season
+  // Return the record(s) from the most recent season (owners and GMs both get access)
   const sorted = [...data].sort((a, b) => seasonNum(b.season) - seasonNum(a.season));
   const latestSeason = sorted[0].season;
   const latestRecords = sorted.filter(r => r.season === latestSeason);

@@ -1004,20 +1004,122 @@ function PortalTab({ teamId, leagueSlug, contracts, onRefresh }: {
   );
 }
 
+// ── GMTab — owner manages their general managers ───────────────────────────────
+function GMTab({ teamId, league, season, onRefresh }: { teamId: string; league: string; season: string | null; onRefresh: () => void }) {
+  const [gmList, setGmList] = useState<{ id: string; discord_id: string | null; owner_name: string | null; role: string }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [newDiscordId, setNewDiscordId] = useState("");
+  const [newName, setNewName] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    const params = new URLSearchParams({ league });
+    if (season) params.set("season", season);
+    const res = await fetch(`/api/team-owners?${params}`);
+    const data = await res.json().catch(() => []);
+    // Only show GMs (not the current owner themselves)
+    setGmList(Array.isArray(data) ? data.filter((r: any) => r.team_id === teamId && r.role === "gm") : []);
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, [teamId, league, season]);
+
+  const addGM = async () => {
+    if (!newDiscordId.trim()) return;
+    setSubmitting(true);
+    setMsg(null);
+    const res = await fetch("/api/team-owners", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ discord_id: newDiscordId.trim(), team_id: teamId, league, season: season ?? undefined, owner_name: newName.trim() || null, role: "gm" }),
+    });
+    const data = await res.json();
+    if (!res.ok) { setMsg({ type: "err", text: data.error ?? "Failed to add GM" }); }
+    else { setMsg({ type: "ok", text: "GM added!" }); setNewDiscordId(""); setNewName(""); load(); onRefresh(); }
+    setSubmitting(false);
+  };
+
+  const removeGM = async (id: string) => {
+    if (!confirm("Remove this General Manager?")) return;
+    const res = await fetch("/api/team-owners", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    if (res.ok) { load(); onRefresh(); }
+    else { const d = await res.json(); alert(d.error ?? "Failed to remove"); }
+  };
+
+  return (
+    <div>
+      <div style={{ color: "#888", fontSize: 13, marginBottom: 16 }}>
+        General Managers have full access to this team's portal. Add their Discord user ID below.
+      </div>
+      {loading ? (
+        <div style={{ color: "#444", textAlign: "center", padding: "20px 0" }}>Loading…</div>
+      ) : gmList.length === 0 ? (
+        <div style={{ color: "#444", textAlign: "center", padding: "20px 0" }}>No General Managers assigned yet.</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+          {gmList.map((gm) => (
+            <div key={gm.id} style={{ ...innerCard, display: "flex", alignItems: "center", gap: 12 }}>
+              <img
+                src={`https://cdn.discordapp.com/embed/avatars/0.png`}
+                style={{ width: 32, height: 32, borderRadius: "50%", background: "#1a1a1a" }}
+                alt=""
+              />
+              <div style={{ flex: 1 }}>
+                <div style={{ color: "#fff", fontWeight: 600, fontSize: 14 }}>{gm.owner_name ?? "Unnamed GM"}</div>
+                <div style={{ color: "#555", fontSize: 12 }}>ID: {gm.discord_id}</div>
+              </div>
+              <span style={{ background: "#1e3a5f", border: "1px solid #1d4ed8", borderRadius: 6, color: "#93c5fd", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>GM</span>
+              <button onClick={() => removeGM(gm.id)} style={{ ...btn("danger"), padding: "4px 10px", fontSize: 12 }}>Remove</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ ...innerCard }}>
+        <div style={{ color: "#aaa", fontWeight: 700, marginBottom: 12, fontSize: 14 }}>Add General Manager</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div>
+            <label style={{ color: "#555", fontSize: 12, display: "block", marginBottom: 4 }}>Discord User ID *</label>
+            <input style={input} placeholder="e.g. 123456789012345678" value={newDiscordId} onChange={(e) => setNewDiscordId(e.target.value)} />
+          </div>
+          <div>
+            <label style={{ color: "#555", fontSize: 12, display: "block", marginBottom: 4 }}>Display Name (optional)</label>
+            <input style={input} placeholder="e.g. CoachJoe" value={newName} onChange={(e) => setNewName(e.target.value)} />
+          </div>
+          {msg && (
+            <div style={{ color: msg.type === "err" ? "#fca5a5" : "#86efac", background: msg.type === "err" ? "#450a0a" : "#052e16", border: `1px solid ${msg.type === "err" ? "#7f1d1d" : "#166534"}`, borderRadius: 8, padding: "8px 12px", fontSize: 13 }}>
+              {msg.text}
+            </div>
+          )}
+          <button onClick={addGM} disabled={submitting || !newDiscordId.trim()} style={{ ...btn("primary"), opacity: (submitting || !newDiscordId.trim()) ? 0.5 : 1 }}>
+            {submitting ? "Adding…" : "Add GM"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────────
 export default function OwnerPage() {
   const { data: session, status } = useSession();
   const params = useParams();
   const leagueSlug = (params?.league as string) ?? "mba";
 
-  const [ownerRecord, setOwnerRecord] = useState<{ id: string; discord_id: string; league: string; season?: string | null; teams: Team } | null>(null);
+  const [ownerRecord, setOwnerRecord] = useState<{ id: string; discord_id: string; league: string; season?: string | null; role?: string | null; teams: Team } | null>(null);
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [retentions, setRetentions] = useState<CapRetention[]>([]);
   const [auctions, setAuctions] = useState<Auction[]>([]);
   const [allTeams, setAllTeams] = useState<Team[]>([]);
   const [seasonTeamIds, setSeasonTeamIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"roster" | "bid" | "trades" | "signings" | "cut" | "portal" | "coaches">("roster");
+  const [tab, setTab] = useState<"roster" | "bid" | "trades" | "signings" | "cut" | "portal" | "coaches" | "management">("roster");
   const [isBoardMember, setIsBoardMember] = useState(false);
 
   const loadAll = useCallback(async () => {
@@ -1107,7 +1209,7 @@ export default function OwnerPage() {
     <div style={{ maxWidth: 900, margin: "0 auto", padding: "24px 16px" }}>
       {/* Team header */}
       <div style={{ ...card, marginBottom: 20 }}>
-        <div style={{ padding: "20px 24px", display: "flex", alignItems: "center", gap: 16, borderBottom: "1px solid #1a1a1a" }}>
+        <div style={{ padding: "20px 24px", display: "flex", alignItems: "center", gap: 16, borderBottom: "1px solid #1a1a1a", flexWrap: "wrap" }}>
           {team.logo_url ? (
             <img src={team.logo_url} style={{ width: 56, height: 56, objectFit: "contain", borderRadius: 8, border: "1px solid #222" }} alt="" />
           ) : (
@@ -1116,7 +1218,12 @@ export default function OwnerPage() {
             </div>
           )}
           <div style={{ flex: 1 }}>
-            <div style={{ color: "#fff", fontWeight: 800, fontSize: 22 }}>{team.name}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ color: "#fff", fontWeight: 800, fontSize: 22 }}>{team.name}</span>
+              {ownerRecord.role === "gm" && (
+                <span style={{ background: "#1e3a5f", border: "1px solid #1d4ed8", borderRadius: 6, color: "#93c5fd", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>GM</span>
+              )}
+            </div>
             <div style={{ color: "#555", fontSize: 13 }}>{leagueSlug.toUpperCase()} · {team.division ?? "League"}</div>
           </div>
           {leagueSlug !== "mcaa" && leagueSlug !== "mbgl" && (
@@ -1137,18 +1244,22 @@ export default function OwnerPage() {
         </div>
 
         {/* Tabs */}
-        <div style={{ display: "flex", borderBottom: "1px solid #1a1a1a" }}>
-          {(leagueSlug === "mcaa"
-            ? [["roster", "My Roster"], ["coaches", "Coaches"], ["signings", "Signings"], ["cut", "Cut Player"], ["portal", "Transfer Portal"]] as const
-            : [["roster", "My Roster"], ["signings", "Signings"], ["bid", `Live Auctions (${auctions.filter((a) => a.status === "active").length})`], ["trades", "Trades"]] as const
-          ).map(([t, label]) => (
+        <div style={{ display: "flex", borderBottom: "1px solid #1a1a1a", overflowX: "auto" }}>
+          {[
+            ...(leagueSlug === "mcaa"
+              ? [["roster", "My Roster"], ["coaches", "Coaches"], ["signings", "Signings"], ["cut", "Cut Player"], ["portal", "Transfer Portal"]]
+              : [["roster", "My Roster"], ["signings", "Signings"], ["bid", `Live Auctions (${auctions.filter((a) => a.status === "active").length})`], ["trades", "Trades"]]
+            ),
+            // Only actual owners (not GMs) can manage the GM roster
+            ...(ownerRecord.role !== "gm" ? [["management", "👑 Owner"]] : []),
+          ].map(([t, label]) => (
             <button
               key={t}
               onClick={() => setTab(t as typeof tab)}
               style={{
-                padding: "12px 20px", fontSize: 13, fontWeight: 600, cursor: "pointer", border: "none",
+                padding: "10px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer", border: "none",
                 background: "none", borderBottom: `2px solid ${tab === t ? "#3b82f6" : "transparent"}`,
-                color: tab === t ? "#fff" : "#555",
+                color: tab === t ? "#fff" : "#555", whiteSpace: "nowrap",
               }}
             >
               {label}
@@ -1156,7 +1267,7 @@ export default function OwnerPage() {
           ))}
         </div>
 
-        <div style={{ padding: "20px 24px" }}>
+        <div style={{ padding: "16px" }}>
           {tab === "roster" && <RosterTab contracts={contracts} retentions={retentions} leagueSlug={leagueSlug} />}
           {tab === "signings" && <SigningsTab teamId={team.id} league={ownerRecord.league} leagueSlug={leagueSlug} contracts={contracts} ownerSeason={ownerRecord.season ?? null} onRefresh={loadAll} />}
           {tab === "bid" && <BidTab auctions={auctions} teamId={team.id} contracts={contracts} onRefresh={loadAll} />}
@@ -1164,6 +1275,9 @@ export default function OwnerPage() {
           {tab === "coaches" && <CoachesTab teamId={team.id} leagueSlug={leagueSlug} contracts={contracts} onRefresh={loadAll} />}
           {tab === "cut" && <CutTab teamId={team.id} leagueSlug={leagueSlug} contracts={contracts} onRefresh={loadAll} />}
           {tab === "portal" && <PortalTab teamId={team.id} leagueSlug={leagueSlug} contracts={contracts} onRefresh={loadAll} />}
+          {tab === "management" && ownerRecord.role !== "gm" && (
+            <GMTab teamId={team.id} league={ownerRecord.league} season={ownerRecord.season ?? null} onRefresh={loadAll} />
+          )}
         </div>
       </div>
     </div>

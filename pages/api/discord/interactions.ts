@@ -239,6 +239,125 @@ async function getPlayerStats(
   };
 }
 
+// ── Roster helpers ────────────────────────────────────────────────────────────
+
+async function getMostRecentSeason(league: string): Promise<string | null> {
+  // Try team_owners first (most reliable for "current roster" season)
+  const { data: ownerRows } = await supabase
+    .from("team_owners")
+    .select("season")
+    .eq("league", league)
+    .not("season", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (ownerRows && ownerRows.length > 0) {
+    const seasons = (ownerRows as { season: string }[])
+      .map((r) => r.season)
+      .filter(Boolean)
+      .sort((a, b) => {
+        const aNum = parseInt(a.match(/\d+/)?.[0] ?? "0");
+        const bNum = parseInt(b.match(/\d+/)?.[0] ?? "0");
+        return bNum - aNum;
+      });
+    if (seasons[0]) return seasons[0];
+  }
+  // Fall back to contracts
+  const { data: cRows } = await supabase
+    .from("contracts")
+    .select("season")
+    .eq("league", league)
+    .eq("status", "active")
+    .not("season", "is", null)
+    .order("season", { ascending: false })
+    .limit(1);
+  return (cRows?.[0] as { season: string } | undefined)?.season ?? null;
+}
+
+async function getSeasonTeams(league: string, season: string) {
+  // Get team IDs that have at least one owner or active contract this season
+  const [{ data: ownerTeams }, { data: contractTeams }] = await Promise.all([
+    supabase.from("team_owners").select("team_id").eq("league", league).eq("season", season),
+    supabase.from("contracts").select("team_id").eq("league", league).eq("season", season).eq("status", "active"),
+  ]);
+  const teamIds = [...new Set([
+    ...((ownerTeams ?? []) as { team_id: string }[]).map((r) => r.team_id),
+    ...((contractTeams ?? []) as { team_id: string }[]).map((r) => r.team_id),
+  ])];
+  if (teamIds.length === 0) return [];
+  const { data: teams } = await supabase.from("teams").select("id, name, abbreviation").in("id", teamIds);
+  return (teams ?? []) as { id: string; name: string; abbreviation: string }[];
+}
+
+async function buildRosterEmbed(league: string, teamId: string, season: string) {
+  const leagueLabel = LEAGUE_LABELS[league] ?? league.toUpperCase();
+  const showCap = league === "pba"; // only PBA has salary cap
+  const CAP = 25000;
+
+  const [{ data: team }, { data: contracts }, { data: owners }] = await Promise.all([
+    supabase.from("teams").select("id, name, abbreviation, color2").eq("id", teamId).maybeSingle(),
+    supabase.from("contracts")
+      .select("mc_uuid, amount, players(mc_username)")
+      .eq("league", league).eq("team_id", teamId).eq("season", season).eq("status", "active"),
+    supabase.from("team_owners").select("owner_name, discord_id, role").eq("team_id", teamId).eq("season", season),
+  ]);
+
+  if (!team) return null;
+  const t = team as { id: string; name: string; abbreviation: string; color2: string | null };
+  const cs = (contracts ?? []) as { mc_uuid: string; amount: number; players: { mc_username: string } }[];
+  const os = (owners ?? []) as { owner_name: string | null; discord_id: string | null; role: string | null }[];
+
+  const totalCap = cs.reduce((s, c) => s + (c.amount ?? 0), 0);
+  const remaining = CAP - totalCap;
+
+  // Separate players (phase != 0) from coaches — contracts don't expose phase here so just list all
+  const rosterLines = cs
+    .filter((c) => c.players?.mc_username)
+    .sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0))
+    .map((c) => {
+      const salary = showCap && c.amount > 0 ? ` — $${c.amount.toLocaleString()}` : "";
+      return `• **${c.players.mc_username}**${salary}`;
+    });
+
+  const fields: { name: string; value: string; inline: boolean }[] = [];
+
+  // Owner / GM
+  const ownerLine = os.map((o) => {
+    const role = o.role === "gm" ? "GM" : "Owner";
+    const name = o.owner_name ?? (o.discord_id ? `<@${o.discord_id}>` : "TBD");
+    return `${role}: **${name}**`;
+  }).join("\n");
+  if (ownerLine) fields.push({ name: "🏢 Management", value: ownerLine, inline: false });
+
+  // Salary cap
+  if (showCap) {
+    const pct = Math.min((totalCap / CAP) * 100, 100).toFixed(0);
+    const barFilled = Math.round(pct as unknown as number / 10);
+    const bar = "█".repeat(barFilled) + "░".repeat(10 - barFilled);
+    fields.push({
+      name: "💰 Salary Cap",
+      value: `\`${bar}\` ${pct}%\n**Used:** $${totalCap.toLocaleString()} / $${CAP.toLocaleString()}\n**Remaining:** $${remaining.toLocaleString()}`,
+      inline: false,
+    });
+  }
+
+  // Roster
+  fields.push({
+    name: `📋 Roster (${cs.length})`,
+    value: rosterLines.length > 0 ? rosterLines.join("\n").slice(0, 1024) : "*No active contracts*",
+    inline: false,
+  });
+
+  const colorHex = t.color2 ? parseInt(t.color2.replace("#", ""), 16) : 0x3b82f6;
+
+  return {
+    title: `${t.name} (${t.abbreviation})`,
+    color: isNaN(colorHex) ? 0x3b82f6 : colorHex,
+    author: { name: `${leagueLabel} · ${season}` },
+    fields,
+    footer: { text: "Partix Basketball · /roster" },
+  };
+}
+
 // ── Discord payload builders ──────────────────────────────────────────────────
 
 function buildEmbed(
@@ -404,6 +523,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({ type: 1 });
   }
 
+  // ── AUTOCOMPLETE (type 4) — for /roster team option ───────────────────────
+  if (body.type === 4) {
+    if (body.data?.name === "roster") {
+      const options = (body.data?.options ?? []) as { name: string; value: string; focused?: boolean }[];
+      const leagueOption = options.find((o) => o.name === "league");
+      const teamOption = options.find((o) => o.name === "team" && o.focused);
+      if (!teamOption) return res.status(200).json({ type: 8, data: { choices: [] } });
+
+      const league = resolveLeague(leagueOption?.value ?? "pba") || "pba";
+      const season = await getMostRecentSeason(league);
+      if (!season) return res.status(200).json({ type: 8, data: { choices: [] } });
+
+      const teams = await getSeasonTeams(league, season);
+      const query = (teamOption.value ?? "").toLowerCase();
+      const filtered = teams
+        .filter((t) => t.name.toLowerCase().includes(query) || t.abbreviation.toLowerCase().includes(query))
+        .slice(0, 25);
+
+      return res.status(200).json({
+        type: 8,
+        data: { choices: filtered.map((t) => ({ name: t.name, value: t.id })) },
+      });
+    }
+    return res.status(200).json({ type: 8, data: { choices: [] } });
+  }
+
   // ── APPLICATION_COMMAND ───────────────────────────────────────────────────
   if (body.type === 2) {
     // /site — return website link
@@ -412,6 +557,38 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         type: 4,
         data: { content: "🏀 **Partix Basketball** — https://partixbasketball.vercel.app/" },
       });
+    }
+
+    // /roster — show team roster for most recent season
+    if (body.data?.name === "roster") {
+      const options = (body.data?.options ?? []) as { name: string; value: string }[];
+      const leagueOption = options.find((o) => o.name === "league");
+      const teamOption = options.find((o) => o.name === "team");
+      const league = resolveLeague(leagueOption?.value ?? "pba") || "pba";
+
+      const season = await getMostRecentSeason(league);
+      if (!season) {
+        return res.status(200).json({ type: 4, data: { content: `No season data found for ${LEAGUE_LABELS[league] ?? league}.`, flags: 64 } });
+      }
+
+      if (!teamOption?.value) {
+        // Show list of available teams
+        const teams = await getSeasonTeams(league, season);
+        const teamList = teams.map((t) => `• **${t.name}** (${t.abbreviation})`).join("\n");
+        return res.status(200).json({
+          type: 4,
+          data: {
+            content: `**${LEAGUE_LABELS[league] ?? league} · ${season} Teams:**\n${teamList || "No teams found."}`,
+            flags: 64,
+          },
+        });
+      }
+
+      const embed = await buildRosterEmbed(league, teamOption.value, season);
+      if (!embed) {
+        return res.status(200).json({ type: 4, data: { content: "Team not found.", flags: 64 } });
+      }
+      return res.status(200).json({ type: 4, data: { embeds: [embed] } });
     }
 
     if (body.data?.name !== "stats") {
