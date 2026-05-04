@@ -4294,10 +4294,14 @@ function AuctionAdminTab({ league }: { league: string }) {
         ...(launchTestMode && { duration_minutes: parseInt(launchTestMinutes) || 5 }),
       }),
     });
-    const d = await r.json().catch(() => ({})) as { created?: number; skipped?: number; error?: string };
+    const d = await r.json().catch(() => ({})) as { created?: number; skipped?: number; error?: string; insertErrors?: string[] };
     setLaunching(false);
     if (r.ok) {
-      setLaunchMsg(`✓ Launched ${d.created} auction${d.created !== 1 ? "s" : ""}${launchTestMode ? ` (test — closes in ${launchTestMinutes}m)` : ""}${(d.skipped ?? 0) > 0 ? ` · ${d.skipped} skipped` : ""}`);
+      const errSample = (d.insertErrors ?? []).slice(0, 3).join(" | ");
+      setLaunchMsg(
+        `✓ Launched ${d.created} auction${d.created !== 1 ? "s" : ""}${launchTestMode ? ` (test — closes in ${launchTestMinutes}m)` : ""}${(d.skipped ?? 0) > 0 ? ` · ${d.skipped} skipped` : ""}` +
+        (errSample ? ` — INSERT ERRORS: ${errSample}` : "")
+      );
       loadAuctions();
     } else {
       setLaunchMsg(`Error: ${d.error ?? "launch failed"}`);

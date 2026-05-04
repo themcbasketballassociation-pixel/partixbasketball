@@ -70,6 +70,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const closesAt = new Date(Date.now() + durationMs).toISOString();
   let created = 0;
   let skipped = 0;
+  const insertErrors: string[] = [];
 
   for (const { mc_uuid, price } of prices) {
     if (existingSet.has(mc_uuid) || contractedSet.has(mc_uuid)) {
@@ -86,8 +87,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       closes_at: closesAt,
     }]);
     if (!error) created++;
-    else skipped++;
+    else {
+      skipped++;
+      insertErrors.push(`${mc_uuid}: ${error.message}`);
+    }
   }
 
-  return res.status(200).json({ created, skipped, total: prices.length });
+  return res.status(200).json({ created, skipped, total: prices.length, insertErrors });
 }
