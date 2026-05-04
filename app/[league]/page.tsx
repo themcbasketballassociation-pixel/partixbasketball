@@ -211,7 +211,7 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
               ) : (
                 <div className="space-y-4">
                   {articles.map((a) => (
-                    <article key={a.id} className="rounded-2xl p-6 transition-all duration-150 hover:scale-[1.005]" style={{ background: "#101318", border: "1px solid #1c2028" }}>
+                    <a key={a.id} href={`/${slug}/articles/${a.id}`} className="block rounded-2xl p-6 transition-all duration-150 hover:scale-[1.005] hover:border-slate-600 group" style={{ background: "#101318", border: "1px solid #1c2028", textDecoration: "none" }}>
                       <div className="flex items-center gap-2 mb-3 flex-wrap">
                         <span className="text-[10px] font-black tracking-widest uppercase px-2 py-0.5 rounded-md" style={{ background: leagueColor[a.league] ?? "#333", color: "white" }}>
                           {leagueLabel[a.league] ?? a.league.toUpperCase()}
@@ -219,11 +219,12 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
                         <span className="text-xs" style={{ color: "#444" }}>
                           {new Date(a.created_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
                         </span>
+                        <span className="ml-auto text-xs text-slate-600 group-hover:text-slate-400 transition">Read more →</span>
                       </div>
-                      {a.image_url && <img src={a.image_url} alt="" className="rounded-xl mb-3 max-h-64 object-cover w-full" />}
-                      <h2 className="text-xl font-bold text-white mb-2 leading-snug">{a.title}</h2>
-                      <p className="text-sm leading-relaxed whitespace-pre-line" style={{ color: "#888" }}>{a.body}</p>
-                    </article>
+                      {a.image_url && <img src={a.image_url} alt="" className="rounded-xl mb-3 max-h-48 object-cover w-full" />}
+                      <h2 className="text-xl font-bold text-white mb-2 leading-snug group-hover:text-blue-300 transition">{a.title}</h2>
+                      <p className="text-sm leading-relaxed whitespace-pre-line line-clamp-3" style={{ color: "#888" }}>{a.body}</p>
+                    </a>
                   ))}
                 </div>
               )}

@@ -178,23 +178,23 @@ function splitStats(stats: GameStat[], game: Game, allPlayerTeams: PlayerTeam[])
 
 // ── Render comment text with @mention highlighting ────────────────────────────
 
-function CommentText({ content, slug }: { content: string; slug: string }) {
+function CommentText({ content, slug, myMcUsername }: { content: string; slug: string; myMcUsername?: string | null }) {
   const parts = content.split(/(@\w+)/g);
   return (
     <p className="text-slate-300 text-sm leading-relaxed">
-      {parts.map((part, i) =>
-        /^@\w+$/.test(part) ? (
-          <Link
-            key={i}
-            href={`/${slug}/players/${encodeURIComponent(part.slice(1))}`}
-            className="text-blue-400 font-semibold hover:underline"
-          >
+      {parts.map((part, i) => {
+        if (!/^@\w+$/.test(part)) return <span key={i}>{part}</span>;
+        const username = part.slice(1);
+        const isSelf = myMcUsername && username.toLowerCase() === myMcUsername.toLowerCase();
+        if (isSelf) return (
+          <span key={i} className="bg-blue-500/20 text-blue-300 font-bold rounded px-0.5">{part}</span>
+        );
+        return (
+          <Link key={i} href={`/${slug}/players/${encodeURIComponent(username)}`} className="text-blue-400 font-semibold hover:underline">
             {part}
           </Link>
-        ) : (
-          <span key={i}>{part}</span>
-        )
-      )}
+        );
+      })}
     </p>
   );
 }
@@ -216,6 +216,8 @@ function CommentsSection({ gameId, slug }: { gameId: string; slug: string }) {
   const [mentionQuery, setMentionQuery]     = useState<string | null>(null);
   const [mentionIndex, setMentionIndex]     = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Derive own MC username from any comment this user posted with mc_username set
+  const myMcUsername = comments.find(c => c.discord_id === discordId && c.mc_username)?.mc_username ?? null;
 
   useEffect(() => {
     fetch("/api/players").then(r => r.json()).then(d => {
@@ -356,7 +358,7 @@ function CommentsSection({ gameId, slug }: { gameId: string; slug: string }) {
                         </button>
                       )}
                     </div>
-                    <CommentText content={c.content} slug={slug} />
+                    <CommentText content={c.content} slug={slug} myMcUsername={myMcUsername} />
                   </div>
                 </div>
               );
