@@ -37,7 +37,8 @@ export async function sendWebhookEmbed(url: string | undefined, embed: Record<st
  *
  * Env vars (set in Vercel):
  *   DISCORD_WEBHOOK_MBA_BIDS          — MBA bid/auction activity
- *   DISCORD_WEBHOOK_PBA               — MBA signings, cuts, trades
+ *   DISCORD_WEBHOOK_MBA_TRANSACTIONS  — MBA signings, cuts, trades (transactions bot)
+ *   DISCORD_WEBHOOK_PBA               — fallback if MBA_TRANSACTIONS not set
  *   DISCORD_WEBHOOK_PBGL              — MBGL transactions
  *   DISCORD_WEBHOOK_PCAA              — MCAA articles / general news
  *   DISCORD_WEBHOOK_MCAA_TRANSACTIONS — MCAA signings & cuts
@@ -48,7 +49,7 @@ export function getWebhookUrl(
   action: "bid" | "transaction" | "portal"
 ): string | undefined {
   if (league === "pba" && action === "bid") return process.env.DISCORD_WEBHOOK_MBA_BIDS;
-  if (league === "pba")  return process.env.DISCORD_WEBHOOK_PBA;
+  if (league === "pba") return process.env.DISCORD_WEBHOOK_MBA_TRANSACTIONS ?? process.env.DISCORD_WEBHOOK_PBA;
   if (league === "pbgl") return process.env.DISCORD_WEBHOOK_PBGL;
   if (league === "pcaa" && action === "portal") return process.env.DISCORD_WEBHOOK_MCAA_PORTAL;
   if (league === "pcaa") return process.env.DISCORD_WEBHOOK_MCAA_TRANSACTIONS;
