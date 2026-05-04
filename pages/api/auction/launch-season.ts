@@ -51,14 +51,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     existingSet = new Set((existing ?? []).map((a) => a.mc_uuid));
   }
 
-  // 3. In real mode: skip players who already have an active contract.
-  //    In test mode: include everyone (contracted players are fine to test-auction).
+  // 3. In real mode: skip players who already have an active contract THIS season.
+  //    Old season contracts left as "active" should not block new season auctions.
+  //    In test mode: include everyone.
   const contractedSet = new Set<string>();
   if (!isTest) {
     const { data: existingContracts } = await supabase
       .from("contracts")
       .select("mc_uuid")
       .eq("league", league)
+      .eq("season", season)
       .eq("status", "active");
     for (const c of existingContracts ?? []) contractedSet.add(c.mc_uuid);
   }
