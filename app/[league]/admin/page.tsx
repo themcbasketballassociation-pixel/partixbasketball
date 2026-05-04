@@ -4214,7 +4214,7 @@ function DraftPicksTab({ league }: { league: string }) {
 
 function AuctionAdminTab({ league }: { league: string }) {
   type AuctionRow = {
-    id: string; mc_uuid: string; min_price: number; status: string; phase: number;
+    id: string; mc_uuid: string; min_price: number; status: string;
     season: string | null; closes_at: string; nominated_at: string;
     winning_bid: number | null; winning_is_two_season: boolean; winning_team_id: string | null;
     players: { mc_uuid: string; mc_username: string };
@@ -4226,6 +4226,7 @@ function AuctionAdminTab({ league }: { league: string }) {
 
   // ── Shared ────────────────────────────────────────────────────────────────────
   const [players, setPlayers] = useState<Player[]>([]);
+  const [allPlayers, setAllPlayers] = useState<Player[]>([]); // all players, no stats filter — for nomination
   const [teams, setTeams] = useState<TeamRow[]>([]);
   const [innerTab, setInnerTab] = useState<"prices" | "auctions">("prices");
 
@@ -4236,6 +4237,8 @@ function AuctionAdminTab({ league }: { league: string }) {
   useEffect(() => {
     fetch(`/api/players?stats_season=${encodeURIComponent(statsFilterSeason)}&league=${league}`)
       .then((r) => r.json()).then((d) => setPlayers(Array.isArray(d) ? d : []));
+    fetch(`/api/players?league=${league}`)
+      .then((r) => r.json()).then((d) => setAllPlayers(Array.isArray(d) ? d : []));
     fetch(`/api/teams?league=${league}`).then((r) => r.json()).then((d) => setTeams(Array.isArray(d) ? d : []));
   }, [league, statsFilterSeason]);
 
@@ -4497,7 +4500,7 @@ function AuctionAdminTab({ league }: { league: string }) {
       <div className="mb-5 rounded-xl border border-yellow-800 bg-yellow-950/40 px-4 py-3">
         <div className="flex items-center gap-3 flex-wrap">
           <span className="text-yellow-400 text-xs font-bold uppercase tracking-widest">🧪 Test Auction</span>
-          <PlayerSearchSelect players={players} value={nomUuid} onChange={setNomUuid} placeholder="Pick a player…" />
+          <PlayerSearchSelect players={allPlayers} value={nomUuid} onChange={setNomUuid} placeholder="Pick a player…" />
           <input
             className={input}
             type="number"
@@ -4771,7 +4774,7 @@ function AuctionAdminTab({ league }: { league: string }) {
 
             <div className="flex gap-3 flex-wrap mb-2">
               <div style={{ flex: 2, minWidth: 160 }}>
-                <PlayerSearchSelect players={players} value={nomUuid} onChange={setNomUuid} placeholder="Search player…" />
+                <PlayerSearchSelect players={allPlayers} value={nomUuid} onChange={setNomUuid} placeholder="Search player…" />
               </div>
               <input className={input} type="number" placeholder="Min Price" value={nomMinPrice} onChange={(e) => setNomMinPrice(e.target.value)} style={{ flex: 1, minWidth: 100 }} />
               <input className={input} placeholder="Season (opt)" value={nomSeason} onChange={(e) => setNomSeason(e.target.value)} style={{ flex: 1, minWidth: 100 }} />

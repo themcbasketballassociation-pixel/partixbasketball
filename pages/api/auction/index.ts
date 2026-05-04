@@ -38,6 +38,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const isPending = reqStatus === "pending";
 
+    // Reject team owners — they are already assigned to their team
+    const { data: playerRow } = await supabase.from("players").select("discord_id").eq("mc_uuid", mc_uuid).maybeSingle();
+    if (playerRow?.discord_id) {
+      const { data: ownerCheck } = await supabase
+        .from("team_owners")
+        .select("id")
+        .eq("discord_id", playerRow.discord_id)
+        .eq("league", league)
+        .maybeSingle();
+      if (ownerCheck) return res.status(400).json({ error: "This player is a team owner and cannot be added to the auction" });
+    }
+
     // Check not already in an active or pending auction
     const { data: existing } = await supabase
       .from("auctions")

@@ -71,7 +71,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     for (const c of existingContracts ?? []) contractedSet.add(c.mc_uuid);
   }
 
-  // 4. Create active auctions for all priced players not already in auction or contracted
+  // 3b. Always skip team owners — they are already assigned to their team
+  const ownerSet = new Set<string>();
+  const { data: teamOwners } = await supabase
+    .from("team_owners")
+    .select("discord_id")
+    .eq("league", league);
+  const ownerDiscordIds = (teamOwners ?? []).map((o: any) => o.discord_id as string);
+  if (ownerDiscordIds.length > 0) {
+    const { data: ownerPlayers } = await supabase
+      .from("players")
+      .select("mc_uuid")
+      .in("discord_id", ownerDiscordIds);
+    for (const p of ownerPlayers ?? []) ownerSet.add(p.mc_uuid);
+  }
+
+  // 4. Create active auctions for all priced players not already in auction, contracted, or an owner
   const durationMs = isTest ? Number(duration_minutes) * 60 * 1000 : 72 * 60 * 60 * 1000;
   const closesAt = new Date(Date.now() + durationMs).toISOString();
   let created = 0;
@@ -79,7 +94,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const insertErrors: string[] = [];
 
   for (const { mc_uuid, price } of prices) {
-    if (existingSet.has(mc_uuid) || contractedSet.has(mc_uuid)) {
+    if (existingSet.has(mc_uuid) || contractedSet.has(mc_uuid) || ownerSet.has(mc_uuid)) {
       skipped++;
       continue;
     }
