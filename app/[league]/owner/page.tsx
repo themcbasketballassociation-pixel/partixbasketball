@@ -541,6 +541,32 @@ function TradeTab({ teamId, league, leagueSlug, contracts, allTeams, seasonTeamI
 
 // ── SigningsTab ────────────────────────────────────────────────────────────────
 type SigningPlayer = { mc_uuid: string; mc_username: string; min_price: number };
+type ContractOffer = {
+  id: string; league: string; mc_uuid: string; team_id: string; amount: number;
+  is_two_season: boolean; season: string | null; status: string; offered_at: string;
+  dm_sent_at: string | null;
+  players: { mc_uuid: string; mc_username: string; discord_id: string | null };
+  teams: { id: string; name: string; abbreviation: string };
+};
+
+function OfferCountdown({ offeredAt }: { offeredAt: string }) {
+  const [label, setLabel] = useState("");
+  useEffect(() => {
+    const HOURS_12_MS = 12 * 60 * 60 * 1000;
+    const tick = () => {
+      const elapsed = Date.now() - new Date(offeredAt).getTime();
+      const remaining = HOURS_12_MS - elapsed;
+      if (remaining <= 0) { setLabel("Player can accept now"); return; }
+      const h = Math.floor(remaining / 3600000);
+      const m = Math.floor((remaining % 3600000) / 60000);
+      setLabel(`Acceptable in ${h}h ${m.toString().padStart(2, "0")}m`);
+    };
+    tick();
+    const id = setInterval(tick, 30000);
+    return () => clearInterval(id);
+  }, [offeredAt]);
+  return <span>{label}</span>;
+}
 
 function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
   teamId: string; league: string; leagueSlug: string; contracts: Contract[]; ownerSeason: string | null; onRefresh: () => void;
@@ -550,23 +576,28 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
   const TOTAL_CAP = 25000;
   const [available, setAvailable] = useState<SigningPlayer[]>([]);
   const [pendingSignings, setPendingSignings] = useState<Contract[]>([]);
+  const [sentOffers, setSentOffers] = useState<ContractOffer[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPlayer, setSelectedPlayer] = useState("");
   const [signingRole, setSigningRole] = useState<"player" | "coach">("player");
   const [err, setErr] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
-  const [signing, setSigning] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [withdrawing, setWithdrawing] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [faRes, pendingRes] = await Promise.all([
+    const [faRes, pendingRes, offersRes] = await Promise.all([
       fetch(`/api/contracts/sign?league=${leagueSlug}`),
       fetch(`/api/contracts?league=${leagueSlug}&team_id=${teamId}&status=pending_approval`),
+      fetch(`/api/contract-offers?league=${leagueSlug}&team_id=${teamId}`),
     ]);
     const fa = await faRes.json();
     const pending = await pendingRes.json();
+    const offers = await offersRes.json();
     setAvailable(Array.isArray(fa) ? fa : []);
     setPendingSignings(Array.isArray(pending) ? pending : []);
+    setSentOffers(Array.isArray(offers) ? offers : []);
     setLoading(false);
   }, [leagueSlug, teamId]);
 
@@ -576,27 +607,54 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
   const capRemaining = TOTAL_CAP - capUsed;
   const selectedInfo = available.find((p) => p.mc_uuid === selectedPlayer);
 
-  const signPlayer = async () => {
+  // For players already sent an offer, filter them from available list
+  const offeredUuids = new Set(sentOffers.map((o) => o.mc_uuid));
+  const availableFiltered = available.filter((p) => !offeredUuids.has(p.mc_uuid));
+
+  const makeOffer = async () => {
     if (!selectedPlayer) return setErr("Select a player");
-    setErr(""); setSuccessMsg(""); setSigning(true);
+    setErr(""); setSuccessMsg(""); setSubmitting(true);
     const isCoach = isMcaa && signingRole === "coach";
-    const r = await fetch(isCoach ? "/api/contracts/coach" : "/api/contracts/sign", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(isCoach
-        ? { league: leagueSlug, mc_username: selectedInfo?.mc_username }
-        : { league: leagueSlug, mc_uuid: selectedPlayer }),
-    });
-    const d = await r.json();
-    setSigning(false);
-    if (!r.ok) {
-      setErr(d.error);
-    } else {
-      const roleLabel = isCoach ? "coach" : "player";
-      setSuccessMsg(`${isCoach ? "Coach" : "Signing"} request submitted for ${selectedInfo?.mc_username ?? "player"}${!hideCap && !isCoach ? ` at ${fmt(selectedInfo?.min_price ?? 0)}` : ""} as ${roleLabel} — waiting for admin approval.`);
+
+    if (isCoach) {
+      // Coaches still go through old direct sign flow
+      const r = await fetch("/api/contracts/coach", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ league: leagueSlug, mc_username: selectedInfo?.mc_username }),
+      });
+      const d = await r.json();
+      setSubmitting(false);
+      if (!r.ok) return setErr(d.error);
+      setSuccessMsg(`Coach request submitted for ${selectedInfo?.mc_username ?? "player"} — waiting for admin approval.`);
       setSelectedPlayer("");
       loadData(); onRefresh();
+      return;
     }
+
+    // Players → create a contract offer (player must accept)
+    const r = await fetch("/api/contract-offers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ league: leagueSlug, mc_uuid: selectedPlayer, amount: selectedInfo?.min_price ?? 0 }),
+    });
+    const d = await r.json();
+    setSubmitting(false);
+    if (!r.ok) return setErr(d.error);
+    setSuccessMsg(`Offer sent to ${selectedInfo?.mc_username ?? "player"}${!hideCap ? ` for $${fmt(selectedInfo?.min_price ?? 0)}` : ""}. They'll be notified after 12 hours and can accept via Discord or their profile.`);
+    setSelectedPlayer("");
+    loadData(); onRefresh();
+  };
+
+  const withdrawOffer = async (offerId: string) => {
+    setWithdrawing(offerId);
+    const r = await fetch(`/api/contract-offers/${offerId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "withdraw" }),
+    });
+    setWithdrawing(null);
+    if (r.ok) { loadData(); onRefresh(); }
   };
 
   return (
@@ -608,28 +666,40 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
       )}
       <div style={{ background: "#0d1117", border: "1px solid #1a2030", borderRadius: 8, padding: "8px 12px", marginBottom: 16, fontSize: 12, color: "#555" }}>
         {isMcaa
-          ? "Sign available players · Players signed at their listed price · Requires admin approval"
-          : "Post-auction signings only · Players signed at their auction minimum price · No 2-season contracts · Requires admin approval"}
+          ? "Send offers to available players · Player must accept · Coach signings go directly to admin approval"
+          : "Post-auction signings only · Send an offer at the auction minimum price · Player accepts after a 12-hour window"}
       </div>
 
+      {/* Make Offer / Coach Sign form */}
       <div style={{ ...innerCard, marginBottom: 20 }}>
-        <div style={{ color: "#aaa", fontWeight: 700, marginBottom: 14 }}>Request a Signing</div>
+        <div style={{ color: "#aaa", fontWeight: 700, marginBottom: 14 }}>
+          {isMcaa ? "Send an Offer / Coach Request" : "Send a Contract Offer"}
+        </div>
         <div style={{ marginBottom: 12 }}>
-          <label style={{ color: "#555", fontSize: 12, display: "block", marginBottom: 4 }}>{isMcaa ? "Available player" : "Player (went undrafted in auction)"}</label>
+          <label style={{ color: "#555", fontSize: 12, display: "block", marginBottom: 4 }}>
+            {isMcaa ? "Available player" : "Player (closed auction — no winner)"}
+          </label>
           {loading ? (
             <div style={{ color: "#444", fontSize: 13 }}>Loading…</div>
-          ) : available.length === 0 ? (
-            <div style={{ color: "#555", fontSize: 13 }}>{isMcaa ? "No players available for signing yet." : "No players available for signing yet. Players appear here after the auction closes without a bid."}</div>
+          ) : availableFiltered.length === 0 ? (
+            <div style={{ color: "#555", fontSize: 13 }}>
+              {isMcaa ? "No players available." : "No players available. Players appear here after their auction closes without a bid."}
+            </div>
           ) : (
             <select style={input} value={selectedPlayer} onChange={(e) => setSelectedPlayer(e.target.value)}>
               <option value="">— Select player —</option>
-              {available.map((p) => <option key={p.mc_uuid} value={p.mc_uuid}>{p.mc_username}{!hideCap ? ` — ${fmt(p.min_price)}` : ""}</option>)}
+              {availableFiltered.map((p) => (
+                <option key={p.mc_uuid} value={p.mc_uuid}>
+                  {p.mc_username}{!hideCap ? ` — $${fmt(p.min_price)}` : ""}
+                </option>
+              ))}
             </select>
           )}
         </div>
+
         {isMcaa && (
           <div style={{ marginBottom: 12 }}>
-            <label style={{ color: "#555", fontSize: 12, display: "block", marginBottom: 6 }}>Signing as</label>
+            <label style={{ color: "#555", fontSize: 12, display: "block", marginBottom: 6 }}>Role</label>
             <div style={{ display: "flex", gap: 8 }}>
               {(["player", "coach"] as const).map((role) => (
                 <button
@@ -648,10 +718,11 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
             </div>
           </div>
         )}
+
         {selectedInfo && !hideCap && signingRole === "player" && (
           <div style={{ ...innerCard, marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ color: "#555", fontSize: 13 }}>Signing salary (auction minimum)</span>
-            <span style={{ color: "#22d3ee", fontWeight: 700, fontSize: 18 }}>{fmt(selectedInfo.min_price)}</span>
+            <span style={{ color: "#555", fontSize: 13 }}>Offer salary (auction minimum)</span>
+            <span style={{ color: "#22d3ee", fontWeight: 700, fontSize: 18 }}>${fmt(selectedInfo.min_price)}</span>
           </div>
         )}
         {selectedInfo && !hideCap && signingRole === "player" && capUsed + selectedInfo.min_price > TOTAL_CAP && (
@@ -661,24 +732,68 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
         )}
         {err && <div style={{ color: "#fca5a5", background: "#450a0a", border: "1px solid #7f1d1d", borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 13 }}>{err}</div>}
         {successMsg && <div style={{ color: "#86efac", background: "#052e16", border: "1px solid #166534", borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 13 }}>{successMsg}</div>}
+
         <button
-          onClick={signPlayer}
-          disabled={signing || !selectedPlayer || (!hideCap && signingRole === "player" && selectedInfo ? capUsed + selectedInfo.min_price > TOTAL_CAP : false)}
-          style={{ ...btn("primary"), opacity: (signing || !selectedPlayer) ? 0.5 : 1 }}
+          onClick={makeOffer}
+          disabled={submitting || !selectedPlayer || (!hideCap && signingRole === "player" && selectedInfo ? capUsed + selectedInfo.min_price > TOTAL_CAP : false)}
+          style={{ ...btn("primary"), opacity: (submitting || !selectedPlayer) ? 0.5 : 1 }}
         >
-          {signing ? "Submitting…" : isMcaa && signingRole === "coach" ? "Submit Coach Request" : "Submit Signing Request"}
+          {submitting ? "Submitting…" : isMcaa && signingRole === "coach" ? "Submit Coach Request" : "📨 Send Offer"}
         </button>
       </div>
 
+      {/* Sent Offers (pending) */}
+      {sentOffers.length > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ color: "#555", fontSize: 12, fontWeight: 600, marginBottom: 8, textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>
+            Sent Offers ({sentOffers.length})
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {sentOffers.map((o) => {
+              const HOURS_12_MS = 12 * 60 * 60 * 1000;
+              const elapsed = Date.now() - new Date(o.offered_at).getTime();
+              const canAccept = elapsed >= HOURS_12_MS;
+              return (
+                <div key={o.id} style={{ ...innerCard, display: "flex", alignItems: "center", gap: 10 }}>
+                  <img
+                    src={`https://minotar.net/avatar/${o.players.mc_username}/32`}
+                    style={{ width: 32, height: 32, borderRadius: 6, border: "1px solid #222", flexShrink: 0 }}
+                    onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/32"; }}
+                    alt=""
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ color: "#fff", fontWeight: 600, fontSize: 13 }}>{o.players.mc_username}</div>
+                    <div style={{ color: canAccept ? "#4ade80" : "#888", fontSize: 11 }}>
+                      <OfferCountdown offeredAt={o.offered_at} />
+                      {o.dm_sent_at && <span style={{ color: "#6366f1", marginLeft: 8 }}>✉ DM sent</span>}
+                      {!o.players.discord_id && <span style={{ color: "#ef4444", marginLeft: 8 }}>⚠ No Discord linked</span>}
+                    </div>
+                  </div>
+                  {!hideCap && <span style={{ color: "#22d3ee", fontWeight: 700, flexShrink: 0 }}>${fmt(o.amount)}</span>}
+                  <button
+                    onClick={() => withdrawOffer(o.id)}
+                    disabled={withdrawing === o.id}
+                    style={{ ...btn("danger"), fontSize: 12, padding: "4px 10px", flexShrink: 0, opacity: withdrawing === o.id ? 0.5 : 1 }}
+                  >
+                    {withdrawing === o.id ? "…" : "Withdraw"}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Pending admin-approval contracts (accepted offers + coach requests) */}
       {pendingSignings.length > 0 && (
         <div style={{ marginBottom: 20 }}>
-          <div style={{ color: "#555", fontSize: 12, fontWeight: 600, marginBottom: 8, textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>Pending Requests</div>
+          <div style={{ color: "#555", fontSize: 12, fontWeight: 600, marginBottom: 8, textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>Pending Admin Approval</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {pendingSignings.map((c) => (
               <div key={c.id} style={{ ...innerCard, display: "flex", alignItems: "center", gap: 12 }}>
                 <img src={`https://minotar.net/avatar/${c.players.mc_username}/32`} style={{ width: 32, height: 32, borderRadius: 6, border: "1px solid #222" }} onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/32"; }} alt="" />
                 <span style={{ color: "#fff", fontWeight: 600, flex: 1 }}>{c.players.mc_username}</span>
-                {!hideCap && <span style={{ color: "#22d3ee", fontWeight: 700 }}>{fmt(c.amount)}</span>}
+                {!hideCap && <span style={{ color: "#22d3ee", fontWeight: 700 }}>${fmt(c.amount)}</span>}
                 <span style={{ color: "#fbbf24", background: "#1c1200", border: "1px solid #78350f", borderRadius: 6, fontSize: 11, padding: "2px 8px", fontWeight: 600 }}>pending approval</span>
               </div>
             ))}
@@ -694,7 +809,7 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
               <div key={c.id} style={{ ...innerCard, display: "flex", alignItems: "center", gap: 12 }}>
                 <img src={`https://minotar.net/avatar/${c.players.mc_username}/32`} style={{ width: 32, height: 32, borderRadius: 6, border: "1px solid #222" }} onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/32"; }} alt="" />
                 <span style={{ color: "#aaa", flex: 1 }}>{c.players.mc_username}</span>
-                {!hideCap && <span style={{ color: "#22d3ee", fontWeight: 700 }}>{fmt(c.amount)}</span>}
+                {!hideCap && <span style={{ color: "#22d3ee", fontWeight: 700 }}>${fmt(c.amount)}</span>}
                 {!hideCap && c.is_two_season && <span style={{ color: "#a855f7", fontSize: 11 }}>2yr</span>}
               </div>
             ))}

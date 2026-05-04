@@ -755,6 +755,141 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return updateEmbed(mc_uuid, league, season, type);
     }
 
+    // ── Contract offer: accept ────────────────────────────────────────────────
+    if (customId.startsWith("accept_offer:")) {
+      const offerId = customId.split(":")[1];
+      const clickerDiscordId = body.member?.user?.id ?? body.user?.id;
+      if (!clickerDiscordId) return res.status(200).json({ type: 4, data: { content: "Could not verify your identity.", flags: 64 } });
+
+      // Fetch the offer
+      const { data: offer } = await supabase
+        .from("contract_offers")
+        .select("*, players(mc_uuid, mc_username, discord_id), teams(id, name, abbreviation)")
+        .eq("id", offerId)
+        .maybeSingle();
+
+      if (!offer) return res.status(200).json({ type: 4, data: { content: "❌ Offer not found.", flags: 64 } });
+      if (offer.status !== "pending") return res.status(200).json({ type: 4, data: { content: "❌ This offer is no longer available.", flags: 64 } });
+
+      const playerDiscordId = (offer.players as any)?.discord_id;
+      if (clickerDiscordId !== playerDiscordId) {
+        return res.status(200).json({ type: 4, data: { content: "❌ This offer is not for you.", flags: 64 } });
+      }
+
+      // Enforce 12-hour window
+      const HOURS_12_MS = 12 * 60 * 60 * 1000;
+      const { data: allPending } = await supabase
+        .from("contract_offers")
+        .select("offered_at")
+        .eq("mc_uuid", offer.mc_uuid)
+        .eq("league", offer.league)
+        .eq("status", "pending")
+        .order("offered_at", { ascending: false });
+
+      const mostRecentOfferedAt = (allPending ?? [])[0]?.offered_at;
+      if (mostRecentOfferedAt) {
+        const elapsed = Date.now() - new Date(mostRecentOfferedAt).getTime();
+        if (elapsed < HOURS_12_MS) {
+          const acceptableAt = new Date(new Date(mostRecentOfferedAt).getTime() + HOURS_12_MS);
+          const remainingMs = acceptableAt.getTime() - Date.now();
+          const h = Math.floor(remainingMs / 3600000);
+          const m = Math.floor((remainingMs % 3600000) / 60000);
+          return res.status(200).json({
+            type: 4,
+            data: { content: `⏳ You can't accept yet — wait **${h}h ${m}m** more (12-hour window from your most recent offer).`, flags: 64 },
+          });
+        }
+      }
+
+      // Check no existing active contract
+      const { data: existingContract } = await supabase
+        .from("contracts")
+        .select("id")
+        .eq("mc_uuid", offer.mc_uuid)
+        .eq("league", offer.league)
+        .in("status", ["active", "pending_approval"])
+        .maybeSingle();
+      if (existingContract) {
+        return res.status(200).json({ type: 4, data: { content: "❌ You already have an active or pending contract.", flags: 64 } });
+      }
+
+      // Create contract
+      const { error: contractErr } = await supabase
+        .from("contracts")
+        .insert([{
+          league: offer.league,
+          mc_uuid: offer.mc_uuid,
+          team_id: offer.team_id,
+          amount: offer.amount,
+          is_two_season: offer.is_two_season,
+          season: offer.season,
+          phase: offer.phase ?? 1,
+          status: "pending_approval",
+        }]);
+
+      if (contractErr) {
+        return res.status(200).json({ type: 4, data: { content: `❌ Error: ${contractErr.message}`, flags: 64 } });
+      }
+
+      // Mark accepted, decline others
+      await supabase.from("contract_offers").update({ status: "accepted" }).eq("id", offerId);
+      await supabase
+        .from("contract_offers")
+        .update({ status: "declined" })
+        .eq("mc_uuid", offer.mc_uuid)
+        .eq("league", offer.league)
+        .eq("status", "pending")
+        .neq("id", offerId);
+
+      const team = (offer.teams as any);
+      const leagueLabel = LEAGUE_LABELS[offer.league] ?? offer.league.toUpperCase();
+      return res.status(200).json({
+        type: 7, // UPDATE MESSAGE
+        data: {
+          content: `✅ **Done!** You accepted the offer from **${team?.name ?? "Unknown"}** in **${leagueLabel}**. Your contract is pending admin approval.`,
+          embeds: [],
+          components: [],
+        },
+      });
+    }
+
+    // ── Contract offer: decline all ───────────────────────────────────────────
+    if (customId.startsWith("decline_all_offers:")) {
+      const parts = customId.split(":");
+      const mc_uuid = parts[1];
+      const league = parts[2];
+      const clickerDiscordId = body.member?.user?.id ?? body.user?.id;
+      if (!clickerDiscordId) return res.status(200).json({ type: 4, data: { content: "Could not verify your identity.", flags: 64 } });
+
+      // Verify this player owns this mc_uuid
+      const { data: player } = await supabase
+        .from("players")
+        .select("mc_uuid, discord_id")
+        .eq("mc_uuid", mc_uuid)
+        .maybeSingle();
+
+      if (!player || (player as any).discord_id !== clickerDiscordId) {
+        return res.status(200).json({ type: 4, data: { content: "❌ You are not authorized to decline these offers.", flags: 64 } });
+      }
+
+      await supabase
+        .from("contract_offers")
+        .update({ status: "declined" })
+        .eq("mc_uuid", mc_uuid)
+        .eq("league", league)
+        .eq("status", "pending");
+
+      const leagueLabel = LEAGUE_LABELS[league] ?? league.toUpperCase();
+      return res.status(200).json({
+        type: 7,
+        data: {
+          content: `✅ You have declined all pending **${leagueLabel}** offers.`,
+          embeds: [],
+          components: [],
+        },
+      });
+    }
+
     return res.status(200).json({ type: 6 });
   }
 

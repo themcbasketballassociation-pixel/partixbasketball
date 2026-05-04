@@ -18,6 +18,42 @@ type Mention = {
   id: string; game_id: string; discord_id: string; discord_name: string | null;
   content: string; created_at: string; mc_username: string | null;
 };
+type ContractOffer = {
+  id: string; league: string; mc_uuid: string; team_id: string;
+  amount: number; is_two_season: boolean; season: string | null;
+  status: string; offered_at: string; dm_sent_at: string | null;
+  players: { mc_uuid: string; mc_username: string };
+  teams: { id: string; name: string; abbreviation: string; logo_url: string | null; color2: string | null };
+};
+
+const LEAGUE_LABELS: Record<string, string> = { pba: "MBA", mba: "MBA", pcaa: "MCAA", mcaa: "MCAA", pbgl: "MBGL", mbgl: "MBGL" };
+const LEAGUE_COLORS: Record<string, string> = { pba: "#C8102E", mba: "#C8102E", pcaa: "#003087", mcaa: "#003087", pbgl: "#BB3430", mbgl: "#BB3430" };
+const HOURS_12_MS = 12 * 60 * 60 * 1000;
+
+function OfferTimer({ offeredAt, onReady }: { offeredAt: string; onReady: () => void }) {
+  const [label, setLabel] = useState("");
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const tick = () => {
+      const elapsed = Date.now() - new Date(offeredAt).getTime();
+      const remaining = HOURS_12_MS - elapsed;
+      if (remaining <= 0) {
+        setLabel("Ready to accept");
+        if (!ready) { setReady(true); onReady(); }
+        return;
+      }
+      const h = Math.floor(remaining / 3600000);
+      const m = Math.floor((remaining % 3600000) / 60000);
+      const s = Math.floor((remaining % 60000) / 1000);
+      setLabel(`Available in ${h}h ${m.toString().padStart(2, "0")}m ${s.toString().padStart(2, "0")}s`);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [offeredAt]);
+  return <span style={{ color: ready ? "#4ade80" : "#888", fontSize: 11, fontVariantNumeric: "tabular-nums" }}>{label}</span>;
+}
 
 export default function ProfilePage({ params }: { params?: Promise<{ league?: string }> }) {
   const resolved = React.use(params ?? Promise.resolve({})) as { league?: string };
@@ -32,6 +68,12 @@ export default function ProfilePage({ params }: { params?: Promise<{ league?: st
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [mentions, setMentions]           = useState<Mention[]>([]);
   const [mentionsLoading, setMentionsLoading] = useState(false);
+  const [offers, setOffers]               = useState<ContractOffer[]>([]);
+  const [offersLoading, setOffersLoading] = useState(false);
+  const [offerAction, setOfferAction]     = useState<Record<string, "accepting" | "declining" | null>>({});
+  const [offerMsgs, setOfferMsgs]         = useState<Record<string, { type: "ok" | "err"; text: string }>>({});
+  // tracks whether the 12-hr window has elapsed for each offer set (by league)
+  const [offerReady, setOfferReady]       = useState<Record<string, boolean>>({});
 
   // Check if Discord is linked to an MC account
   useEffect(() => {
@@ -76,11 +118,63 @@ export default function ProfilePage({ params }: { params?: Promise<{ league?: st
       .catch(() => setMentionsLoading(false));
   }, [linkedPlayer]);
 
+  // Load contract offers for this player
+  useEffect(() => {
+    if (!discordId) return;
+    setOffersLoading(true);
+    fetch(`/api/contract-offers?discord_id=${discordId}&status=pending`)
+      .then(r => r.json())
+      .then(d => { setOffers(Array.isArray(d) ? d : []); setOffersLoading(false); })
+      .catch(() => setOffersLoading(false));
+  }, [discordId]);
+
   const unpinGame = (id: string) => {
     const key = `partix:pinned:${slug}`;
     const saved = JSON.parse(localStorage.getItem(key) ?? "[]") as string[];
     localStorage.setItem(key, JSON.stringify(saved.filter((i: string) => i !== id)));
     setPinnedGames(prev => prev.filter(g => g.id !== id));
+  };
+
+  const respondOffer = async (offerId: string, action: "accept" | "decline") => {
+    setOfferAction(prev => ({ ...prev, [offerId]: action === "accept" ? "accepting" : "declining" }));
+    setOfferMsgs(prev => ({ ...prev, [offerId]: { type: "ok", text: "" } }));
+    const r = await fetch(`/api/contract-offers/${offerId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action }),
+    });
+    const d = await r.json();
+    setOfferAction(prev => ({ ...prev, [offerId]: null }));
+    if (!r.ok) {
+      setOfferMsgs(prev => ({ ...prev, [offerId]: { type: "err", text: d.error } }));
+    } else {
+      // Refresh offers list
+      fetch(`/api/contract-offers?discord_id=${discordId}&status=pending`)
+        .then(res => res.json())
+        .then(data => setOffers(Array.isArray(data) ? data : []));
+      if (action === "accept") {
+        setOfferMsgs(prev => ({
+          ...prev,
+          [offerId]: { type: "ok", text: "✅ Offer accepted! Your contract is pending admin approval." },
+        }));
+      }
+    }
+  };
+
+  // Group offers by league so we can find the most recent per league
+  const offersByLeague = offers.reduce<Record<string, ContractOffer[]>>((acc, o) => {
+    const key = o.league;
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(o);
+    return acc;
+  }, {});
+
+  // For each league: find most recent offered_at, compute acceptable_at
+  const getAcceptableAt = (leagueOffers: ContractOffer[]) => {
+    const mostRecent = leagueOffers.reduce((best, o) =>
+      new Date(o.offered_at) > new Date(best.offered_at) ? o : best
+    );
+    return new Date(new Date(mostRecent.offered_at).getTime() + HOURS_12_MS);
   };
 
   // ── Not signed in ───────────────────────────────────────────────────────────
@@ -208,6 +302,146 @@ export default function ProfilePage({ params }: { params?: Promise<{ league?: st
           )}
         </div>
       </div>
+
+      {/* ── Contract Offers ─────────────────────────────────────────────────── */}
+      {isLinked && (
+        <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
+          <div className="px-6 py-5 border-b border-slate-800 flex items-center gap-2 flex-wrap">
+            <h3 className="font-bold text-white">📋 Contract Offers</h3>
+            {offers.length > 0 && (
+              <span className="text-xs text-amber-400 bg-amber-950 border border-amber-800 rounded-full px-2 py-0.5 font-bold">
+                {offers.length}
+              </span>
+            )}
+            <p className="text-slate-500 text-xs ml-1">Offers from teams — accept after the 12-hour window</p>
+          </div>
+          <div className="p-6">
+            {offersLoading ? (
+              <p className="text-slate-600 text-sm text-center py-4">Loading…</p>
+            ) : offers.length === 0 ? (
+              <p className="text-slate-600 text-sm text-center py-4">No pending offers.</p>
+            ) : (
+              <div className="space-y-6">
+                {Object.entries(offersByLeague).map(([league, leagueOffers]) => {
+                  const acceptableAt = getAcceptableAt(leagueOffers);
+                  const leagueColor = LEAGUE_COLORS[league] ?? "#888";
+                  const leagueLabel = LEAGUE_LABELS[league] ?? league.toUpperCase();
+                  const showSalary = league !== "pcaa" && league !== "pbgl";
+                  const canAccept = offerReady[league] || Date.now() >= acceptableAt.getTime();
+
+                  return (
+                    <div key={league}>
+                      {/* League header */}
+                      <div className="flex items-center gap-2 mb-3">
+                        <span
+                          className="text-[10px] font-black tracking-widest uppercase px-2 py-0.5 rounded-md text-white"
+                          style={{ background: leagueColor }}
+                        >
+                          {leagueLabel}
+                        </span>
+                        {!canAccept ? (
+                          <span className="text-xs text-slate-500">
+                            Accepting opens at{" "}
+                            <span className="text-slate-400 font-semibold">
+                              {acceptableAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}{" "}
+                              {acceptableAt.toLocaleDateString([], { month: "short", day: "numeric" })}
+                            </span>
+                            {" — "}
+                            <OfferTimer
+                              offeredAt={leagueOffers.reduce((best, o) =>
+                                new Date(o.offered_at) > new Date(best.offered_at) ? o : best
+                              ).offered_at}
+                              onReady={() => setOfferReady(prev => ({ ...prev, [league]: true }))}
+                            />
+                          </span>
+                        ) : (
+                          <span className="text-xs text-green-400 font-semibold">✓ Window open — choose an offer below</span>
+                        )}
+                      </div>
+
+                      {/* Offer cards */}
+                      <div className="space-y-2">
+                        {leagueOffers.map((o) => {
+                          const msg = offerMsgs[o.id];
+                          const acting = offerAction[o.id];
+                          return (
+                            <div
+                              key={o.id}
+                              className="rounded-xl border px-4 py-3 flex items-center gap-3 flex-wrap"
+                              style={{ borderColor: canAccept ? "#1e3a2a" : "#1c2028", background: canAccept ? "#0a1a10" : "#101318" }}
+                            >
+                              {/* Team logo / name */}
+                              <div className="flex items-center gap-3 flex-1 min-w-0">
+                                {o.teams.logo_url ? (
+                                  <img src={o.teams.logo_url} alt="" className="w-8 h-8 object-contain flex-shrink-0" />
+                                ) : (
+                                  <div className="w-8 h-8 rounded-lg flex-shrink-0" style={{ background: o.teams.color2 ?? "#333" }} />
+                                )}
+                                <div className="min-w-0">
+                                  <div className="text-white font-semibold text-sm truncate">{o.teams.name}</div>
+                                  {showSalary && o.amount > 0 && (
+                                    <div className="text-cyan-400 font-bold text-xs">${o.amount.toLocaleString()}</div>
+                                  )}
+                                  {o.is_two_season && (
+                                    <div className="text-purple-400 text-xs">2-season contract</div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Offered date */}
+                              <div className="text-slate-600 text-xs flex-shrink-0">
+                                {new Date(o.offered_at).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                              </div>
+
+                              {/* Accept / Decline buttons */}
+                              {msg?.text ? (
+                                <span className={`text-xs font-semibold ${msg.type === "ok" ? "text-green-400" : "text-red-400"}`}>
+                                  {msg.text}
+                                </span>
+                              ) : (
+                                <div className="flex gap-2 flex-shrink-0">
+                                  <button
+                                    onClick={() => respondOffer(o.id, "accept")}
+                                    disabled={!canAccept || !!acting}
+                                    className="px-3 py-1.5 rounded-lg text-xs font-bold transition"
+                                    style={{
+                                      background: canAccept ? "#052e16" : "#0a120c",
+                                      border: `1px solid ${canAccept ? "#166534" : "#1a2a1c"}`,
+                                      color: canAccept ? "#86efac" : "#2a4a2e",
+                                      cursor: canAccept && !acting ? "pointer" : "not-allowed",
+                                      opacity: acting ? 0.5 : 1,
+                                    }}
+                                  >
+                                    {acting === "accepting" ? "…" : "✅ Accept"}
+                                  </button>
+                                  <button
+                                    onClick={() => respondOffer(o.id, "decline")}
+                                    disabled={!!acting}
+                                    className="px-3 py-1.5 rounded-lg text-xs font-bold transition"
+                                    style={{
+                                      background: "#1a0a0a",
+                                      border: "1px solid #450a0a",
+                                      color: "#fca5a5",
+                                      cursor: acting ? "not-allowed" : "pointer",
+                                      opacity: acting ? 0.5 : 1,
+                                    }}
+                                  >
+                                    {acting === "declining" ? "…" : "❌ Decline"}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Pinned Box Scores ────────────────────────────────────────────────── */}
       <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
