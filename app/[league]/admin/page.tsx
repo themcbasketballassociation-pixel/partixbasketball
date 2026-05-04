@@ -4247,6 +4247,7 @@ function AuctionAdminTab({ league }: { league: string }) {
   const [playerPrices, setPlayerPrices] = useState<Record<string, number>>({});
   const [editingPriceMap, setEditingPriceMap] = useState<Record<string, string>>({});
   const [savingPriceUuid, setSavingPriceUuid] = useState<string | null>(null);
+  const [deletingPriceUuid, setDeletingPriceUuid] = useState<string | null>(null);
   const [priceMsg, setPriceMsg] = useState("");
   const [showPaste, setShowPaste] = useState(false);
   const [pasteText, setPasteText] = useState("");
@@ -4287,6 +4288,17 @@ function AuctionAdminTab({ league }: { league: string }) {
       const d = await r.json().catch(() => ({}));
       setPriceMsg(`Error: ${(d as { error?: string }).error ?? "save failed"}`);
     }
+  };
+
+  const deletePlayerPrice = async (mc_uuid: string) => {
+    setDeletingPriceUuid(mc_uuid);
+    await fetch("/api/auction-prices", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mc_uuid, league, season: priceSeason }),
+    });
+    setDeletingPriceUuid(null);
+    setPlayerPrices((m) => { const n = { ...m }; delete n[mc_uuid]; return n; });
   };
 
   const saveAllPrices = async () => {
@@ -4716,16 +4728,28 @@ function AuctionAdminTab({ league }: { league: string }) {
                         </button>
                       </div>
                     ) : (
-                      <button
-                        className={`text-sm border rounded-lg px-3 py-1 transition font-mono ${
-                          storedPrice != null
-                            ? "text-cyan-300 border-cyan-900 bg-cyan-950/40 hover:border-cyan-600"
-                            : "text-slate-600 border-slate-800 hover:text-white hover:border-slate-600"
-                        }`}
-                        onClick={() => setEditingPriceMap((m) => ({ ...m, [p.mc_uuid]: String(storedPrice ?? 1000) }))}
-                      >
-                        {storedPrice != null ? storedPrice.toLocaleString() : "— set price"}
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          className={`text-sm border rounded-lg px-3 py-1 transition font-mono ${
+                            storedPrice != null
+                              ? "text-cyan-300 border-cyan-900 bg-cyan-950/40 hover:border-cyan-600"
+                              : "text-slate-600 border-slate-800 hover:text-white hover:border-slate-600"
+                          }`}
+                          onClick={() => setEditingPriceMap((m) => ({ ...m, [p.mc_uuid]: String(storedPrice ?? 1000) }))}
+                        >
+                          {storedPrice != null ? storedPrice.toLocaleString() : "— set price"}
+                        </button>
+                        {storedPrice != null && (
+                          <button
+                            className="text-slate-600 hover:text-red-400 transition text-base leading-none px-1"
+                            title="Remove price"
+                            disabled={deletingPriceUuid === p.mc_uuid}
+                            onClick={() => deletePlayerPrice(p.mc_uuid)}
+                          >
+                            {deletingPriceUuid === p.mc_uuid ? "…" : "×"}
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                 );
@@ -6503,16 +6527,27 @@ function BackupTab() {
 function SigningsAdminTab({ league }: { league: string }) {
   type SigningRow = { id: string; mc_uuid: string; amount: number; is_two_season: boolean; phase: number; season: string | null; status: string; players: { mc_uuid: string; mc_username: string }; teams: { id: string; name: string; abbreviation: string } };
 
+  const [innerTab, setInnerTab] = useState<"pending" | "active">("pending");
   const [signings, setSignings] = useState<SigningRow[]>([]);
+  const [activeContracts, setActiveContracts] = useState<SigningRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionMsg, setActionMsg] = useState<Record<string, string>>({});
   const [syncMsg, setSyncMsg] = useState("");
+  // Edit contract state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editAmount, setEditAmount] = useState("");
+  const [editSeason, setEditSeason] = useState("");
+  const [editIs2s, setEditIs2s] = useState(false);
+  const [editMsg, setEditMsg] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
-    const r = await fetch(`/api/contracts?league=${league}&status=pending_approval`);
-    const d = await r.json();
-    setSignings(Array.isArray(d) ? d : []);
+    const [pend, active] = await Promise.all([
+      fetch(`/api/contracts?league=${league}&status=pending_approval`).then(r => r.json()),
+      fetch(`/api/contracts?league=${league}&status=active`).then(r => r.json()),
+    ]);
+    setSignings(Array.isArray(pend) ? pend : []);
+    setActiveContracts(Array.isArray(active) ? active : []);
     setLoading(false);
   }, [league]);
 
@@ -6523,6 +6558,26 @@ function SigningsAdminTab({ league }: { league: string }) {
     const r = await fetch("/api/admin/sync-rosters", { method: "POST" });
     const d = await r.json().catch(() => ({})) as { synced?: number; error?: string };
     setSyncMsg(r.ok ? `✓ Synced ${d.synced ?? 0} active contracts → player_teams` : `Error: ${d.error}`);
+  };
+
+  const startEdit = (s: SigningRow) => {
+    setEditingId(s.id);
+    setEditAmount(String(s.amount));
+    setEditSeason(s.season ?? "");
+    setEditIs2s(s.is_two_season);
+    setEditMsg("");
+  };
+
+  const saveEdit = async (id: string) => {
+    setEditMsg("Saving…");
+    const r = await fetch(`/api/contracts/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount: parseInt(editAmount) || 0, season: editSeason || null, is_two_season: editIs2s }),
+    });
+    const d = await r.json();
+    if (!r.ok) { setEditMsg(`Error: ${d.error ?? "failed"}`); return; }
+    setEditingId(null); setEditMsg(""); load();
   };
 
   const decide = async (id: string, action: "approve" | "reject") => {
@@ -6543,70 +6598,118 @@ function SigningsAdminTab({ league }: { league: string }) {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <div className="text-sm font-semibold text-slate-300">Pending Signing Requests</div>
-        <div className="flex gap-2">
+      {/* Inner tabs */}
+      <div className="flex border-b border-slate-800 mb-4">
+        {([["pending", "Pending Approval"], ["active", "Active Contracts"]] as const).map(([t, label]) => (
+          <button key={t} onClick={() => setInnerTab(t)} className={`px-5 py-2 text-sm font-semibold transition ${innerTab === t ? "border-b-2 border-blue-500 text-white" : "text-slate-500 hover:text-slate-300"}`}>
+            {label}{t === "pending" && signings.length > 0 ? ` (${signings.length})` : ""}
+          </button>
+        ))}
+        <div className="ml-auto flex gap-2 items-center pb-1">
           <button className={`${btnSecondary} text-xs`} onClick={syncRosters} title="Fix any approved players missing from player_teams">🔄 Sync Rosters</button>
           <button className={`${btnPrimary} text-xs`} onClick={load}>Refresh</button>
         </div>
       </div>
+
       {syncMsg && (
         <div className={`mb-3 text-xs rounded-lg px-3 py-2 border ${syncMsg.startsWith("✓") ? "text-green-400 bg-green-950 border-green-800" : "text-red-400 bg-red-950 border-red-800"}`}>
           {syncMsg}
         </div>
       )}
+
       {loading ? (
         <div className="text-slate-600 text-sm text-center py-8">Loading…</div>
-      ) : signings.length === 0 ? (
-        <div className="text-slate-600 text-sm text-center py-8">No pending signing requests.</div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {signings.map((s) => (
-            <div key={s.id} className={card}>
-              <div className="flex items-center gap-3">
-                <img
-                  src={`https://minotar.net/avatar/${s.players.mc_username}/40`}
-                  className="w-10 h-10 rounded-lg border border-slate-700"
-                  onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/40"; }}
-                  alt=""
-                />
-                <div className="flex-1">
-                  <div className="text-white font-bold">{s.players.mc_username}</div>
-                  <div className="text-slate-500 text-xs">
-                    {s.teams?.name ?? "Unknown team"}{s.season ? ` · ${s.season}` : ""}
-                    {s.phase === 0 ? <span className="text-violet-400 ml-1">· Coach</span> : null}
-                    {s.is_two_season && <span className="text-purple-400 ml-1">· 2-season</span>}
+      ) : innerTab === "pending" ? (
+        signings.length === 0 ? (
+          <div className="text-slate-600 text-sm text-center py-8">No pending signing requests.</div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {signings.map((s) => (
+              <div key={s.id} className={card}>
+                <div className="flex items-center gap-3">
+                  <img src={`https://minotar.net/avatar/${s.players.mc_username}/40`} className="w-10 h-10 rounded-lg border border-slate-700" onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/40"; }} alt="" />
+                  <div className="flex-1">
+                    <div className="text-white font-bold">{s.players.mc_username}</div>
+                    <div className="text-slate-500 text-xs">
+                      {s.teams?.name ?? "Unknown team"}{s.season ? ` · ${s.season}` : ""}
+                      {s.phase === 0 ? <span className="text-violet-400 ml-1">· Coach</span> : null}
+                      {s.is_two_season && <span className="text-purple-400 ml-1">· 2-season</span>}
+                    </div>
+                  </div>
+                  {s.amount > 0 && (
+                    <div className="text-right">
+                      <div className="text-cyan-400 font-bold text-lg">{s.amount.toLocaleString()}</div>
+                      <div className="text-slate-600 text-xs">salary</div>
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <button onClick={() => decide(s.id, "approve")} className="rounded-lg px-3 py-1.5 text-sm font-semibold bg-green-900 hover:bg-green-800 text-green-300 border border-green-700 transition">Approve</button>
+                    <button onClick={() => decide(s.id, "reject")} className="rounded-lg px-3 py-1.5 text-sm font-semibold bg-red-950 hover:bg-red-900 text-red-300 border border-red-800 transition">Reject</button>
                   </div>
                 </div>
-                {s.amount > 0 && (
-                  <div className="text-right">
-                    <div className="text-cyan-400 font-bold text-lg">{s.amount.toLocaleString()}</div>
-                    <div className="text-slate-600 text-xs">salary</div>
+                {actionMsg[s.id] && (
+                  <div className={`mt-2 text-xs px-3 py-1.5 rounded-lg border ${actionMsg[s.id].startsWith("✓") ? "text-green-400 bg-green-950 border-green-800" : "text-red-400 bg-red-950 border-red-800"}`}>{actionMsg[s.id]}</div>
+                )}
+              </div>
+            ))}
+          </div>
+        )
+      ) : (
+        /* Active Contracts */
+        activeContracts.length === 0 ? (
+          <div className="text-slate-600 text-sm text-center py-8">No active contracts.</div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {editMsg && <div className={`mb-2 text-xs rounded-lg px-3 py-2 border ${editMsg.startsWith("Error") ? "text-red-400 bg-red-950 border-red-800" : "text-slate-300 bg-slate-900 border-slate-700"}`}>{editMsg}</div>}
+            {activeContracts.map((s) => (
+              <div key={s.id} className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-3">
+                {editingId === s.id ? (
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <img src={`https://minotar.net/avatar/${s.players.mc_username}/32`} className="w-8 h-8 rounded-lg border border-slate-700" onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/32"; }} alt="" />
+                      <span className="text-white font-bold">{s.players.mc_username}</span>
+                      <span className="text-slate-500 text-xs">— {s.teams?.name}</span>
+                    </div>
+                    <div className="flex gap-2 flex-wrap items-center">
+                      <div>
+                        <div className="text-xs text-slate-500 mb-1">Salary</div>
+                        <input className={input} type="number" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} style={{ width: 100 }} />
+                      </div>
+                      <div>
+                        <div className="text-xs text-slate-500 mb-1">Season</div>
+                        <input className={input} value={editSeason} onChange={(e) => setEditSeason(e.target.value)} placeholder="e.g. Season 7" style={{ width: 130 }} />
+                      </div>
+                      <div>
+                        <div className="text-xs text-slate-500 mb-1">2-Season</div>
+                        <button onClick={() => setEditIs2s(v => !v)} className={`rounded-lg px-3 py-2 text-sm border transition ${editIs2s ? "bg-purple-900 border-purple-700 text-purple-300" : "bg-slate-800 border-slate-700 text-slate-400"}`}>
+                          {editIs2s ? "Yes" : "No"}
+                        </button>
+                      </div>
+                      <div className="flex gap-2 mt-4">
+                        <button onClick={() => saveEdit(s.id)} className={btnPrimary}>Save</button>
+                        <button onClick={() => { setEditingId(null); setEditMsg(""); }} className={btnSecondary}>Cancel</button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <img src={`https://minotar.net/avatar/${s.players.mc_username}/36`} className="w-9 h-9 rounded-lg border border-slate-700" onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/36"; }} alt="" />
+                    <div className="flex-1">
+                      <div className="text-white font-semibold text-sm">{s.players.mc_username}</div>
+                      <div className="text-slate-500 text-xs">
+                        {s.teams?.name ?? "??"}{s.season ? ` · ${s.season}` : ""}
+                        {s.phase === 0 ? <span className="text-violet-400 ml-1">· Coach</span> : null}
+                        {s.is_two_season && <span className="text-purple-400 ml-1">· 2-season</span>}
+                      </div>
+                    </div>
+                    {s.amount > 0 && <div className="text-cyan-400 font-bold font-mono">{s.amount.toLocaleString()}</div>}
+                    <button onClick={() => startEdit(s)} className={`${btnSecondary} text-xs`}>Edit</button>
                   </div>
                 )}
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => decide(s.id, "approve")}
-                    className="rounded-lg px-3 py-1.5 text-sm font-semibold bg-green-900 hover:bg-green-800 text-green-300 border border-green-700 transition"
-                  >
-                    Approve
-                  </button>
-                  <button
-                    onClick={() => decide(s.id, "reject")}
-                    className="rounded-lg px-3 py-1.5 text-sm font-semibold bg-red-950 hover:bg-red-900 text-red-300 border border-red-800 transition"
-                  >
-                    Reject
-                  </button>
-                </div>
               </div>
-              {actionMsg[s.id] && (
-                <div className={`mt-2 text-xs px-3 py-1.5 rounded-lg border ${actionMsg[s.id].startsWith("✓") ? "text-green-400 bg-green-950 border-green-800" : actionMsg[s.id].startsWith("✗") ? "text-red-400 bg-red-950 border-red-800" : "text-red-400 bg-red-950 border-red-800"}`}>
-                  {actionMsg[s.id]}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )
       )}
     </div>
   );

@@ -83,7 +83,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "PUT") {
     const admin = await requireAdmin(req, res);
     if (!admin) return;
-    const { status, team_id, amount } = req.body;
+    const { status, team_id, amount, is_two_season, season } = req.body;
 
     // Fetch existing contract before updating so we know old status
     const { data: existing } = await supabase
@@ -96,6 +96,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (status !== undefined) updates.status = status;
     if (team_id !== undefined) updates.team_id = team_id;
     if (amount !== undefined) updates.amount = Number(amount);
+    if (is_two_season !== undefined) updates.is_two_season = is_two_season;
+    if (season !== undefined) updates.season = season;
     const { data, error } = await supabase
       .from("contracts")
       .update(updates)

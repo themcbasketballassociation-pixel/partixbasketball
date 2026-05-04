@@ -37,5 +37,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json(data);
   }
 
+  if (req.method === "DELETE") {
+    const admin = await requireAdmin(req, res);
+    if (!admin) return;
+    const { mc_uuid, league: leagueRaw, season } = req.body;
+    const league = resolveLeague(leagueRaw);
+    if (!mc_uuid || !league || !season)
+      return res.status(400).json({ error: "mc_uuid, league, season required" });
+    const { error } = await supabase
+      .from("auction_player_prices")
+      .delete()
+      .eq("mc_uuid", mc_uuid)
+      .eq("league", league)
+      .eq("season", season);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json({ success: true });
+  }
+
   return res.status(405).json({ error: "Method not allowed" });
 }
