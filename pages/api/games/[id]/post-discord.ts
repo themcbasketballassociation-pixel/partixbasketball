@@ -67,7 +67,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const slug = LEAGUE_SLUGS[league] ?? league;
   const baseUrl = process.env.NEXTAUTH_URL ?? "https://partixbasketball.com";
-  const boxscoreUrl = `${baseUrl}/${slug}/boxscores?game=${id}`;
+  const boxscoreUrl = `${baseUrl}/${slug}/boxscores/${id}`;
   const leagueLogoUrl = `${baseUrl}${LEAGUE_LOGOS[league] ?? ""}`;
 
   // ── Winning team roster for POTG eligibility ─────────────────────────────
