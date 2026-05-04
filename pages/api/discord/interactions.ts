@@ -290,26 +290,65 @@ async function getSeasonTeams(league: string, season: string) {
 
 async function buildRosterEmbed(league: string, teamId: string, season: string) {
   const leagueLabel = LEAGUE_LABELS[league] ?? league.toUpperCase();
-  const showCap = league === "pba"; // only PBA has salary cap
+  const showCap = league === "pba";
   const CAP = 25000;
+  const baseUrl = process.env.NEXTAUTH_URL ?? "https://partixbasketball.com";
 
-  const [{ data: team }, { data: contracts }, { data: owners }] = await Promise.all([
-    supabase.from("teams").select("id, name, abbreviation, color2").eq("id", teamId).maybeSingle(),
+  // Fetch team, contracts, owners, and all season games in parallel
+  const [{ data: team }, { data: contracts }, { data: owners }, { data: seasonGames }] = await Promise.all([
+    supabase.from("teams").select("id, name, abbreviation, color2, division, logo_url").eq("id", teamId).maybeSingle(),
     supabase.from("contracts")
       .select("mc_uuid, amount, players(mc_username)")
       .eq("league", league).eq("team_id", teamId).eq("season", season).eq("status", "active"),
     supabase.from("team_owners").select("owner_name, discord_id, role").eq("team_id", teamId).eq("season", season),
+    supabase.from("games")
+      .select("home_team_id, away_team_id, home_score, away_score, status")
+      .eq("league", league).eq("season", season).eq("status", "completed"),
   ]);
 
   if (!team) return null;
-  const t = team as { id: string; name: string; abbreviation: string; color2: string | null };
+  const t = team as { id: string; name: string; abbreviation: string; color2: string | null; division: string | null; logo_url: string | null };
   const cs = (contracts ?? []) as unknown as { mc_uuid: string; amount: number; players: { mc_username: string } }[];
   const os = (owners ?? []) as { owner_name: string | null; discord_id: string | null; role: string | null }[];
+  const games = (seasonGames ?? []) as { home_team_id: string; away_team_id: string; home_score: number; away_score: number }[];
 
+  // ── Record for this team ──────────────────────────────────────────────────
+  let wins = 0, losses = 0;
+  for (const g of games) {
+    const isHome = g.home_team_id === teamId;
+    const isAway = g.away_team_id === teamId;
+    if (!isHome && !isAway) continue;
+    const teamScore = isHome ? g.home_score : g.away_score;
+    const oppScore  = isHome ? g.away_score : g.home_score;
+    if (teamScore > oppScore) wins++; else losses++;
+  }
+
+  // ── Standings rank among all teams in this season ─────────────────────────
+  // Build win totals for every team that played
+  const teamWins: Record<string, number> = {};
+  const teamLosses: Record<string, number> = {};
+  for (const g of games) {
+    [g.home_team_id, g.away_team_id].forEach(id => {
+      if (!teamWins[id]) { teamWins[id] = 0; teamLosses[id] = 0; }
+    });
+    if (g.home_score > g.away_score) { teamWins[g.home_team_id]++; teamLosses[g.away_team_id]++; }
+    else { teamWins[g.away_team_id]++; teamLosses[g.home_team_id]++; }
+  }
+  // Ensure this team appears even with 0 games
+  if (!teamWins[teamId]) { teamWins[teamId] = 0; teamLosses[teamId] = 0; }
+  const sortedTeams = Object.keys(teamWins).sort((a, b) =>
+    (teamWins[b] - teamLosses[b]) - (teamWins[a] - teamLosses[a]) || teamWins[b] - teamWins[a]
+  );
+  const rank = sortedTeams.indexOf(teamId) + 1;
+  const total = sortedTeams.length;
+
+  const rankSuffix = (n: number) => ["th","st","nd","rd"][((n % 100) >= 11 && (n % 100) <= 13) ? 0 : Math.min(n % 10, 4)] ?? "th";
+  const standingsStr = total > 0 ? `${rank}${rankSuffix(rank)} of ${total}` : "—";
+
+  // ── Build embed fields ────────────────────────────────────────────────────
   const totalCap = cs.reduce((s, c) => s + (c.amount ?? 0), 0);
   const remaining = CAP - totalCap;
 
-  // Separate players (phase != 0) from coaches — contracts don't expose phase here so just list all
   const rosterLines = cs
     .filter((c) => c.players?.mc_username)
     .sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0))
@@ -320,7 +359,12 @@ async function buildRosterEmbed(league: string, teamId: string, season: string) 
 
   const fields: { name: string; value: string; inline: boolean }[] = [];
 
-  // Owner / GM
+  // Record + standings side-by-side
+  fields.push({ name: "📊 Record", value: `**${wins}–${losses}**`, inline: true });
+  fields.push({ name: "🏆 Standings", value: `**${standingsStr}**`, inline: true });
+  if (t.division) fields.push({ name: "📍 Division", value: t.division, inline: true });
+
+  // Management
   const ownerLine = os.map((o) => {
     const role = o.role === "gm" ? "GM" : "Owner";
     const name = o.owner_name ?? (o.discord_id ? `<@${o.discord_id}>` : "TBD");
@@ -328,19 +372,19 @@ async function buildRosterEmbed(league: string, teamId: string, season: string) 
   }).join("\n");
   if (ownerLine) fields.push({ name: "🏢 Management", value: ownerLine, inline: false });
 
-  // Salary cap
+  // Salary cap bar
   if (showCap) {
-    const pct = Math.min((totalCap / CAP) * 100, 100).toFixed(0);
-    const barFilled = Math.round(pct as unknown as number / 10);
+    const pct = Math.min((totalCap / CAP) * 100, 100);
+    const barFilled = Math.round(pct / 10);
     const bar = "█".repeat(barFilled) + "░".repeat(10 - barFilled);
     fields.push({
       name: "💰 Salary Cap",
-      value: `\`${bar}\` ${pct}%\n**Used:** $${totalCap.toLocaleString()} / $${CAP.toLocaleString()}\n**Remaining:** $${remaining.toLocaleString()}`,
+      value: `\`${bar}\` ${pct.toFixed(0)}%\n**Used:** $${totalCap.toLocaleString()} / $${CAP.toLocaleString()}  ·  **Remaining:** $${remaining.toLocaleString()}`,
       inline: false,
     });
   }
 
-  // Roster
+  // Roster list
   fields.push({
     name: `📋 Roster (${cs.length})`,
     value: rosterLines.length > 0 ? rosterLines.join("\n").slice(0, 1024) : "*No active contracts*",
@@ -348,11 +392,15 @@ async function buildRosterEmbed(league: string, teamId: string, season: string) 
   });
 
   const colorHex = t.color2 ? parseInt(t.color2.replace("#", ""), 16) : 0x3b82f6;
+  // Team logo: use Supabase storage URL if available, else fall back to league logo
+  const LEAGUE_LOGOS_LOCAL: Record<string, string> = { pba: "/logos/mba.webp", pcaa: "/logos/mcaa.webp", pbgl: "/logos/MBGL.png" };
+  const logoUrl = t.logo_url ?? `${baseUrl}${LEAGUE_LOGOS_LOCAL[league] ?? ""}`;
 
   return {
     title: `${t.name} (${t.abbreviation})`,
     color: isNaN(colorHex) ? 0x3b82f6 : colorHex,
     author: { name: `${leagueLabel} · ${season}` },
+    thumbnail: { url: logoUrl },
     fields,
     footer: { text: "Partix Basketball · /roster" },
   };
