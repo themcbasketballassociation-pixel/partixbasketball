@@ -25,13 +25,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const isTest = !!duration_minutes;
 
-  // 2a. In test mode: cancel ALL previous auctions for this league so every priced player re-appears fresh
+  // 2a. In test mode: wipe ALL auctions (and their bids) for this league so every
+  //     priced player re-appears fresh — including closed/cancelled/signed ones.
   if (isTest) {
-    await supabase
+    // First fetch all auction ids to delete their bids (cascade may not be set up)
+    const { data: allAuctions } = await supabase
       .from("auctions")
-      .update({ status: "cancelled" })
-      .eq("league", league)
-      .in("status", ["active", "pending", "player_choice", "signed"]);
+      .select("id")
+      .eq("league", league);
+    const allIds = (allAuctions ?? []).map((a) => a.id as string);
+    if (allIds.length > 0) {
+      await supabase.from("auction_bids").delete().in("auction_id", allIds);
+      await supabase.from("auctions").delete().eq("league", league);
+    }
   }
 
   // 2b. In real mode: skip players already in a live auction
