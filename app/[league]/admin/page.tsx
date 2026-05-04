@@ -6344,7 +6344,6 @@ function BoardPortalView({ league, isAdmin, onBack }: { league: string; isAdmin?
           </div>
         )}
 
-      </div>
     </div>
   );
 }
