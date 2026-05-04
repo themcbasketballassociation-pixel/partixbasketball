@@ -4317,7 +4317,7 @@ function AuctionAdminTab({ league }: { league: string }) {
       const username = parts[0];
       const rawPrice = parts[parts.length - 1].replace(/[^0-9]/g, "");
       if (!rawPrice) continue;
-      const player = players.find((p) => p.mc_username.toLowerCase() === username.toLowerCase());
+      const player = allPlayers.find((p) => p.mc_username.toLowerCase() === username.toLowerCase());
       if (player) newMap[player.mc_uuid] = rawPrice;
       else notFound.push(username);
     }
@@ -4473,10 +4473,10 @@ function AuctionAdminTab({ league }: { league: string }) {
   const PLAYER_CHOICE_WINDOW = 500;
   const pendingAuctions = auctions.filter((a) => a.status === "pending").sort((a, b) => a.min_price - b.min_price);
   const sortedAuctions = [...auctions].sort((a, b) => a.min_price - b.min_price);
-  const pricedCount = players.filter((p) => playerPrices[p.mc_uuid] != null).length;
+  const pricedCount = allPlayers.filter((p) => playerPrices[p.mc_uuid] != null).length;
   const filteredPlayers = priceSearch.trim()
-    ? players.filter((p) => p.mc_username.toLowerCase().includes(priceSearch.toLowerCase()))
-    : players;
+    ? allPlayers.filter((p) => p.mc_username.toLowerCase().includes(priceSearch.toLowerCase()))
+    : allPlayers;
 
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
@@ -4544,19 +4544,6 @@ function AuctionAdminTab({ league }: { league: string }) {
             >
               {REGULAR_SEASONS.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
-
-            {/* Stats eligibility filter */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-slate-500 whitespace-nowrap">Stats from:</span>
-              <select
-                className={`${input} text-xs`}
-                style={{ maxWidth: 160 }}
-                value={statsFilterSeason}
-                onChange={(e) => setStatsFilterSeason(e.target.value)}
-              >
-                {REGULAR_SEASONS.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
 
             <button
               className={`${btnSecondary} text-xs`}
@@ -4652,7 +4639,7 @@ function AuctionAdminTab({ league }: { league: string }) {
 
           {/* Summary + search */}
           <div className="flex items-center gap-3 mb-3 flex-wrap">
-            <span className="text-xs text-slate-500">{pricedCount} / {players.length} priced for {priceSeason} <span className="text-slate-600">· showing players with {statsFilterSeason} stats</span></span>
+            <span className="text-xs text-slate-500">{pricedCount} / {allPlayers.length} priced for {priceSeason}</span>
             <input
               className={`${input} text-xs`}
               style={{ maxWidth: 200 }}
