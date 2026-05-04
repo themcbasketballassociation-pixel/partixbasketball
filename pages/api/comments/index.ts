@@ -5,12 +5,13 @@ import { authOptions } from "../auth/[...nextauth]";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === "GET") {
-    const { game_id, discord_id } = req.query;
+    const { game_id, discord_id, mentioned_mc_username } = req.query;
 
     let query = supabase.from("game_comments").select("*").order("created_at", { ascending: true });
     if (game_id) query = query.eq("game_id", game_id as string);
     if (discord_id) query = query.eq("discord_id", discord_id as string);
-    if (!game_id && !discord_id) return res.status(400).json({ error: "game_id or discord_id required" });
+    if (mentioned_mc_username) query = query.ilike("content", `%@${mentioned_mc_username as string}%`);
+    if (!game_id && !discord_id && !mentioned_mc_username) return res.status(400).json({ error: "game_id, discord_id, or mentioned_mc_username required" });
 
     const { data: comments, error } = await query;
     if (error) return res.status(500).json({ error: error.message });

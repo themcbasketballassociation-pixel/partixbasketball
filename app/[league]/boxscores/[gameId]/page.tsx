@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useSession, signIn } from "next-auth/react";
 import Link from "next/link";
 
@@ -176,17 +176,56 @@ function splitStats(stats: GameStat[], game: Game, allPlayerTeams: PlayerTeam[])
   return { homeStats, awayStats, allFallback };
 }
 
+// ── Render comment text with @mention highlighting ────────────────────────────
+
+function CommentText({ content, slug }: { content: string; slug: string }) {
+  const parts = content.split(/(@\w+)/g);
+  return (
+    <p className="text-slate-300 text-sm leading-relaxed">
+      {parts.map((part, i) =>
+        /^@\w+$/.test(part) ? (
+          <Link
+            key={i}
+            href={`/${slug}/players/${encodeURIComponent(part.slice(1))}`}
+            className="text-blue-400 font-semibold hover:underline"
+          >
+            {part}
+          </Link>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </p>
+  );
+}
+
 // ── Comments section ──────────────────────────────────────────────────────────
 
 function CommentsSection({ gameId, slug }: { gameId: string; slug: string }) {
   const { data: session } = useSession();
   const discordId = (session?.user as any)?.id as string | undefined;
 
-  const [comments, setComments]       = useState<Comment[]>([]);
+  const [comments, setComments]             = useState<Comment[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(true);
-  const [commentText, setCommentText] = useState("");
-  const [posting, setPosting]         = useState(false);
-  const [postErr, setPostErr]         = useState("");
+  const [commentText, setCommentText]       = useState("");
+  const [posting, setPosting]               = useState(false);
+  const [postErr, setPostErr]               = useState("");
+
+  // @ mention autocomplete
+  const [allPlayers, setAllPlayers]         = useState<{ mc_username: string }[]>([]);
+  const [mentionQuery, setMentionQuery]     = useState<string | null>(null);
+  const [mentionIndex, setMentionIndex]     = useState(0);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    fetch("/api/players").then(r => r.json()).then(d => {
+      if (Array.isArray(d)) setAllPlayers(d);
+    }).catch(() => {});
+  }, []);
+
+  const mentionMatches = mentionQuery !== null
+    ? allPlayers.filter(p => p.mc_username.toLowerCase().startsWith(mentionQuery.toLowerCase())).slice(0, 6)
+    : [];
 
   const loadComments = useCallback(async () => {
     const data = await fetch(`/api/comments?game_id=${gameId}`).then(r => r.json()).catch(() => []);
@@ -195,6 +234,45 @@ function CommentsSection({ gameId, slug }: { gameId: string; slug: string }) {
   }, [gameId]);
 
   useEffect(() => { loadComments(); }, [loadComments]);
+
+  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setCommentText(val);
+    const cursor = e.target.selectionStart ?? val.length;
+    const before = val.slice(0, cursor);
+    const m = before.match(/@(\w*)$/);
+    setMentionQuery(m ? m[1] : null);
+    setMentionIndex(0);
+  };
+
+  const insertMention = (username: string) => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const cursor = ta.selectionStart ?? commentText.length;
+    const before = commentText.slice(0, cursor);
+    const m = before.match(/@(\w*)$/);
+    if (!m) return;
+    const prefix = before.slice(0, before.length - m[0].length);
+    const after  = commentText.slice(cursor);
+    const next   = `${prefix}@${username} ${after}`;
+    setCommentText(next);
+    setMentionQuery(null);
+    setTimeout(() => {
+      ta.focus();
+      const pos = prefix.length + username.length + 2;
+      ta.setSelectionRange(pos, pos);
+    }, 0);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (mentionMatches.length > 0) {
+      if (e.key === "ArrowDown") { e.preventDefault(); setMentionIndex(i => Math.min(i + 1, mentionMatches.length - 1)); return; }
+      if (e.key === "ArrowUp")   { e.preventDefault(); setMentionIndex(i => Math.max(i - 1, 0)); return; }
+      if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); insertMention(mentionMatches[mentionIndex].mc_username); return; }
+      if (e.key === "Escape")    { setMentionQuery(null); return; }
+    }
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) postComment();
+  };
 
   const postComment = async () => {
     if (!commentText.trim()) return;
@@ -205,7 +283,7 @@ function CommentsSection({ gameId, slug }: { gameId: string; slug: string }) {
       body: JSON.stringify({ game_id: gameId, content: commentText.trim() }),
     });
     setPosting(false);
-    if (r.ok) { setCommentText(""); loadComments(); }
+    if (r.ok) { setCommentText(""); setMentionQuery(null); loadComments(); }
     else { const d = await r.json(); setPostErr(d.error ?? "Failed to post"); }
   };
 
@@ -236,7 +314,6 @@ function CommentsSection({ gameId, slug }: { gameId: string; slug: string }) {
               const displayName = c.mc_username ?? c.discord_name ?? "Discord User";
               return (
                 <div key={c.id} className="flex gap-3 group">
-                  {/* Avatar */}
                   {c.mc_username ? (
                     <img
                       src={`https://minotar.net/helm/${c.mc_username}/40`}
@@ -247,7 +324,6 @@ function CommentsSection({ gameId, slug }: { gameId: string; slug: string }) {
                     />
                   ) : (
                     <div className="w-9 h-9 rounded-lg flex-shrink-0 bg-indigo-950 border border-indigo-800 flex items-center justify-center">
-                      {/* Discord icon */}
                       <svg className="w-4 h-4 text-indigo-400" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057c.002.022.015.042.031.053a19.9 19.9 0 0 0 5.993 3.03.077.077 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/>
                       </svg>
@@ -280,7 +356,7 @@ function CommentsSection({ gameId, slug }: { gameId: string; slug: string }) {
                         </button>
                       )}
                     </div>
-                    <p className="text-slate-300 text-sm leading-relaxed">{c.content}</p>
+                    <CommentText content={c.content} slug={slug} />
                   </div>
                 </div>
               );
@@ -288,10 +364,8 @@ function CommentsSection({ gameId, slug }: { gameId: string; slug: string }) {
           </div>
         )}
 
-        {/* Divider */}
         {comments.length > 0 && <div className="border-t border-slate-800" />}
 
-        {/* Input or sign-in prompt */}
         {!session ? (
           <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-700 bg-slate-950 px-5 py-4">
             <p className="text-slate-500 text-sm">Sign in with Discord to leave a comment</p>
@@ -307,18 +381,43 @@ function CommentsSection({ gameId, slug }: { gameId: string; slug: string }) {
           </div>
         ) : (
           <div className="space-y-2">
-            <textarea
-              value={commentText}
-              onChange={e => setCommentText(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) postComment(); }}
-              placeholder="Write a comment… (Ctrl+Enter to post)"
-              maxLength={500}
-              rows={3}
-              className="w-full rounded-xl border border-slate-700 bg-slate-950 text-white text-sm px-4 py-3 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none placeholder:text-slate-600"
-            />
+            {/* Textarea with @ mention autocomplete */}
+            <div className="relative">
+              <textarea
+                ref={textareaRef}
+                value={commentText}
+                onChange={handleTextChange}
+                onKeyDown={handleKeyDown}
+                placeholder="Write a comment… type @ to mention a player"
+                maxLength={500}
+                rows={3}
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 text-white text-sm px-4 py-3 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none placeholder:text-slate-600"
+              />
+              {/* Mention autocomplete dropdown */}
+              {mentionMatches.length > 0 && (
+                <div className="absolute bottom-full left-0 mb-1 w-56 rounded-xl border border-slate-700 bg-slate-900 shadow-xl overflow-hidden z-50">
+                  {mentionMatches.map((p, i) => (
+                    <div
+                      key={p.mc_username}
+                      className={`flex items-center gap-2 px-3 py-2 cursor-pointer transition text-sm ${i === mentionIndex ? "bg-blue-700 text-white" : "text-slate-200 hover:bg-slate-800"}`}
+                      onMouseDown={e => { e.preventDefault(); insertMention(p.mc_username); }}
+                    >
+                      <img
+                        src={`https://minotar.net/avatar/${p.mc_username}/20`}
+                        className="w-5 h-5 rounded flex-shrink-0"
+                        style={{ imageRendering: "pixelated" }}
+                        alt=""
+                        onError={e => { (e.currentTarget as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/20"; }}
+                      />
+                      <span className="font-medium">@{p.mc_username}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             {postErr && <p className="text-red-400 text-xs">{postErr}</p>}
             <div className="flex items-center justify-between">
-              <span className="text-slate-600 text-xs">{commentText.length}/500</span>
+              <span className="text-slate-600 text-xs">{commentText.length}/500 · Ctrl+Enter to post</span>
               <button
                 onClick={postComment}
                 disabled={posting || !commentText.trim()}

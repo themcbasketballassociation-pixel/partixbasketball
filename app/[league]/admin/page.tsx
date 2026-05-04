@@ -5766,7 +5766,7 @@ function SearchablePlayerSelect({
       <button
         type="button"
         onClick={() => { setOpen(v => !v); setSearch(""); }}
-        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-left transition focus:border-purple-500 focus:outline-none flex items-center justify-between gap-2"
+        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-3 sm:py-2 text-sm text-left transition focus:border-purple-500 focus:outline-none flex items-center justify-between gap-2"
       >
         <span className={selected ? "text-white truncate" : "text-slate-500"}>
           {selected ? selected.mc_username : placeholder}
@@ -6094,115 +6094,120 @@ function BoardPortalView({ league, isAdmin, onBack }: { league: string; isAdmin?
         </div>
       </div>
 
-      {/* Tabs: Players | Teams | Awards */}
-      <div className="flex border-b border-slate-800">
+      {/* Tabs: Players | Teams | Awards — scrollable on mobile */}
+      <div className="flex border-b border-slate-800 overflow-x-auto">
         {(["players", "teams", "awards"] as const).map(t => (
           <button key={t} onClick={() => setBoardTab(t)}
-            className={`px-5 py-3 text-sm font-medium capitalize transition ${boardTab === t ? "border-b-2 border-purple-500 text-white" : "text-slate-500 hover:text-slate-300"}`}>
-            {t === "players" ? "Players" : t === "teams" ? `Teams (${teams.length})` : "Awards"}
+            className={`px-5 py-3 text-sm font-medium whitespace-nowrap transition flex-shrink-0 ${boardTab === t ? "border-b-2 border-purple-500 text-white" : "text-slate-500 hover:text-slate-300"}`}>
+            {t === "players" ? "🏀 Players" : t === "teams" ? `🏆 Teams (${teams.length})` : "🎖️ Awards"}
           </button>
         ))}
       </div>
 
-      <div className="p-6">
-        {/* Side-by-side: ballot left, results right */}
-        <div className="flex gap-6" style={{ alignItems: "flex-start" }}>
+      {/* Mobile: stacked; Desktop: side-by-side */}
+      <div className="flex flex-col xl:flex-row gap-0 xl:gap-0">
 
-          {/* ── LEFT: Ballot ── */}
-          <div className="flex-1 min-w-0">
+        {/* ── Ballot ── */}
+        <div className="flex-1 min-w-0 p-4 sm:p-6">
 
-            {/* Players tab */}
-            {boardTab === "players" && (
-              <div>
-                <div className="text-base font-bold text-white mb-1">Top 10 Players</div>
-                <div className="text-xs text-slate-500 mb-4">1st = 10 pts · 10th = 1 pt</div>
-                <div className="flex flex-col gap-2">
-                  {playerRanks.map((val, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <span className="text-slate-500 text-xs font-mono w-7 text-right flex-shrink-0">{ordinal(i)}</span>
-                      <SearchablePlayerSelect
-                        value={val}
-                        options={playerOpts(playerRanks, val)}
-                        onChange={uuid => { const n = [...playerRanks]; n[i] = uuid; setPlayerRanks(n); }}
-                      />
-                      <span className="text-xs font-bold text-purple-400 w-10 flex-shrink-0 text-right">{val ? `+${boardPlayerPts(i + 1)}` : ""}</span>
-                    </div>
-                  ))}
+          {/* Players tab */}
+          {boardTab === "players" && (
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <div className="text-base font-bold text-white">Top 10 Players</div>
+                  <div className="text-xs text-slate-500 mt-0.5">1st = 10 pts · 10th = 1 pt</div>
                 </div>
-                <SaveBar />
               </div>
-            )}
-
-            {/* Teams tab */}
-            {boardTab === "teams" && (
-              <div>
-                <div className="text-base font-bold text-white mb-1">Team Rankings</div>
-                <div className="text-xs text-slate-500 mb-4">Rank all {teams.length} teams · 1st = {teams.length} pts · last = 1 pt</div>
-                {teams.length === 0
-                  ? <div className="text-slate-600 text-sm py-4">No teams found for {ballotSeason}.</div>
-                  : (
-                    <div className="flex flex-col gap-2">
-                      {teamRanks.map((val, i) => (
-                        <div key={i} className="flex items-center gap-2">
-                          <span className="text-slate-500 text-xs font-mono w-7 text-right flex-shrink-0">{ordinal(i)}</span>
-                          <select
-                            className="flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-purple-500 focus:outline-none"
-                            value={val}
-                            onChange={e => { const n = [...teamRanks]; n[i] = e.target.value; setTeamRanks(n); }}>
-                            <option value="">— Select team —</option>
-                            {teamOpts(teamRanks, val).map(t => (
-                              <option key={t.id} value={t.id}>{t.name} ({t.abbreviation})</option>
-                            ))}
-                          </select>
-                          <span className="text-xs font-bold text-purple-400 w-10 flex-shrink-0 text-right">{val ? `+${teams.length - i}` : ""}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                <SaveBar />
+              <div className="flex flex-col gap-2.5">
+                {playerRanks.map((val, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <span className="text-slate-500 text-xs font-bold w-8 text-right flex-shrink-0 tabular-nums">{i + 1}.</span>
+                    <SearchablePlayerSelect
+                      value={val}
+                      options={playerOpts(playerRanks, val)}
+                      onChange={uuid => { const n = [...playerRanks]; n[i] = uuid; setPlayerRanks(n); }}
+                    />
+                    <span className="text-xs font-bold text-purple-400 w-9 flex-shrink-0 text-right tabular-nums">{val ? `+${boardPlayerPts(i + 1)}` : ""}</span>
+                  </div>
+                ))}
               </div>
-            )}
+              <SaveBar />
+            </div>
+          )}
 
-            {/* Awards tab */}
-            {boardTab === "awards" && (
-              <div>
-                <div className="text-base font-bold text-white mb-1">Award Votes</div>
-                <div className="text-xs text-slate-500 mb-4">Top 3 per award · 1st = 5 pts · 2nd = 3 pts · 3rd = 1 pt</div>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {BOARD_AWARDS.map(award => (
-                    <div key={award.key} className="rounded-xl border border-slate-700 bg-slate-950 p-4">
-                      <div className="text-sm font-semibold text-purple-300 mb-3">{award.label}</div>
-                      <div className="flex flex-col gap-2">
-                        {[1, 2, 3].map(rank => {
-                          const val = awardVotes[award.key]?.[String(rank)] ?? "";
-                          return (
-                            <div key={rank} className="flex items-center gap-2">
-                              <span className="text-slate-500 text-xs w-6 flex-shrink-0">{ordinal(rank - 1)}</span>
-                              <SearchablePlayerSelect
-                                value={val}
-                                options={awardPlayerOpts(award.key, String(rank))}
-                                onChange={uuid => setAwardVotes(prev => ({ ...prev, [award.key]: { ...(prev[award.key] ?? {}), [String(rank)]: uuid } }))}
-                              />
-                              {val && <span className="text-xs text-purple-400 font-bold w-8 flex-shrink-0 text-right">+{boardAwardPts(rank)}</span>}
-                            </div>
-                          );
-                        })}
+          {/* Teams tab */}
+          {boardTab === "teams" && (
+            <div>
+              <div className="text-base font-bold text-white mb-1">Team Rankings</div>
+              <div className="text-xs text-slate-500 mb-3">Rank all {teams.length} teams · 1st = {teams.length} pts · last = 1 pt</div>
+              {teams.length === 0
+                ? <div className="text-slate-600 text-sm py-4">No teams found for {ballotSeason}.</div>
+                : (
+                  <div className="flex flex-col gap-2.5">
+                    {teamRanks.map((val, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <span className="text-slate-500 text-xs font-bold w-8 text-right flex-shrink-0 tabular-nums">{i + 1}.</span>
+                        <select
+                          className="flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-3 sm:py-2 text-sm text-white focus:border-purple-500 focus:outline-none min-w-0"
+                          value={val}
+                          onChange={e => { const n = [...teamRanks]; n[i] = e.target.value; setTeamRanks(n); }}>
+                          <option value="">— Select team —</option>
+                          {teamOpts(teamRanks, val).map(t => (
+                            <option key={t.id} value={t.id}>{t.name} ({t.abbreviation})</option>
+                          ))}
+                        </select>
+                        <span className="text-xs font-bold text-purple-400 w-9 flex-shrink-0 text-right tabular-nums">{val ? `+${teams.length - i}` : ""}</span>
                       </div>
-                    </div>
-                  ))}
-                </div>
-                <SaveBar />
-              </div>
-            )}
-          </div>
+                    ))}
+                  </div>
+                )}
+              <SaveBar />
+            </div>
+          )}
 
-          {/* ── RIGHT: Results ── */}
-          <div className="w-64 flex-shrink-0 rounded-xl border border-slate-800 bg-slate-950 p-4">
-            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Live Results</div>
+          {/* Awards tab */}
+          {boardTab === "awards" && (
+            <div>
+              <div className="text-base font-bold text-white mb-1">Award Votes</div>
+              <div className="text-xs text-slate-500 mb-4">Top 3 per award · 1st = 5 pts · 2nd = 3 pts · 3rd = 1 pt</div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {BOARD_AWARDS.map(award => (
+                  <div key={award.key} className="rounded-xl border border-slate-700 bg-slate-950 p-4">
+                    <div className="text-sm font-semibold text-purple-300 mb-3">{award.label}</div>
+                    <div className="flex flex-col gap-2.5">
+                      {[1, 2, 3].map(rank => {
+                        const val = awardVotes[award.key]?.[String(rank)] ?? "";
+                        return (
+                          <div key={rank} className="flex items-center gap-2">
+                            <span className="text-slate-500 text-xs font-bold w-5 flex-shrink-0 tabular-nums">{rank}.</span>
+                            <SearchablePlayerSelect
+                              value={val}
+                              options={awardPlayerOpts(award.key, String(rank))}
+                              onChange={uuid => setAwardVotes(prev => ({ ...prev, [award.key]: { ...(prev[award.key] ?? {}), [String(rank)]: uuid } }))}
+                            />
+                            {val && <span className="text-xs text-purple-400 font-bold w-7 flex-shrink-0 text-right">+{boardAwardPts(rank)}</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <SaveBar />
+            </div>
+          )}
+        </div>
+
+        {/* ── Results panel — sidebar on xl, collapsible strip on mobile ── */}
+        <div className="xl:w-72 xl:flex-shrink-0 xl:border-l border-t xl:border-t-0 border-slate-800 xl:bg-slate-950/50">
+          <div className="p-4 sm:p-5">
+            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">📊 Live Results</div>
             <ResultsPanel />
           </div>
-
         </div>
+
+      </div>
 
         {/* ── Admin Ballot Review ── */}
         {isAdmin && (

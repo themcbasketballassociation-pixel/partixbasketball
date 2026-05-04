@@ -14,6 +14,10 @@ type Comment = {
   id: string; game_id: string; discord_id: string; discord_name: string | null;
   content: string; created_at: string; mc_username: string | null;
 };
+type Mention = {
+  id: string; game_id: string; discord_id: string; discord_name: string | null;
+  content: string; created_at: string; mc_username: string | null;
+};
 
 export default function ProfilePage({ params }: { params?: Promise<{ league?: string }> }) {
   const resolved = React.use(params ?? Promise.resolve({})) as { league?: string };
@@ -26,6 +30,8 @@ export default function ProfilePage({ params }: { params?: Promise<{ league?: st
   const [pinnedGames, setPinnedGames]     = useState<PinnedGame[]>([]);
   const [myComments, setMyComments]       = useState<Comment[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(false);
+  const [mentions, setMentions]           = useState<Mention[]>([]);
+  const [mentionsLoading, setMentionsLoading] = useState(false);
 
   // Check if Discord is linked to an MC account
   useEffect(() => {
@@ -59,6 +65,16 @@ export default function ProfilePage({ params }: { params?: Promise<{ league?: st
       .then(d => { setMyComments(Array.isArray(d) ? d : []); setCommentsLoading(false); })
       .catch(() => setCommentsLoading(false));
   }, [discordId]);
+
+  // Load mentions (comments that @mention this player's MC username)
+  useEffect(() => {
+    if (linkedPlayer === "loading" || !linkedPlayer) return;
+    setMentionsLoading(true);
+    fetch(`/api/comments?mentioned_mc_username=${encodeURIComponent(linkedPlayer.mc_username)}`)
+      .then(r => r.json())
+      .then(d => { setMentions(Array.isArray(d) ? d : []); setMentionsLoading(false); })
+      .catch(() => setMentionsLoading(false));
+  }, [linkedPlayer]);
 
   const unpinGame = (id: string) => {
     const key = `partix:pinned:${slug}`;
@@ -229,6 +245,68 @@ export default function ProfilePage({ params }: { params?: Promise<{ league?: st
           )}
         </div>
       </div>
+
+      {/* ── Mentions ────────────────────────────────────────────────────────── */}
+      {isLinked && player && (
+        <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
+          <div className="px-6 py-5 border-b border-slate-800 flex items-center gap-2">
+            <h3 className="font-bold text-white">@ Mentions</h3>
+            {mentions.length > 0 && (
+              <span className="text-xs text-blue-400 bg-blue-950 border border-blue-800 rounded-full px-2 py-0.5 font-bold">{mentions.length}</span>
+            )}
+            <p className="text-slate-500 text-xs ml-1">Comments that mention @{player.mc_username}</p>
+          </div>
+          <div className="p-6">
+            {mentionsLoading ? (
+              <p className="text-slate-600 text-sm text-center py-4">Loading…</p>
+            ) : mentions.length === 0 ? (
+              <p className="text-slate-600 text-sm text-center py-4">No one has mentioned you yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {[...mentions].reverse().map(c => {
+                  const author = c.mc_username ?? c.discord_name ?? "Someone";
+                  // highlight @player in content
+                  const parts = c.content.split(/(@\w+)/g);
+                  return (
+                    <div key={c.id} className="rounded-xl border border-blue-900/50 bg-blue-950/20 px-4 py-3">
+                      <div className="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
+                        <div className="flex items-center gap-2">
+                          {c.mc_username && (
+                            <img
+                              src={`https://minotar.net/avatar/${c.mc_username}/20`}
+                              className="w-5 h-5 rounded flex-shrink-0"
+                              style={{ imageRendering: "pixelated" }}
+                              alt=""
+                              onError={e => { (e.currentTarget as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/20"; }}
+                            />
+                          )}
+                          <span className="text-white text-xs font-semibold">{author}</span>
+                          <span className="text-slate-600 text-xs">mentioned you</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-600 text-xs">
+                            {new Date(c.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          </span>
+                          <Link href={`/${slug}/boxscores/${c.game_id}`} className="text-xs text-blue-400 hover:underline">
+                            View →
+                          </Link>
+                        </div>
+                      </div>
+                      <p className="text-slate-300 text-sm leading-relaxed">
+                        {parts.map((part, i) =>
+                          /^@\w+$/.test(part)
+                            ? <span key={i} className={part.slice(1) === player.mc_username ? "text-blue-400 font-bold" : "text-blue-400 font-semibold"}>{part}</span>
+                            : <span key={i}>{part}</span>
+                        )}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── My Comments ─────────────────────────────────────────────────────── */}
       <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
