@@ -87,16 +87,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
-    // Player must not already have an active/pending contract
-    const { data: existingContract } = await supabase
+    // Player must not already have an active/pending contract THIS season
+    let contractQuery = supabase
       .from("contracts")
-      .select("id")
+      .select("id, season")
       .eq("mc_uuid", offer.mc_uuid)
       .eq("league", offer.league)
-      .in("status", ["active", "pending_approval"])
-      .maybeSingle();
+      .in("status", ["active", "pending_approval"]);
+    // If the offer has a season, only block on same-season contracts
+    if (offer.season) contractQuery = contractQuery.eq("season", offer.season);
+    const { data: existingContract } = await contractQuery.maybeSingle();
     if (existingContract)
-      return res.status(400).json({ error: "You already have an active or pending contract" });
+      return res.status(400).json({ error: "You already have an active or pending contract this season" });
 
     // Create the contract (pending_approval → admin approves to make it active)
     const { data: contract, error: contractErr } = await supabase
