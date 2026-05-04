@@ -24,6 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: "No prices set for this season. Set prices in the Prices tab first." });
 
   const isTest = !!duration_minutes;
+  console.log("[launch-season] v5 isTest=", isTest, "league=", league, "season=", season, "prices=", prices?.length);
 
   // 2a. In test mode: wipe ALL auctions (and their bids) for this league so every
   //     priced player re-appears fresh — including closed/cancelled/signed ones.
@@ -93,5 +94,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   }
 
-  return res.status(200).json({ created, skipped, total: prices.length, insertErrors });
+  return res.status(200).json({
+    created,
+    skipped,
+    total: prices.length,
+    insertErrors,
+    debug: {
+      isTest,
+      existingSetSize: existingSet.size,
+      contractedSetSize: contractedSet.size,
+      pricesCount: prices.length,
+    },
+  });
 }
