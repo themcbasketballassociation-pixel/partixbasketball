@@ -527,11 +527,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (body.type === 4) {
     if (body.data?.name === "roster") {
       const options = (body.data?.options ?? []) as { name: string; value: string; focused?: boolean }[];
-      const leagueOption = options.find((o) => o.name === "league");
       const teamOption = options.find((o) => o.name === "team" && o.focused);
       if (!teamOption) return res.status(200).json({ type: 8, data: { choices: [] } });
 
-      const league = resolveLeague(leagueOption?.value ?? "pba") || "pba";
+      const league = "pba"; // MBA only
       const season = await getMostRecentSeason(league);
       if (!season) return res.status(200).json({ type: 8, data: { choices: [] } });
 
@@ -559,12 +558,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    // /roster — show team roster for most recent season
+    // /roster — show MBA team roster for most recent season
     if (body.data?.name === "roster") {
       const options = (body.data?.options ?? []) as { name: string; value: string }[];
-      const leagueOption = options.find((o) => o.name === "league");
       const teamOption = options.find((o) => o.name === "team");
-      const league = resolveLeague(leagueOption?.value ?? "pba") || "pba";
+      const league = "pba"; // MBA only
 
       const season = await getMostRecentSeason(league);
       if (!season) {

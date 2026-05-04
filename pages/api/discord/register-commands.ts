@@ -33,20 +33,9 @@ const COMMANDS = [
   },
   {
     name: "roster",
-    description: "View a team's roster, salary cap, and ownership for the current season",
+    description: "View an MBA team's roster, salary cap, and ownership for the current season",
     type: 1,
     options: [
-      {
-        name: "league",
-        description: "Which league",
-        type: 3, // STRING
-        required: true,
-        choices: [
-          { name: "MBA (PBA)", value: "pba" },
-          { name: "MCAA", value: "pcaa" },
-          { name: "MBGL", value: "pbgl" },
-        ],
-      },
       {
         name: "team",
         description: "Team name (type to search)",
