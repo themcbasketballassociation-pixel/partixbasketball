@@ -111,10 +111,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const newTeamId = (data as any).team_id;
       const contractSeason = (data as any).season ?? null;
 
-      // Add (or move) player to the new team in player_teams (include season)
+      // Add (or move) player to the new team in player_teams
       await supabase
         .from("player_teams")
-        .upsert([{ mc_uuid, team_id: newTeamId, league: contractLeague, season: contractSeason }], { onConflict: "mc_uuid,league" });
+        .upsert([{ mc_uuid, team_id: newTeamId, league: contractLeague }], { onConflict: "mc_uuid,league" });
 
       // If this was a portal claim, close the original in_portal contract
       if (existing?.status === "portal_claim") {
