@@ -24,10 +24,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: "No prices set for this season. Set prices in the Prices tab first." });
 
   const isTest = !!duration_minutes;
-  console.log("[launch-season] v5 isTest=", isTest, "league=", league, "season=", season, "prices=", prices?.length);
+  console.log("[launch-season] v6 isTest=", isTest, "league=", league, "season=", season, "prices=", prices?.length);
 
   // 2a. In test mode: wipe ALL auctions (and their bids) for this league so every
   //     priced player re-appears fresh — including closed/cancelled/signed ones.
+  let deleteErr: string | null = null;
+  let deletedCount = 0;
   if (isTest) {
     // First fetch all auction ids to delete their bids (cascade may not be set up)
     const { data: allAuctions } = await supabase
@@ -35,10 +37,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .select("id")
       .eq("league", league);
     const allIds = (allAuctions ?? []).map((a) => a.id as string);
+    deletedCount = allIds.length;
     if (allIds.length > 0) {
       await supabase.from("auction_bids").delete().in("auction_id", allIds);
-      await supabase.from("auctions").delete().eq("league", league);
+      const { error: delErr } = await supabase.from("auctions").delete().eq("league", league);
+      if (delErr) deleteErr = delErr.message;
     }
+    console.log("[launch-season] deleted", deletedCount, "auctions, deleteErr=", deleteErr);
   }
 
   // 2b. In real mode: skip players already in a live auction
@@ -104,6 +109,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       existingSetSize: existingSet.size,
       contractedSetSize: contractedSet.size,
       pricesCount: prices.length,
+      deletedCount,
+      deleteErr,
     },
   });
 }
