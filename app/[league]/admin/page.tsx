@@ -6476,6 +6476,7 @@ function SigningsAdminTab({ league }: { league: string }) {
   const [signings, setSignings] = useState<SigningRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionMsg, setActionMsg] = useState<Record<string, string>>({});
+  const [syncMsg, setSyncMsg] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -6486,6 +6487,13 @@ function SigningsAdminTab({ league }: { league: string }) {
   }, [league]);
 
   useEffect(() => { load(); }, [load]);
+
+  const syncRosters = async () => {
+    setSyncMsg("Syncing…");
+    const r = await fetch("/api/admin/sync-rosters", { method: "POST" });
+    const d = await r.json().catch(() => ({})) as { synced?: number; error?: string };
+    setSyncMsg(r.ok ? `✓ Synced ${d.synced ?? 0} active contracts → player_teams` : `Error: ${d.error}`);
+  };
 
   const decide = async (id: string, action: "approve" | "reject") => {
     const newStatus = action === "approve" ? "active" : "rejected";
@@ -6507,8 +6515,16 @@ function SigningsAdminTab({ league }: { league: string }) {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div className="text-sm font-semibold text-slate-300">Pending Signing Requests</div>
-        <button className={`${btnPrimary} text-xs`} onClick={load}>Refresh</button>
+        <div className="flex gap-2">
+          <button className={`${btnSecondary} text-xs`} onClick={syncRosters} title="Fix any approved players missing from player_teams">🔄 Sync Rosters</button>
+          <button className={`${btnPrimary} text-xs`} onClick={load}>Refresh</button>
+        </div>
       </div>
+      {syncMsg && (
+        <div className={`mb-3 text-xs rounded-lg px-3 py-2 border ${syncMsg.startsWith("✓") ? "text-green-400 bg-green-950 border-green-800" : "text-red-400 bg-red-950 border-red-800"}`}>
+          {syncMsg}
+        </div>
+      )}
       {loading ? (
         <div className="text-slate-600 text-sm text-center py-8">Loading…</div>
       ) : signings.length === 0 ? (
