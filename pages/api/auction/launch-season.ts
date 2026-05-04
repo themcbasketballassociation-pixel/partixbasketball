@@ -51,15 +51,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     existingSet = new Set((existing ?? []).map((a) => a.mc_uuid));
   }
 
-  // 3. Always skip players who are actually on a team (active contract)
-  // In test mode we only check "active" — not "pending_approval" since those
-  // come from previous test bids and would falsely block players.
-  const { data: existingContracts } = await supabase
-    .from("contracts")
-    .select("mc_uuid")
-    .eq("league", league)
-    .eq("status", "active");
-  const contractedSet = new Set((existingContracts ?? []).map((c) => c.mc_uuid));
+  // 3. In real mode: skip players who already have an active contract.
+  //    In test mode: include everyone (contracted players are fine to test-auction).
+  const contractedSet = new Set<string>();
+  if (!isTest) {
+    const { data: existingContracts } = await supabase
+      .from("contracts")
+      .select("mc_uuid")
+      .eq("league", league)
+      .eq("status", "active");
+    for (const c of existingContracts ?? []) contractedSet.add(c.mc_uuid);
+  }
 
   // 4. Create active auctions for all priced players not already in auction or contracted
   const durationMs = isTest ? Number(duration_minutes) * 60 * 1000 : 12 * 60 * 60 * 1000;
