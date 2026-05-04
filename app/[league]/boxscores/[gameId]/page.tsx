@@ -293,8 +293,8 @@ function CommentsSection({ gameId, slug }: { gameId: string; slug: string }) {
   };
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
-      <div className="px-6 py-5 border-b border-slate-800 flex items-center gap-2">
+    <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg">
+      <div className="px-6 py-5 border-b border-slate-800 flex items-center gap-2 rounded-t-2xl overflow-hidden">
         <h2 className="text-base font-bold text-white">Comments</h2>
         {comments.length > 0 && (
           <span className="text-xs text-slate-500 bg-slate-800 rounded-full px-2 py-0.5">{comments.length}</span>
@@ -388,28 +388,29 @@ function CommentsSection({ gameId, slug }: { gameId: string; slug: string }) {
                 value={commentText}
                 onChange={handleTextChange}
                 onKeyDown={handleKeyDown}
-                placeholder="Write a comment… type @ to mention a player"
+                placeholder="Write a comment… type @name to mention a player"
                 maxLength={500}
                 rows={3}
                 className="w-full rounded-xl border border-slate-700 bg-slate-950 text-white text-sm px-4 py-3 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none placeholder:text-slate-600"
               />
               {/* Mention autocomplete dropdown */}
               {mentionMatches.length > 0 && (
-                <div className="absolute bottom-full left-0 mb-1 w-56 rounded-xl border border-slate-700 bg-slate-900 shadow-xl overflow-hidden z-50">
+                <div className="absolute top-full left-0 mt-1 w-64 rounded-xl border border-slate-700 bg-slate-900 shadow-xl overflow-hidden z-50">
+                  <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500 border-b border-slate-800">Mention a player</div>
                   {mentionMatches.map((p, i) => (
                     <div
                       key={p.mc_username}
-                      className={`flex items-center gap-2 px-3 py-2 cursor-pointer transition text-sm ${i === mentionIndex ? "bg-blue-700 text-white" : "text-slate-200 hover:bg-slate-800"}`}
+                      className={`flex items-center gap-2.5 px-3 py-2.5 cursor-pointer transition text-sm ${i === mentionIndex ? "bg-blue-600 text-white" : "text-slate-200 hover:bg-slate-800"}`}
                       onMouseDown={e => { e.preventDefault(); insertMention(p.mc_username); }}
                     >
                       <img
-                        src={`https://minotar.net/avatar/${p.mc_username}/20`}
-                        className="w-5 h-5 rounded flex-shrink-0"
+                        src={`https://minotar.net/helm/${p.mc_username}/24`}
+                        className="w-6 h-6 rounded flex-shrink-0"
                         style={{ imageRendering: "pixelated" }}
                         alt=""
-                        onError={e => { (e.currentTarget as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/20"; }}
+                        onError={e => { (e.currentTarget as HTMLImageElement).src = "https://minotar.net/helm/MHF_Steve/24"; }}
                       />
-                      <span className="font-medium">@{p.mc_username}</span>
+                      <span className="font-semibold">@{p.mc_username}</span>
                     </div>
                   ))}
                 </div>
