@@ -1214,29 +1214,44 @@ const DAY_OFFSETS: Record<string, number> = {
   thursday: 0, friday: 1, saturday: 2, sunday: 3,
 };
 
+const WORD_TO_NUM: Record<string, number> = {
+  one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7,
+  eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
+};
+
 function parseScheduleText(text: string) {
   const results: Array<{ week: number; day: string; time: string; home: string; away: string }> = [];
-  const sections = text.split(/Week\s+(\d+)/i);
+  // Split on "Week N" (digit) OR "Week One/Two/..." (word)
+  const sections = text.split(/Week\s+(\w+)/i);
   for (let i = 1; i < sections.length; i += 2) {
-    const weekNum = parseInt(sections[i]);
+    const weekRaw = sections[i].toLowerCase();
+    const weekNum = WORD_TO_NUM[weekRaw] ?? parseInt(weekRaw) ?? 0;
+    if (!weekNum) continue;
     const lines = (sections[i + 1] ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
     let currentDay = "Thursday";
-    let currentTime = "7:00 PM";
+    let currentTime = "9:15 PM";
     for (const line of lines) {
-      // Update current day if line starts with a day name
-      const dayM = line.match(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b/i);
-      if (dayM) currentDay = dayM[1];
-      // Update current time if line contains a time
+      // Skip pure day header lines
+      const dayM = line.match(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)$/i);
+      if (dayM) { currentDay = dayM[1]; continue; }
+      // Extract time if present (keep as running default for subsequent games)
       const timeM = line.match(/(\d+:\d+\s*[AP]M)/i);
       if (timeM) currentTime = timeM[1].trim();
-      // Parse "Team A vs Team B"
-      const vsM = line.match(/^(.+?)\s+vs\s+(.+)$/i);
+      // Strip time + timezone from line before parsing team names
+      const stripped = line.replace(/\d+:\d+\s*[AP]M(\s+[A-Z]{2,4})?/i, "").trim();
+      // "Team A vs Team B" — first team is HOME
+      const vsM = stripped.match(/^(.+?)\s+vs\s+(.+)$/i);
       if (vsM) {
-        let home = vsM[1]
-          .replace(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s+/i, "")
-          .replace(/\d+:\d+\s*[AP]M\s*/i, "")
-          .trim();
+        const home = vsM[1].trim();
         const away = vsM[2].trim();
+        if (home && away) results.push({ week: weekNum, day: currentDay, time: currentTime, home, away });
+        continue;
+      }
+      // "Team A @ Team B" — first team is AWAY, second is HOME
+      const atM = stripped.match(/^(.+?)\s+@\s+(.+)$/i);
+      if (atM) {
+        const away = atM[1].trim();
+        const home = atM[2].trim();
         if (home && away) results.push({ week: weekNum, day: currentDay, time: currentTime, home, away });
       }
     }
