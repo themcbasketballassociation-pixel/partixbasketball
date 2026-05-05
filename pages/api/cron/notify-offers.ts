@@ -29,6 +29,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  let isAdminPost = false;
   if (req.method === "GET") {
     // Vercel cron: verify cron secret
     if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -38,18 +39,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Manual POST from admin panel: require admin session
     const admin = await requireAdmin(req, res);
     if (!admin) return;
+    isAdminPost = true;
   }
 
-  // Fetch all pending offers where DM hasn't been sent yet
-  const { data: pending, error } = await supabase
+  // Cron: only fetch offers that haven't been DM'd yet
+  // Admin POST: fetch all still-pending offers (resend to anyone who hasn't accepted/declined)
+  let query = supabase
     .from("contract_offers")
     .select("*, players(mc_uuid, mc_username, discord_id), teams(id, name, abbreviation, logo_url)")
     .eq("status", "pending")
-    .is("dm_sent_at", null)
     .order("offered_at", { ascending: false });
+  if (!isAdminPost) query = query.is("dm_sent_at", null);
+
+  const { data: pending, error } = await query;
 
   if (error) return res.status(500).json({ error: error.message });
-  if (!pending?.length) return res.status(200).json({ notified: 0, message: "No pending offers to notify" });
+  if (!pending?.length) return res.status(200).json({ notified: 0, message: "No pending offers found" });
 
   // Group offers by (mc_uuid + league)
   const groups = new Map<string, typeof pending>();
