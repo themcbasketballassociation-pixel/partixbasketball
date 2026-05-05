@@ -181,12 +181,12 @@ function BidTab({ auctions, teamId, contracts, onRefresh }: {
       .filter((b) => b.is_valid)
       .reduce((best: Bid | null, b) => (!best || b.effective_value > best.effective_value ? b : best), null);
 
-  // Pending cap hold: only auctions where this team is currently the top bidder
+  // Pending cap hold: auctions where player can still accept (within 500 of top = player choice window)
   const pendingCapHold = activeAuctions.reduce((sum, auction) => {
     const top = topBid(auction);
     const myTop = myBids(auction).sort((a, b) => b.effective_value - a.effective_value)[0];
     if (!myTop || !top) return sum;
-    return myTop.effective_value >= top.effective_value ? sum + myTop.amount : sum;
+    return myTop.effective_value >= top.effective_value - 500 ? sum + myTop.amount : sum;
   }, 0);
 
   const placeBid = async (auctionId: string) => {

@@ -93,8 +93,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const existingTotal = existingAmounts.reduce((s, a) => s + a, 0);
   const maxExisting = existingAmounts.reduce((m, a) => Math.max(m, a), 0);
 
-  // Pending cap holds: only count auctions where this team is the CURRENT top bidder.
-  // If outbid, cap is released — the player can't accept a lower offer anyway.
+  // Pending cap holds: count auctions where the player can still accept this team's bid.
+  // That means within the 500-point player-choice window of the top bid.
+  // If more than 500 below the top, the player cannot choose this team — release the hold.
   const [{ data: otherBids }, { data: openAuctions }] = await Promise.all([
     supabase
       .from("auction_bids")
@@ -134,10 +135,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       teamBestByAuction[b.auction_id] = { amount: b.amount, effective_value: b.effective_value };
   }
 
-  // Only hold cap where this team is still the top bidder
+  // Hold cap if within 500 of top (player choice window) — player can still accept this bid.
+  // More than 500 below top = player cannot choose this team = no hold.
   let pendingCapHold = 0;
   for (const [aId, best] of Object.entries(teamBestByAuction)) {
-    if (best.effective_value >= (topEffByAuction[aId] ?? 0))
+    if (best.effective_value >= (topEffByAuction[aId] ?? 0) - 500)
       pendingCapHold += best.amount;
   }
 

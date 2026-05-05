@@ -134,12 +134,12 @@ function BidView({ auctions, teamId, contracts, onRefresh }: { auctions: Auction
   const topBid = (a: Auction) => [...(a.auction_bids ?? [])].filter(b => b.is_valid).sort((x, y) => y.effective_value - x.effective_value)[0] ?? null;
   const myBid = (a: Auction) => [...(a.auction_bids ?? [])].filter(b => b.is_valid && b.team_id === teamId).sort((x, y) => y.effective_value - x.effective_value)[0] ?? null;
 
-  // Pending cap holds: only auctions where this team is currently the top bidder
+  // Pending cap holds: auctions where player can still accept (within 500 of top = player choice window)
   const pendingHolds = active.reduce((sum, a) => {
     const top = topBid(a);
     const my = myBid(a);
     if (!my || !top) return sum;
-    return my.effective_value >= top.effective_value ? sum + my.amount : sum;
+    return my.effective_value >= top.effective_value - 500 ? sum + my.amount : sum;
   }, 0);
   const availableCap = Math.max(0, 25000 - existingTotal - pendingHolds);
 
