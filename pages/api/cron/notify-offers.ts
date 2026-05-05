@@ -11,6 +11,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { supabase } from "../../../lib/supabase";
 import { sendDiscordDm } from "../../../lib/discordDm";
+import { requireAdmin } from "../../../lib/adminAuth";
 
 const HOURS_12_MS = 12 * 60 * 60 * 1000;
 
@@ -24,9 +25,19 @@ function leagueSlug(league: string) {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Validate cron secret
-  if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
-    return res.status(401).json({ error: "Unauthorized" });
+  if (req.method !== "GET" && req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  if (req.method === "GET") {
+    // Vercel cron: verify cron secret
+    if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+  } else {
+    // Manual POST from admin panel: require admin session
+    const admin = await requireAdmin(req, res);
+    if (!admin) return;
   }
 
   // Fetch all pending offers where DM hasn't been sent yet

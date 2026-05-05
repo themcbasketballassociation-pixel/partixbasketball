@@ -6575,6 +6575,24 @@ function SigningsAdminTab({ league }: { league: string }) {
     setSyncMsg(r.ok ? `✓ Synced ${d.synced ?? 0} active contracts → player_teams` : `Error: ${d.error}`);
   };
 
+  const [notifying, setNotifying] = useState(false);
+  const [notifyMsg, setNotifyMsg] = useState("");
+
+  const sendOfferNotifications = async () => {
+    setNotifying(true);
+    setNotifyMsg("Sending…");
+    const r = await fetch("/api/cron/notify-offers", { method: "POST" });
+    const d = await r.json().catch(() => ({})) as { notified?: number; total_groups?: number; message?: string; error?: string };
+    if (!r.ok) {
+      setNotifyMsg(`Error: ${d.error ?? "failed"}`);
+    } else if (d.notified === 0) {
+      setNotifyMsg(d.message ?? `✓ No offers ready to send yet (${d.total_groups ?? 0} groups checked)`);
+    } else {
+      setNotifyMsg(`✓ Sent DMs to ${d.notified} player${d.notified !== 1 ? "s" : ""}`);
+    }
+    setNotifying(false);
+  };
+
   const startEdit = (s: SigningRow) => {
     setEditingId(s.id);
     setEditAmount(String(s.amount));
@@ -6621,10 +6639,17 @@ function SigningsAdminTab({ league }: { league: string }) {
           </button>
         ))}
         <div className="ml-auto flex gap-2 items-center pb-1">
+          <button className={`${btnSecondary} text-xs`} onClick={sendOfferNotifications} disabled={notifying} title="DM all players whose offers passed the 12-hour window">📨 Send Offer DMs</button>
           <button className={`${btnSecondary} text-xs`} onClick={syncRosters} title="Fix any approved players missing from player_teams">🔄 Sync Rosters</button>
           <button className={`${btnPrimary} text-xs`} onClick={load}>Refresh</button>
         </div>
       </div>
+
+      {notifyMsg && (
+        <div className={`mb-3 text-xs rounded-lg px-3 py-2 border ${notifyMsg.startsWith("✓") ? "text-green-400 bg-green-950 border-green-800" : "text-red-400 bg-red-950 border-red-800"}`}>
+          {notifyMsg}
+        </div>
+      )}
 
       {syncMsg && (
         <div className={`mb-3 text-xs rounded-lg px-3 py-2 border ${syncMsg.startsWith("✓") ? "text-green-400 bg-green-950 border-green-800" : "text-red-400 bg-red-950 border-red-800"}`}>
