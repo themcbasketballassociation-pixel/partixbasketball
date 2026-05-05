@@ -83,15 +83,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   // ── Cap checks ───────────────────────────────────────────────────────────────
-  const { data: teamContracts } = await supabase
-    .from("contracts")
-    .select("amount")
-    .eq("team_id", team_id)
-    .eq("status", "active");
+  const [{ data: teamContracts }, { data: teamRetentions }] = await Promise.all([
+    supabase.from("contracts").select("amount").eq("team_id", team_id).eq("status", "active"),
+    supabase.from("cap_retentions").select("retention_amount").eq("retaining_team_id", team_id).eq("status", "active"),
+  ]);
 
   const existingAmounts = (teamContracts ?? []).map((c: any) => c.amount as number);
   const existingTotal = existingAmounts.reduce((s, a) => s + a, 0);
   const maxExisting = existingAmounts.reduce((m, a) => Math.max(m, a), 0);
+  const retentionTotal = (teamRetentions ?? []).reduce((s: number, r: any) => s + r.retention_amount, 0);
 
   // Pending cap holds: count auctions where the player can still accept this team's bid.
   // That means within the 500-point player-choice window of the top bid.
@@ -143,10 +143,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       pendingCapHold += best.amount;
   }
 
-  // Total cap: signed contracts + pending bid holds + new bid must not exceed 25,000
-  if (existingTotal + pendingCapHold + amount > TOTAL_CAP)
+  // Total cap: contracts + retentions + bid holds + new bid must not exceed 25,000
+  if (existingTotal + retentionTotal + pendingCapHold + amount > TOTAL_CAP)
     return res.status(400).json({
-      error: `Bid exceeds total cap of ${TOTAL_CAP.toLocaleString()}. Signed: ${existingTotal.toLocaleString()}, Pending bid holds: ${pendingCapHold.toLocaleString()}, New bid: ${amount.toLocaleString()}. Would total ${(existingTotal + pendingCapHold + amount).toLocaleString()}.`,
+      error: `Bid exceeds total cap of ${TOTAL_CAP.toLocaleString()}. Signed: ${existingTotal.toLocaleString()}, Retained: ${retentionTotal.toLocaleString()}, Pending holds: ${pendingCapHold.toLocaleString()}, New bid: ${amount.toLocaleString()}. Would total ${(existingTotal + retentionTotal + pendingCapHold + amount).toLocaleString()}.`,
     });
 
   // Roster viability: highest existing contract + bid ≤ 20,000

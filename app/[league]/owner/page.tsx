@@ -68,12 +68,12 @@ function CapBar({ contracts, retentions }: { contracts: Contract[]; retentions: 
         <div style={{ background: color, width: `${pct}%`, height: "100%", transition: "width 0.3s", borderRadius: 4 }} />
       </div>
       <div style={{ display: "flex", justifyContent: "space-between" }}>
-        <span style={{ color: "#555", fontSize: 12 }}>Court cap: {fmt(used)} / {fmt(COURT_CAP)}</span>
+        <span style={{ color: "#555", fontSize: 12 }}>Court cap: {fmt(used + retentionTotal)} / {fmt(COURT_CAP)}</span>
         <span style={{ color: "#555", fontSize: 12 }}>Remaining: {fmt(TOTAL_CAP - totalHit)}</span>
       </div>
       {retentionTotal > 0 && (
         <div style={{ color: "#a78bfa", fontSize: 12, marginTop: 4 }}>
-          Includes {fmt(retentionTotal)} in active cap retentions
+          Includes {fmt(retentionTotal)} in retained salary
         </div>
       )}
     </div>
@@ -155,8 +155,8 @@ function RosterTab({ contracts, retentions, leagueSlug }: { contracts: Contract[
 }
 
 // ── BidTab ─────────────────────────────────────────────────────────────────────
-function BidTab({ auctions, teamId, contracts, onRefresh }: {
-  auctions: Auction[]; teamId: string; contracts: Contract[]; onRefresh: () => void;
+function BidTab({ auctions, teamId, contracts, retentions, onRefresh }: {
+  auctions: Auction[]; teamId: string; contracts: Contract[]; retentions: CapRetention[]; onRefresh: () => void;
 }) {
   const [bidAmounts, setBidAmounts] = useState<Record<string, string>>({});
   const [twoSeason, setTwoSeason] = useState<Record<string, boolean>>({});
@@ -173,6 +173,7 @@ function BidTab({ auctions, teamId, contracts, onRefresh }: {
 
   const existingTotal = (contracts ?? []).reduce((s, c) => s + c.amount, 0);
   const maxExisting = (contracts ?? []).reduce((m, c) => Math.max(m, c.amount), 0);
+  const retentionTotal = (retentions ?? []).filter((r) => r.status === "active").reduce((s, r) => s + r.retention_amount, 0);
 
   const myBids = (auction: Auction) =>
     (auction.auction_bids ?? []).filter((b) => b.is_valid && b.team_id === teamId);
@@ -223,8 +224,9 @@ function BidTab({ auctions, teamId, contracts, onRefresh }: {
         style={{ ...input }}
       />
       <div style={{ ...innerCard, display: "flex", gap: 20, flexWrap: "wrap" as const }}>
-        <div><span style={{ color: "#555", fontSize: 12 }}>Cap remaining: </span><span style={{ color: "#22d3ee", fontWeight: 700 }}>{fmt(TOTAL_CAP - existingTotal - pendingCapHold)}</span></div>
+        <div><span style={{ color: "#555", fontSize: 12 }}>Cap remaining: </span><span style={{ color: "#22d3ee", fontWeight: 700 }}>{fmt(TOTAL_CAP - existingTotal - retentionTotal - pendingCapHold)}</span></div>
         {pendingCapHold > 0 && <div><span style={{ color: "#555", fontSize: 12 }}>Bid holds: </span><span style={{ color: "#f59e0b", fontWeight: 600 }}>{fmt(pendingCapHold)}</span></div>}
+        {retentionTotal > 0 && <div><span style={{ color: "#555", fontSize: 12 }}>Retained: </span><span style={{ color: "#a78bfa", fontWeight: 600 }}>{fmt(retentionTotal)}</span></div>}
         <div><span style={{ color: "#555", fontSize: 12 }}>Highest contract: </span><span style={{ color: "#fff", fontWeight: 600 }}>{fmt(maxExisting)}</span></div>
         <div><span style={{ color: "#555", fontSize: 12 }}>Viability max new: </span><span style={{ color: "#f97316", fontWeight: 600 }}>{fmt(MAX_VIABILITY - maxExisting)}</span></div>
       </div>
@@ -1391,7 +1393,7 @@ export default function OwnerPage() {
         <div style={{ padding: "16px" }}>
           {tab === "roster" && <RosterTab contracts={contracts} retentions={retentions} leagueSlug={leagueSlug} />}
           {tab === "signings" && <SigningsTab teamId={team.id} league={ownerRecord.league} leagueSlug={leagueSlug} contracts={contracts} ownerSeason={ownerRecord.season ?? null} onRefresh={loadAll} />}
-          {tab === "bid" && <BidTab auctions={auctions} teamId={team.id} contracts={contracts} onRefresh={loadAll} />}
+          {tab === "bid" && <BidTab auctions={auctions} teamId={team.id} contracts={contracts} retentions={retentions} onRefresh={loadAll} />}
           {tab === "trades" && <TradeTab teamId={team.id} league={ownerRecord.league} leagueSlug={leagueSlug} contracts={contracts} allTeams={allTeams} seasonTeamIds={seasonTeamIds} onRefresh={loadAll} />}
           {tab === "coaches" && <CoachesTab teamId={team.id} leagueSlug={leagueSlug} contracts={contracts} onRefresh={loadAll} />}
           {tab === "cut" && <CutTab teamId={team.id} leagueSlug={leagueSlug} contracts={contracts} onRefresh={loadAll} />}

@@ -68,9 +68,9 @@ function CapBar({ contracts, retentions }: { contracts: Contract[]; retentions: 
       </div>
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
         <span style={{ color: "#555", fontSize: 12 }}>Contracts: {fmt(used)}</span>
-        <span style={{ color: "#555", fontSize: 12 }}>Court cap: {fmt(COURT)} max</span>
+        <span style={{ color: "#555", fontSize: 12 }}>Court cap: {fmt(used + ret)} / {fmt(COURT)}</span>
         <span style={{ color: "#555", fontSize: 12 }}>Remaining: {fmt(TOTAL - total)}</span>
-        {ret > 0 && <span style={{ color: "#a78bfa", fontSize: 12 }}>Retentions: {fmt(ret)}</span>}
+        {ret > 0 && <span style={{ color: "#a78bfa", fontSize: 12 }}>Retained: {fmt(ret)}</span>}
       </div>
     </div>
   );
@@ -116,7 +116,7 @@ function RosterView({ contracts, retentions, leagueSlug }: { contracts: Contract
 }
 
 // ── Bidding ────────────────────────────────────────────────────────────────────
-function BidView({ auctions, teamId, contracts, onRefresh }: { auctions: Auction[]; teamId: string; contracts: Contract[]; onRefresh: () => void }) {
+function BidView({ auctions, teamId, contracts, retentions, onRefresh }: { auctions: Auction[]; teamId: string; contracts: Contract[]; retentions: CapRetention[]; onRefresh: () => void }) {
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [twos, setTwos] = useState<Record<string, boolean>>({});
   const [msgs, setMsgs] = useState<Record<string, { ok: boolean; text: string }>>({});
@@ -125,6 +125,7 @@ function BidView({ auctions, teamId, contracts, onRefresh }: { auctions: Auction
 
   const maxExisting = contracts.reduce((m, c) => Math.max(m, c.amount), 0);
   const existingTotal = contracts.reduce((s, c) => s + c.amount, 0);
+  const retentionTotal = (retentions ?? []).filter(r => r.status === "active").reduce((s, r) => s + r.retention_amount, 0);
   const active = auctions.filter(a => a.status === "active");
   const filtered = search.trim()
     ? active.filter(a => (a.players?.mc_username ?? "").toLowerCase().includes(search.toLowerCase()))
@@ -141,7 +142,7 @@ function BidView({ auctions, teamId, contracts, onRefresh }: { auctions: Auction
     if (!my || !top) return sum;
     return my.effective_value >= top.effective_value - 500 ? sum + my.amount : sum;
   }, 0);
-  const availableCap = Math.max(0, 25000 - existingTotal - pendingHolds);
+  const availableCap = Math.max(0, 25000 - existingTotal - retentionTotal - pendingHolds);
 
   const placeBid = async (aId: string) => {
     const amt = parseInt(amounts[aId] ?? "");
@@ -170,6 +171,7 @@ function BidView({ auctions, teamId, contracts, onRefresh }: { auctions: Auction
       <div style={{ ...st.innerCard, marginBottom: 14 }}>
         <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginBottom: 6 }}>
           <span style={{ color: "#555", fontSize: 13 }}>Signed: <strong style={{ color: "#ccc" }}>{fmt(existingTotal)}</strong></span>
+          {retentionTotal > 0 && <span style={{ color: "#555", fontSize: 13 }}>Retained: <strong style={{ color: "#a78bfa" }}>{fmt(retentionTotal)}</strong></span>}
           {pendingHolds > 0 && <span style={{ color: "#555", fontSize: 13 }}>Bid holds: <strong style={{ color: "#f59e0b" }}>{fmt(pendingHolds)}</strong></span>}
           <span style={{ color: "#555", fontSize: 13 }}>Available cap: <strong style={{ color: availableCap < 2000 ? "#ef4444" : "#22d3ee" }}>{fmt(availableCap)}</strong></span>
           <span style={{ color: "#555", fontSize: 13 }}>Max new bid: <strong style={{ color: "#f97316" }}>{fmt(Math.max(0, 20000 - maxExisting))}</strong></span>
@@ -884,7 +886,7 @@ export default function OwnerPortalView({ teamRecord, leagueSlug, onBack }: {
 
       {tab === "roster" && <RosterView contracts={contracts} retentions={retentions} leagueSlug={leagueSlug} />}
       {tab === "signings" && <SigningsView teamId={team.id} leagueSlug={leagueSlug} contracts={contracts} onRefresh={load} />}
-      {tab === "bid" && <BidView auctions={auctions} teamId={team.id} contracts={contracts} onRefresh={load} />}
+      {tab === "bid" && <BidView auctions={auctions} teamId={team.id} contracts={contracts} retentions={retentions} onRefresh={load} />}
       {tab === "trades" && (
         <TradesView teamId={team.id} leagueSlug={leagueSlug} contracts={contracts} allTeams={seasonFilteredTeams} myPicks={myPicks} onRefresh={load} />
       )}
