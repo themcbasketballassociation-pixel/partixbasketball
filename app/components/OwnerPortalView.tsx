@@ -296,9 +296,7 @@ function TradesView({ teamId, leagueSlug, contracts, allTeams, myPicks, onRefres
     const buildAssets = (rows: AssetRow[], fromTeamId: string, ctrts: Contract[], picks: DraftPick[]) =>
       rows.filter(a => a.type === "contract" ? a.cid : a.pickId).map(a => {
         if (a.type === "pick") return { from_team_id: fromTeamId, pick_id: a.pickId };
-        const contract = ctrts.find(c => c.id === a.cid);
-        const maxRet = contract ? Math.floor(contract.amount * 0.1) : 0;
-        const ret = Math.min(parseInt(a.ret) || 0, maxRet);
+        const ret = Math.min(parseInt(a.ret) || 0, 1000);
         return { from_team_id: fromTeamId, contract_id: a.cid, retention_amount: ret };
       });
 
@@ -358,18 +356,14 @@ function TradesView({ teamId, leagueSlug, contracts, allTeams, myPicks, onRefres
                 <option value="">— Player —</option>
                 {ctrts.map(c => <option key={c.id} value={c.id}>{c.players.mc_username} ({fmt(c.amount)})</option>)}
               </select>
-              {a.cid && (() => {
-                const c = ctrts.find(x => x.id === a.cid);
-                const maxRet = c ? Math.floor(c.amount * 0.1) : 0;
-                return maxRet > 0 ? (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                    <input type="number" placeholder="Retain" min={0} max={maxRet} step={100} value={a.ret}
-                      onChange={e => set(p => p.map((x, j) => j === i ? { ...x, ret: e.target.value } : x))}
-                      style={{ ...st.input, width: 80, flex: "none" }} />
-                    <span style={{ color: "#555", fontSize: 10, textAlign: "center" }}>max {fmt(maxRet)}</span>
-                  </div>
-                ) : null;
-              })()}
+              {a.cid && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  <input type="number" placeholder="Retain $" min={0} max={1000} step={250} value={a.ret}
+                    onChange={e => set(p => p.map((x, j) => j === i ? { ...x, ret: e.target.value } : x))}
+                    style={{ ...st.input, width: 90, flex: "none" }} />
+                  <span style={{ color: "#555", fontSize: 10, textAlign: "center" }}>max 1,000</span>
+                </div>
+              )}
             </div>
           ) : (
             <select style={st.input} value={a.pickId} onChange={e => set(p => p.map((x, j) => j === i ? { ...x, pickId: e.target.value } : x))}>
@@ -400,7 +394,7 @@ function TradesView({ teamId, leagueSlug, contracts, allTeams, myPicks, onRefres
         </div>
         <input style={{ ...st.input, marginBottom: 10 }} placeholder="Notes (optional)" value={notes} onChange={e => setNotes(e.target.value)} />
         <div style={{ background: "#0a0d12", border: "1px solid #1a2030", borderRadius: 8, padding: "7px 12px", marginBottom: 10, color: "#444", fontSize: 12 }}>
-          Cap retention: max 2,000 per side · max 10% per contract · max 3 retentions per team
+          Retention: max 1,000 per team total · flat amount, no salary % restriction
         </div>
         {err && <div style={{ color: "#fca5a5", background: "#450a0a", border: "1px solid #7f1d1d", borderRadius: 8, padding: "7px 12px", marginBottom: 8, fontSize: 13 }}>{err}</div>}
         <button onClick={submit} disabled={busy} style={{ ...ownerBtn("primary"), opacity: busy ? 0.5 : 1 }}>{busy ? "Submitting…" : "Propose Trade"}</button>
