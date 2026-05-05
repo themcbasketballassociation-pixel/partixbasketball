@@ -56,8 +56,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "DELETE") {
     const admin = await requireAdmin(req, res);
     if (!admin) return;
-    const { id } = req.body;
-    if (!id) return res.status(400).json({ error: "id required" });
+    const { id, league: leagueRaw, season } = req.body;
+
+    // Bulk delete: league + season (no id)
+    if (!id && leagueRaw && season) {
+      const league = resolveLeague(leagueRaw);
+      if (!league) return res.status(400).json({ error: "Invalid league" });
+      const { error, count } = await supabase
+        .from("draft_picks")
+        .delete({ count: "exact" })
+        .eq("league", league)
+        .eq("season", season);
+      if (error) return res.status(500).json({ error: error.message });
+      return res.status(200).json({ success: true, deleted: count });
+    }
+
+    // Single delete by id
+    if (!id) return res.status(400).json({ error: "id or (league + season) required" });
     const { error } = await supabase.from("draft_picks").delete().eq("id", id);
     if (error) return res.status(500).json({ error: error.message });
     return res.status(200).json({ success: true });

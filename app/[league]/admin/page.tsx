@@ -4063,6 +4063,18 @@ function DraftPicksTab({ league }: { league: string }) {
 
   useEffect(() => { refresh(); }, [refresh]);
 
+  const deleteAllPicks = async () => {
+    if (!confirm(`Delete ALL picks for ${filterSeason} in ${league.toUpperCase()}? This cannot be undone.`)) return;
+    const r = await fetch("/api/draft-picks", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ league, season: filterSeason }),
+    });
+    const d = await r.json();
+    if (!r.ok) alert(d.error);
+    else refresh();
+  };
+
   const seed = async () => {
     setSeedMsg(""); setSeedBusy(true);
     const r = await fetch("/api/draft-picks/seed", {
@@ -4166,10 +4178,13 @@ function DraftPicksTab({ league }: { league: string }) {
       )}
 
       {/* Season filter + list */}
-      <div className="flex gap-2 mb-4 flex-wrap">
+      <div className="flex gap-2 mb-4 flex-wrap items-center">
         {["Season 7", "Season 8", "Season 6"].map(s => (
           <button key={s} className={filterSeason === s ? btnPrimary : btnSecondary} onClick={() => setFilterSeason(s)}>{s}</button>
         ))}
+        <button className={btnDanger} onClick={deleteAllPicks} style={{ marginLeft: "auto" }}>
+          Delete All {filterSeason} Picks
+        </button>
       </div>
 
       {picks.length === 0 ? (
