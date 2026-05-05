@@ -64,18 +64,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json(available);
     }
 
-    // MBA/MBGL: only players whose auction closed with no winner
-    const { data: closedAuctions } = await supabase
-      .from("auction_items")
-      .select("mc_uuid, min_price, players(mc_uuid, mc_username)")
-      .eq("league", league)
-      .eq("status", "closed");
-    const available = (closedAuctions ?? [])
-      .filter((a: any) => !taken.has(a.mc_uuid))
-      .map((a: any) => ({
-        mc_uuid: a.mc_uuid,
-        mc_username: (a.players as any)?.mc_username ?? a.mc_uuid,
-        min_price: a.min_price,
+    // MBA/MBGL: all players without active contracts
+    // Use auction min_price as the suggested offer amount if one exists
+    const [{ data: allPlayers }, { data: allAuctions }] = await Promise.all([
+      supabase.from("players").select("mc_uuid, mc_username").order("mc_username", { ascending: true }),
+      supabase.from("auction_items").select("mc_uuid, min_price").eq("league", league),
+    ]);
+    const auctionPrices = new Map((allAuctions ?? []).map((a: any) => [a.mc_uuid as string, a.min_price as number]));
+    const available = (allPlayers ?? [])
+      .filter((p: any) => !taken.has(p.mc_uuid))
+      .map((p: any) => ({
+        mc_uuid: p.mc_uuid,
+        mc_username: p.mc_username ?? p.mc_uuid,
+        min_price: auctionPrices.get(p.mc_uuid) ?? 0,
       }));
     return res.status(200).json(available);
   }

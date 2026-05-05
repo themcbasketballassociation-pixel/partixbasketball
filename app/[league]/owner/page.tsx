@@ -587,6 +587,7 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
   const [sentOffers, setSentOffers] = useState<ContractOffer[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPlayer, setSelectedPlayer] = useState("");
+  const [offerAmount, setOfferAmount] = useState("");
   const [signingRole, setSigningRole] = useState<"player" | "coach">("player");
   const [err, setErr] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
@@ -619,6 +620,12 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
   const offeredUuids = new Set(sentOffers.map((o) => o.mc_uuid));
   const availableFiltered = available.filter((p) => !offeredUuids.has(p.mc_uuid));
 
+  // Reset offer amount to auction min_price (or 0) whenever player selection changes
+  useEffect(() => {
+    const info = available.find((p) => p.mc_uuid === selectedPlayer);
+    setOfferAmount(info ? String(info.min_price) : "");
+  }, [selectedPlayer, available]);
+
   const makeOffer = async () => {
     if (!selectedPlayer) return setErr("Select a player");
     setErr(""); setSuccessMsg(""); setSubmitting(true);
@@ -641,16 +648,17 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
     }
 
     // Players → create a contract offer (player must accept)
+    const amt = hideCap ? 0 : (parseInt(offerAmount) || 0);
     const r = await fetch("/api/contract-offers", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ league: leagueSlug, mc_uuid: selectedPlayer, amount: selectedInfo?.min_price ?? 0 }),
+      body: JSON.stringify({ league: leagueSlug, mc_uuid: selectedPlayer, amount: amt }),
     });
     const d = await r.json();
     setSubmitting(false);
     if (!r.ok) return setErr(d.error);
-    setSuccessMsg(`Offer sent to ${selectedInfo?.mc_username ?? "player"}${!hideCap ? ` for $${fmt(selectedInfo?.min_price ?? 0)}` : ""}. They'll be notified after 12 hours and can accept via Discord or their profile.`);
-    setSelectedPlayer("");
+    setSuccessMsg(`Offer sent to ${selectedInfo?.mc_username ?? "player"}${!hideCap ? ` for $${fmt(amt)}` : ""}. They'll be notified after 12 hours and can accept via Discord or their profile.`);
+    setSelectedPlayer(""); setOfferAmount("");
     loadData(); onRefresh();
   };
 
@@ -675,7 +683,7 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
       <div style={{ background: "#0d1117", border: "1px solid #1a2030", borderRadius: 8, padding: "8px 12px", marginBottom: 16, fontSize: 12, color: "#555" }}>
         {isMcaa
           ? "Send offers to available players · Player must accept · Coach signings go directly to admin approval"
-          : "Post-auction signings only · Send an offer at the auction minimum price · Player accepts after a 12-hour window"}
+          : "Send a contract offer to any available player · Player accepts after the 12-hour window"}
       </div>
 
       {/* Make Offer / Coach Sign form */}
@@ -684,21 +692,17 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
           {isMcaa ? "Send an Offer / Coach Request" : "Send a Contract Offer"}
         </div>
         <div style={{ marginBottom: 12 }}>
-          <label style={{ color: "#555", fontSize: 12, display: "block", marginBottom: 4 }}>
-            {isMcaa ? "Available player" : "Player (closed auction — no winner)"}
-          </label>
+          <label style={{ color: "#555", fontSize: 12, display: "block", marginBottom: 4 }}>Player</label>
           {loading ? (
             <div style={{ color: "#444", fontSize: 13 }}>Loading…</div>
           ) : availableFiltered.length === 0 ? (
-            <div style={{ color: "#555", fontSize: 13 }}>
-              {isMcaa ? "No players available." : "No players available. Players appear here after their auction closes without a bid."}
-            </div>
+            <div style={{ color: "#555", fontSize: 13 }}>No players available.</div>
           ) : (
             <select style={input} value={selectedPlayer} onChange={(e) => setSelectedPlayer(e.target.value)}>
               <option value="">— Select player —</option>
               {availableFiltered.map((p) => (
                 <option key={p.mc_uuid} value={p.mc_uuid}>
-                  {p.mc_username}{!hideCap ? ` — $${fmt(p.min_price)}` : ""}
+                  {p.mc_username}{!hideCap && p.min_price > 0 ? ` (auction min: $${fmt(p.min_price)})` : ""}
                 </option>
               ))}
             </select>
@@ -728,14 +732,22 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
         )}
 
         {selectedInfo && !hideCap && signingRole === "player" && (
-          <div style={{ ...innerCard, marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ color: "#555", fontSize: 13 }}>Offer salary (auction minimum)</span>
-            <span style={{ color: "#22d3ee", fontWeight: 700, fontSize: 18 }}>${fmt(selectedInfo.min_price)}</span>
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ color: "#555", fontSize: 12, display: "block", marginBottom: 4 }}>Offer salary</label>
+            <input
+              type="number"
+              style={input}
+              value={offerAmount}
+              min={0}
+              step={500}
+              placeholder="0"
+              onChange={(e) => setOfferAmount(e.target.value)}
+            />
           </div>
         )}
-        {selectedInfo && !hideCap && signingRole === "player" && capUsed + selectedInfo.min_price > TOTAL_CAP && (
+        {selectedInfo && !hideCap && signingRole === "player" && capUsed + (parseInt(offerAmount) || 0) > TOTAL_CAP && (
           <div style={{ color: "#fca5a5", background: "#450a0a", border: "1px solid #7f1d1d", borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 13 }}>
-            ⚠ Exceeds cap: {fmt(capUsed)} + {fmt(selectedInfo.min_price)} = {fmt(capUsed + selectedInfo.min_price)} / {fmt(TOTAL_CAP)}
+            ⚠ Exceeds cap: {fmt(capUsed)} + {fmt(parseInt(offerAmount) || 0)} = {fmt(capUsed + (parseInt(offerAmount) || 0))} / {fmt(TOTAL_CAP)}
           </div>
         )}
         {err && <div style={{ color: "#fca5a5", background: "#450a0a", border: "1px solid #7f1d1d", borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 13 }}>{err}</div>}
@@ -743,7 +755,7 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
 
         <button
           onClick={makeOffer}
-          disabled={submitting || !selectedPlayer || (!hideCap && signingRole === "player" && selectedInfo ? capUsed + selectedInfo.min_price > TOTAL_CAP : false)}
+          disabled={submitting || !selectedPlayer || (!hideCap && signingRole === "player" && selectedInfo ? capUsed + (parseInt(offerAmount) || 0) > TOTAL_CAP : false)}
           style={{ ...btn("primary"), opacity: (submitting || !selectedPlayer) ? 0.5 : 1 }}
         >
           {submitting ? "Submitting…" : isMcaa && signingRole === "coach" ? "Submit Coach Request" : "📨 Send Offer"}
