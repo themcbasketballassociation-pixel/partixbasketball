@@ -93,12 +93,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const existingTotal = existingAmounts.reduce((s, a) => s + a, 0);
   const maxExisting = existingAmounts.reduce((m, a) => Math.max(m, a), 0);
 
-  // Pending cap holds: team's highest valid bid on every OTHER active/player_choice auction.
-  // A bid commits cap until the player signs somewhere (then that auction closes and the hold releases).
+  // Pending cap holds: only count auctions where this team is the CURRENT top bidder.
+  // If outbid, cap is released — the player can't accept a lower offer anyway.
   const [{ data: otherBids }, { data: openAuctions }] = await Promise.all([
     supabase
       .from("auction_bids")
-      .select("auction_id, amount")
+      .select("auction_id, amount, effective_value")
       .eq("team_id", team_id)
       .eq("is_valid", true)
       .neq("auction_id", auction_id),
@@ -108,12 +108,38 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .in("status", ["active", "player_choice"]),
   ]);
   const openIds = new Set((openAuctions ?? []).map((a: any) => a.id as string));
-  const holdByAuction: Record<string, number> = {};
-  for (const b of (otherBids ?? []) as { auction_id: string; amount: number }[]) {
-    if (openIds.has(b.auction_id))
-      holdByAuction[b.auction_id] = Math.max(holdByAuction[b.auction_id] ?? 0, b.amount);
+
+  // Find auctions where this team has bid
+  const teamBidsOnOpen = ((otherBids ?? []) as { auction_id: string; amount: number; effective_value: number }[])
+    .filter((b) => openIds.has(b.auction_id));
+  const openAuctionIds = [...new Set(teamBidsOnOpen.map((b) => b.auction_id))];
+
+  // Fetch all bids on those auctions to find the top effective_value per auction
+  let topEffByAuction: Record<string, number> = {};
+  if (openAuctionIds.length > 0) {
+    const { data: allOpenBids } = await supabase
+      .from("auction_bids")
+      .select("auction_id, effective_value")
+      .eq("is_valid", true)
+      .in("auction_id", openAuctionIds);
+    for (const b of (allOpenBids ?? []) as { auction_id: string; effective_value: number }[])
+      topEffByAuction[b.auction_id] = Math.max(topEffByAuction[b.auction_id] ?? 0, b.effective_value);
   }
-  const pendingCapHold = Object.values(holdByAuction).reduce((s, a) => s + a, 0);
+
+  // Team's best bid per auction
+  const teamBestByAuction: Record<string, { amount: number; effective_value: number }> = {};
+  for (const b of teamBidsOnOpen) {
+    const cur = teamBestByAuction[b.auction_id];
+    if (!cur || b.effective_value > cur.effective_value)
+      teamBestByAuction[b.auction_id] = { amount: b.amount, effective_value: b.effective_value };
+  }
+
+  // Only hold cap where this team is still the top bidder
+  let pendingCapHold = 0;
+  for (const [aId, best] of Object.entries(teamBestByAuction)) {
+    if (best.effective_value >= (topEffByAuction[aId] ?? 0))
+      pendingCapHold += best.amount;
+  }
 
   // Total cap: signed contracts + pending bid holds + new bid must not exceed 25,000
   if (existingTotal + pendingCapHold + amount > TOTAL_CAP)

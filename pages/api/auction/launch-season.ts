@@ -90,14 +90,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const durationMs = isTest ? Number(duration_minutes) * 60 * 1000 : 72 * 60 * 60 * 1000;
   const closesAt = new Date(Date.now() + durationMs).toISOString();
   let created = 0;
-  let skipped = 0;
+  const skippedOwner: string[] = [];
+  const skippedContracted: string[] = [];
+  const skippedExisting: string[] = [];
   const insertErrors: string[] = [];
 
   for (const { mc_uuid, price } of prices) {
-    if (existingSet.has(mc_uuid) || contractedSet.has(mc_uuid) || ownerSet.has(mc_uuid)) {
-      skipped++;
-      continue;
-    }
+    if (ownerSet.has(mc_uuid)) { skippedOwner.push(mc_uuid); continue; }
+    if (contractedSet.has(mc_uuid)) { skippedContracted.push(mc_uuid); continue; }
+    if (existingSet.has(mc_uuid)) { skippedExisting.push(mc_uuid); continue; }
     const { error } = await supabase.from("auctions").insert([{
       league,
       mc_uuid,
@@ -107,21 +108,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       closes_at: closesAt,
     }]);
     if (!error) created++;
-    else {
-      skipped++;
-      insertErrors.push(`${mc_uuid}: ${error.message}`);
-    }
+    else insertErrors.push(`${mc_uuid}: ${error.message}`);
+  }
+
+  // Resolve usernames for skipped players so the admin can see who was filtered
+  const allSkippedUuids = [...skippedOwner, ...skippedContracted, ...skippedExisting];
+  let skippedNames: Record<string, string> = {};
+  if (allSkippedUuids.length > 0) {
+    const { data: pls } = await supabase.from("players").select("mc_uuid, mc_username").in("mc_uuid", allSkippedUuids);
+    for (const p of pls ?? []) skippedNames[p.mc_uuid] = p.mc_username;
   }
 
   return res.status(200).json({
     created,
-    skipped,
+    skipped: skippedOwner.length + skippedContracted.length + skippedExisting.length,
     total: prices.length,
     insertErrors,
+    skippedOwner: skippedOwner.map(u => skippedNames[u] ?? u),
+    skippedContracted: skippedContracted.map(u => skippedNames[u] ?? u),
+    skippedExisting: skippedExisting.map(u => skippedNames[u] ?? u),
     debug: {
       isTest,
       existingSetSize: existingSet.size,
       contractedSetSize: contractedSet.size,
+      ownerSetSize: ownerSet.size,
       pricesCount: prices.length,
       deletedCount,
       deleteErr,
