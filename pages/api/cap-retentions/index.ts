@@ -8,8 +8,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const league = resolveLeague(leagueRaw);
     let query = supabase
       .from("cap_retentions")
-      .select("*, players(mc_uuid, mc_username)")
-      .order("created_at" as any, { ascending: false });
+      .select("*, players(mc_uuid, mc_username)");
     if (league) query = query.eq("league", league as string);
     if (team_id) query = query.eq("retaining_team_id", team_id as string);
     if (status) query = query.eq("status", status as string);

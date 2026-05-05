@@ -100,7 +100,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (existingContract)
       return res.status(400).json({ error: "You already have an active or pending contract this season" });
 
-    // Create the contract (pending_approval → admin approves to make it active)
+    // Create the contract as active immediately — no admin approval needed
     const { data: contract, error: contractErr } = await supabase
       .from("contracts")
       .insert([{
@@ -111,11 +111,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         is_two_season: offer.is_two_season,
         season: offer.season,
         phase: offer.phase ?? 1,
-        status: "pending_approval",
+        status: "active",
       }])
       .select("*, players(mc_uuid, mc_username), teams(id, name, abbreviation)")
       .single();
     if (contractErr) return res.status(500).json({ error: contractErr.message });
+
+    // Sync player_teams so the player appears on their new team immediately
+    await supabase
+      .from("player_teams")
+      .upsert([{ mc_uuid: offer.mc_uuid, team_id: offer.team_id, league: offer.league }], { onConflict: "mc_uuid,league" });
 
     // Mark this offer as accepted, decline all other pending offers for this player in this league
     await supabase.from("contract_offers").update({ status: "accepted" }).eq("id", id);

@@ -119,14 +119,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (!asset.contract_id) {
           const retention = Number(asset.retention_amount ?? 0);
           if (retention > 0) {
-            await supabase.from("cap_retentions").insert([{
-              league: trade.league,
-              retaining_team_id: asset.from_team_id,
-              mc_uuid: null,
-              original_contract_id: null,
-              retention_amount: retention,
-              status: "active",
-            }]);
+            // Sending team absorbs the cost; receiving team gets equal cap relief (negative)
+            await supabase.from("cap_retentions").insert([
+              {
+                league: trade.league,
+                retaining_team_id: asset.from_team_id,
+                mc_uuid: null,
+                original_contract_id: null,
+                retention_amount: retention,
+                status: "active",
+              },
+              {
+                league: trade.league,
+                retaining_team_id: receivingTeamId,
+                mc_uuid: null,
+                original_contract_id: null,
+                retention_amount: -retention,
+                status: "active",
+              },
+            ]);
           }
           continue;
         }
