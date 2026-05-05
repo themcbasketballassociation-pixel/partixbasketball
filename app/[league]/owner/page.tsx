@@ -423,7 +423,6 @@ function TradeTab({ teamId, league, leagueSlug, contracts, allTeams, seasonTeamI
       <div style={{ color: "#555", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>{label}</div>
       {assets.map((a, i) => {
         const selectedContract = ctrts.find(c => c.id === a.contract_id);
-        const maxRetention = selectedContract ? Math.min(Math.floor(selectedContract.amount * 0.10 / 250) * 250, 2000) : 0;
         return (
           <div key={i} style={{ marginBottom: 10 }}>
             <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
@@ -443,21 +442,19 @@ function TradeTab({ teamId, league, leagueSlug, contracts, allTeams, seasonTeamI
                 style={{ ...input, flex: 1, minWidth: 80 }}
                 step={250}
                 min={0}
-                max={maxRetention || undefined}
+                max={1000}
               />
               <button onClick={() => setAssets((prev) => prev.filter((_, j) => j !== i))} style={{ ...btn("danger"), padding: "6px 10px" }}>✕</button>
             </div>
             {selectedContract && (
               <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 11, color: "#555", paddingLeft: 2 }}>
-                <span>Max retention: <span style={{ color: "#a855f7" }}>{fmt(maxRetention)}</span> (10% of {fmt(selectedContract.amount)})</span>
-                {maxRetention > 0 && (
-                  <button
-                    onClick={() => setAssets((prev) => prev.map((x, j) => j === i ? { ...x, retention: String(maxRetention) } : x))}
-                    style={{ ...btn(), fontSize: 11, padding: "2px 6px", color: "#a855f7", borderColor: "#4c1d95" }}
-                  >
-                    Set max
-                  </button>
-                )}
+                <span>Max retention: <span style={{ color: "#a855f7" }}>1,000</span></span>
+                <button
+                  onClick={() => setAssets((prev) => prev.map((x, j) => j === i ? { ...x, retention: "1000" } : x))}
+                  style={{ ...btn(), fontSize: 11, padding: "2px 6px", color: "#a855f7", borderColor: "#4c1d95" }}
+                >
+                  Set max
+                </button>
               </div>
             )}
           </div>
@@ -488,7 +485,7 @@ function TradeTab({ teamId, league, leagueSlug, contracts, allTeams, seasonTeamI
           <input style={input} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Any notes for the other team / admin…" />
         </div>
         <div style={{ background: "#0d1117", border: "1px solid #1a2030", borderRadius: 8, padding: "8px 12px", marginBottom: 12, fontSize: 12, color: "#555" }}>
-          Retention rules: max 2,000 total per side · max 10% of any single contract · max 3 retentions per team
+          Retention rules: max 1,000 per team total · flat amount, no salary % restriction
         </div>
         {err && <div style={{ color: "#fca5a5", background: "#450a0a", border: "1px solid #7f1d1d", borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 13 }}>{err}</div>}
         <button onClick={submitTrade} disabled={submitting} style={{ ...btn("primary"), opacity: submitting ? 0.5 : 1 }}>

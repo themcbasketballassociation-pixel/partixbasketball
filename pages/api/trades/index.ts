@@ -4,9 +4,7 @@ import { resolveLeague } from "../../../lib/leagueMapping";
 import { getSessionDiscordId, isAdminId } from "../../../lib/ownerAuth";
 import { sendWebhook, getWebhookUrl } from "../../../lib/discordWebhook";
 
-const MAX_CAP_SPACE_TRADE = 2000;
-const MAX_RETENTION_PCT = 0.1; // 10%
-const MAX_RETENTIONS_PER_TEAM = 3;
+const MAX_RETENTION = 1000; // flat max per trade and per team total
 
 const TRADE_ASSETS_SELECT = `
   id, from_team_id, contract_id, pick_id, retention_amount,
@@ -103,41 +101,37 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const retention = Number(asset.retention_amount ?? 0);
 
       if (retention > 0) {
+        if (retention > MAX_RETENTION)
+          return res.status(400).json({ error: `Retention cannot exceed ${MAX_RETENTION.toLocaleString()}` });
+
         const { data: contract } = await supabase
           .from("contracts")
-          .select("amount, team_id")
+          .select("team_id")
           .eq("id", asset.contract_id)
           .maybeSingle();
         if (!contract) return res.status(400).json({ error: `Contract ${asset.contract_id} not found` });
         if (contract.team_id !== asset.from_team_id)
           return res.status(400).json({ error: "Contract does not belong to the sending team" });
 
-        const maxRetention = Math.min(
-          Math.floor(contract.amount * MAX_RETENTION_PCT),
-          MAX_CAP_SPACE_TRADE
-        );
-        if (retention > maxRetention)
-          return res.status(400).json({
-            error: `Retention on contract ${asset.contract_id} exceeds max (${maxRetention} = 10% of ${contract.amount}, capped at ${MAX_CAP_SPACE_TRADE})`,
-          });
-
+        // Team total active retention cannot exceed 1,000
         const { data: activeRetentions } = await supabase
           .from("cap_retentions")
-          .select("id")
+          .select("retention_amount")
           .eq("retaining_team_id", asset.from_team_id)
           .eq("status", "active");
-        if ((activeRetentions ?? []).length >= MAX_RETENTIONS_PER_TEAM)
-          return res.status(400).json({ error: `Team already has ${MAX_RETENTIONS_PER_TEAM} active cap retentions` });
+        const existingRetTotal = (activeRetentions ?? []).reduce((s: number, r: any) => s + r.retention_amount, 0);
+        if (existingRetTotal + retention > MAX_RETENTION)
+          return res.status(400).json({ error: `Team's total active retention cannot exceed ${MAX_RETENTION.toLocaleString()} (currently has ${existingRetTotal.toLocaleString()})` });
 
         if (asset.from_team_id === proposing_team_id) proposerRetentionTotal += retention;
         else receiverRetentionTotal += retention;
       }
     }
 
-    if (proposerRetentionTotal > MAX_CAP_SPACE_TRADE)
-      return res.status(400).json({ error: `Proposing team cannot retain more than ${MAX_CAP_SPACE_TRADE} total` });
-    if (receiverRetentionTotal > MAX_CAP_SPACE_TRADE)
-      return res.status(400).json({ error: `Receiving team cannot retain more than ${MAX_CAP_SPACE_TRADE} total` });
+    if (proposerRetentionTotal > MAX_RETENTION)
+      return res.status(400).json({ error: `Proposing team cannot retain more than ${MAX_RETENTION.toLocaleString()} total in this trade` });
+    if (receiverRetentionTotal > MAX_RETENTION)
+      return res.status(400).json({ error: `Receiving team cannot retain more than ${MAX_RETENTION.toLocaleString()} total in this trade` });
 
     // Get proposer display name for admin tracking
     const { getServerSession } = await import("next-auth/next");
