@@ -2,7 +2,7 @@
  * Cron: notify-offers
  *
  * Finds players with pending contract offers where the most recent offer is
- * ≥12 hours old and no DM has been sent yet, then DMs them via Discord bot
+ * ≥24 hours old and no DM has been sent yet, then DMs them via Discord bot
  * with accept/decline buttons.
  *
  * Call this endpoint on a schedule (e.g. every hour via Vercel Cron):
@@ -13,7 +13,7 @@ import { supabase } from "../../../lib/supabase";
 import { sendDiscordDm } from "../../../lib/discordDm";
 import { requireAdmin } from "../../../lib/adminAuth";
 
-const HOURS_12_MS = 12 * 60 * 60 * 1000;
+const HOURS_24_MS = 24 * 60 * 60 * 1000;
 
 const LEAGUE_LABELS: Record<string, string> = { pba: "MBA", pcaa: "MCAA", pbgl: "MBGL" };
 const LEAGUE_COLORS: Record<string, number> = { pba: 0xc8102e, pcaa: 0x003087, pbgl: 0xbb3430 };
@@ -74,7 +74,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Most recent offer (already sorted descending)
     const mostRecentOffer = offers[0];
     const elapsed = now - new Date(mostRecentOffer.offered_at).getTime();
-    if (elapsed < HOURS_12_MS) continue; // 12-hour window hasn't passed yet
+    if (elapsed < HOURS_24_MS) continue; // 12-hour window hasn't passed yet
 
     const league = offers[0].league as string;
     const label = LEAGUE_LABELS[league] ?? league.toUpperCase();

@@ -777,7 +777,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       // Enforce 12-hour window
-      const HOURS_12_MS = 12 * 60 * 60 * 1000;
+      const HOURS_24_MS = 24 * 60 * 60 * 1000;
       const { data: allPending } = await supabase
         .from("contract_offers")
         .select("offered_at")
@@ -789,14 +789,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const mostRecentOfferedAt = (allPending ?? [])[0]?.offered_at;
       if (mostRecentOfferedAt) {
         const elapsed = Date.now() - new Date(mostRecentOfferedAt).getTime();
-        if (elapsed < HOURS_12_MS) {
-          const acceptableAt = new Date(new Date(mostRecentOfferedAt).getTime() + HOURS_12_MS);
+        if (elapsed < HOURS_24_MS) {
+          const acceptableAt = new Date(new Date(mostRecentOfferedAt).getTime() + HOURS_24_MS);
           const remainingMs = acceptableAt.getTime() - Date.now();
           const h = Math.floor(remainingMs / 3600000);
           const m = Math.floor((remainingMs % 3600000) / 60000);
           return res.status(200).json({
             type: 4,
-            data: { content: `⏳ You can't accept yet — wait **${h}h ${m}m** more (12-hour window from your most recent offer).`, flags: 64 },
+            data: { content: `⏳ You can't accept yet — wait **${h}h ${m}m** more (24-hour window from your most recent offer).`, flags: 64 },
           });
         }
       }

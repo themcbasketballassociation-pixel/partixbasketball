@@ -28,7 +28,7 @@ type ContractOffer = {
 
 const LEAGUE_LABELS: Record<string, string> = { pba: "MBA", mba: "MBA", pcaa: "MCAA", mcaa: "MCAA", pbgl: "MBGL", mbgl: "MBGL" };
 const LEAGUE_COLORS: Record<string, string> = { pba: "#C8102E", mba: "#C8102E", pcaa: "#003087", mcaa: "#003087", pbgl: "#BB3430", mbgl: "#BB3430" };
-const HOURS_12_MS = 12 * 60 * 60 * 1000;
+const HOURS_24_MS = 24 * 60 * 60 * 1000;
 
 function OfferTimer({ offeredAt, onReady }: { offeredAt: string; onReady: () => void }) {
   const [label, setLabel] = useState("");
@@ -36,7 +36,7 @@ function OfferTimer({ offeredAt, onReady }: { offeredAt: string; onReady: () => 
   useEffect(() => {
     const tick = () => {
       const elapsed = Date.now() - new Date(offeredAt).getTime();
-      const remaining = HOURS_12_MS - elapsed;
+      const remaining = HOURS_24_MS - elapsed;
       if (remaining <= 0) {
         setLabel("Ready to accept");
         if (!ready) { setReady(true); onReady(); }
@@ -174,7 +174,7 @@ export default function ProfilePage({ params }: { params?: Promise<{ league?: st
     const mostRecent = leagueOffers.reduce((best, o) =>
       new Date(o.offered_at) > new Date(best.offered_at) ? o : best
     );
-    return new Date(new Date(mostRecent.offered_at).getTime() + HOURS_12_MS);
+    return new Date(new Date(mostRecent.offered_at).getTime() + HOURS_24_MS);
   };
 
   // ── Not signed in ───────────────────────────────────────────────────────────
@@ -313,7 +313,7 @@ export default function ProfilePage({ params }: { params?: Promise<{ league?: st
                 {offers.length}
               </span>
             )}
-            <p className="text-slate-500 text-xs ml-1">Offers from teams — accept after the 12-hour window</p>
+            <p className="text-slate-500 text-xs ml-1">Offers from teams — accept after the 24-hour window</p>
           </div>
           <div className="p-6">
             {offersLoading ? (

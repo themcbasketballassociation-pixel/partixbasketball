@@ -560,10 +560,10 @@ type ContractOffer = {
 function OfferCountdown({ offeredAt }: { offeredAt: string }) {
   const [label, setLabel] = useState("");
   useEffect(() => {
-    const HOURS_12_MS = 12 * 60 * 60 * 1000;
+    const HOURS_24_MS = 24 * 60 * 60 * 1000;
     const tick = () => {
       const elapsed = Date.now() - new Date(offeredAt).getTime();
-      const remaining = HOURS_12_MS - elapsed;
+      const remaining = HOURS_24_MS - elapsed;
       if (remaining <= 0) { setLabel("Player can accept now"); return; }
       const h = Math.floor(remaining / 3600000);
       const m = Math.floor((remaining % 3600000) / 60000);
@@ -657,7 +657,7 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
     const d = await r.json();
     setSubmitting(false);
     if (!r.ok) return setErr(d.error);
-    setSuccessMsg(`Offer sent to ${selectedInfo?.mc_username ?? "player"}${!hideCap ? ` for $${fmt(amt)}` : ""}. They'll be notified after 12 hours and can accept via Discord or their profile.`);
+    setSuccessMsg(`Offer sent to ${selectedInfo?.mc_username ?? "player"}${!hideCap ? ` for $${fmt(amt)}` : ""}. They'll be notified after 24 hours and can accept via Discord or their profile.`);
     setSelectedPlayer(""); setOfferAmount("");
     loadData(); onRefresh();
   };
@@ -683,7 +683,7 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
       <div style={{ background: "#0d1117", border: "1px solid #1a2030", borderRadius: 8, padding: "8px 12px", marginBottom: 16, fontSize: 12, color: "#555" }}>
         {isMcaa
           ? "Send offers to available players · Player must accept · Coach signings go directly to admin approval"
-          : "Send a contract offer to any available player · Player accepts after the 12-hour window"}
+          : "Send a contract offer to any available player · Player accepts after the 24-hour window"}
       </div>
 
       {/* Make Offer / Coach Sign form */}
@@ -770,9 +770,9 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {sentOffers.map((o) => {
-              const HOURS_12_MS = 12 * 60 * 60 * 1000;
+              const HOURS_24_MS = 24 * 60 * 60 * 1000;
               const elapsed = Date.now() - new Date(o.offered_at).getTime();
-              const canAccept = elapsed >= HOURS_12_MS;
+              const canAccept = elapsed >= HOURS_24_MS;
               return (
                 <div key={o.id} style={{ ...innerCard, display: "flex", alignItems: "center", gap: 10 }}>
                   <img

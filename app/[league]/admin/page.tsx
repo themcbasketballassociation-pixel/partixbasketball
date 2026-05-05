@@ -6639,7 +6639,7 @@ function SigningsAdminTab({ league }: { league: string }) {
           </button>
         ))}
         <div className="ml-auto flex gap-2 items-center pb-1">
-          <button className={`${btnSecondary} text-xs`} onClick={sendOfferNotifications} disabled={notifying} title="DM all players whose offers passed the 12-hour window">📨 Send Offer DMs</button>
+          <button className={`${btnSecondary} text-xs`} onClick={sendOfferNotifications} disabled={notifying} title="DM all players whose offers passed the 24-hour window">📨 Send Offer DMs</button>
           <button className={`${btnSecondary} text-xs`} onClick={syncRosters} title="Fix any approved players missing from player_teams">🔄 Sync Rosters</button>
           <button className={`${btnPrimary} text-xs`} onClick={load}>Refresh</button>
         </div>
