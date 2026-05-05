@@ -7312,7 +7312,7 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
             <button
               key={p.id}
               disabled={!p.available}
-              onClick={p.available ? () => setPortal(p.id) : undefined}
+              onClick={p.available ? (p.id === "owner" ? () => { window.location.href = `/${league}/owner`; } : () => setPortal(p.id)) : undefined}
               className="text-left rounded-xl border p-5 transition-all duration-150 flex flex-col gap-3"
               style={{
                 background: p.available ? p.bg : "#0a0a0a",
