@@ -28,9 +28,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { data: teams, error: teamsErr } = await supabase
       .from("teams")
       .select("id")
-      .eq("league", league);
+      .eq("league", league)
+      .eq("season", base_season as string);
     if (teamsErr) return res.status(500).json({ error: teamsErr.message });
-    if (!teams?.length) return res.status(400).json({ error: "No teams found for this league" });
+    if (!teams?.length) return res.status(400).json({ error: `No teams found for ${base_season} in this league` });
 
     // Check which picks already exist
     const { data: existing } = await supabase
