@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { supabase } from "../../../lib/supabase";
 import { getSessionDiscordId, isAdminId } from "../../../lib/ownerAuth";
+import { sendWebhook, getWebhookUrl } from "../../../lib/discordWebhook";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { id } = req.query;
@@ -34,7 +35,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const { data: trade, error: fetchErr } = await supabase
       .from("trade_proposals")
-      .select("*, trade_assets(id, from_team_id, contract_id, pick_id, retention_amount, contracts(mc_uuid, amount))")
+      .select(`
+        *,
+        proposing_team:teams!trade_proposals_proposing_team_id_fkey(id, name, abbreviation),
+        receiving_team:teams!trade_proposals_receiving_team_id_fkey(id, name, abbreviation),
+        trade_assets(
+          id, from_team_id, contract_id, pick_id, retention_amount,
+          contracts(mc_uuid, amount, players(mc_uuid, mc_username)),
+          draft_picks(id, season, round, original_team:teams!draft_picks_original_team_id_fkey(id, abbreviation))
+        )
+      `)
       .eq("id", id)
       .single();
     if (fetchErr || !trade) return res.status(404).json({ error: "Trade not found" });
@@ -134,6 +144,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           .eq("id", asset.contract_id);
         if (contractErr) return res.status(500).json({ error: contractErr.message });
 
+        // Keep player_teams in sync with the contract's new team
+        await supabase
+          .from("player_teams")
+          .upsert([{ mc_uuid: contract.mc_uuid, team_id: receivingTeamId, league: trade.league }], { onConflict: "mc_uuid,league" });
+
         if (retention > 0) {
           await supabase.from("cap_retentions").insert([{
             league: trade.league,
@@ -153,6 +168,38 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .select()
         .single();
       if (error) return res.status(500).json({ error: error.message });
+
+      // Post trade approval to Discord transactions channel
+      const leagueDisplay = trade.league === "pba" ? "MBA" : trade.league === "pbgl" ? "MBGL" : trade.league === "pcaa" ? "MCAA" : trade.league.toUpperCase();
+      const propAbb: string = (trade.proposing_team as any)?.abbreviation ?? "?";
+      const recvAbb: string = (trade.receiving_team as any)?.abbreviation ?? "?";
+
+      const fmtAsset = (a: any): string => {
+        if (a.pick_id && a.draft_picks) {
+          const orig: string = a.draft_picks.original_team?.abbreviation ?? "?";
+          return `S${a.draft_picks.season} R${a.draft_picks.round} (${orig})`;
+        }
+        if (a.contract_id && a.contracts) {
+          const name: string = a.contracts.players?.mc_username ?? "?";
+          const amt: number = a.contracts.amount;
+          const ret = Number(a.retention_amount ?? 0);
+          return `${name} ($${amt.toLocaleString()})${ret > 0 ? ` ret. $${ret.toLocaleString()}` : ""}`;
+        }
+        const ret = Number(a.retention_amount ?? 0);
+        return ret > 0 ? `$${ret.toLocaleString()} cash retention` : "?";
+      };
+
+      const propAssets = (trade.trade_assets ?? []).filter((a: any) => a.from_team_id === trade.proposing_team_id);
+      const recvAssets = (trade.trade_assets ?? []).filter((a: any) => a.from_team_id === trade.receiving_team_id);
+      const propLine = propAssets.length ? `**${propAbb} sends:** ${propAssets.map(fmtAsset).join(", ")}` : `**${propAbb} sends:** nothing`;
+      const recvLine = recvAssets.length ? `**${recvAbb} sends:** ${recvAssets.map(fmtAsset).join(", ")}` : `**${recvAbb} sends:** nothing`;
+      const noteStr = admin_note ? `\n> ${admin_note}` : "";
+
+      await sendWebhook(
+        getWebhookUrl(trade.league, "transaction"),
+        `✅ **[${leagueDisplay}] Trade Approved**\n${propLine}\n${recvLine}${noteStr}`
+      );
+
       return res.status(200).json(data);
     }
 
