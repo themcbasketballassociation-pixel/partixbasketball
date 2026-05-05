@@ -181,6 +181,14 @@ function BidTab({ auctions, teamId, contracts, onRefresh }: {
       .filter((b) => b.is_valid)
       .reduce((best: Bid | null, b) => (!best || b.effective_value > best.effective_value ? b : best), null);
 
+  // Pending cap hold: only auctions where this team is currently the top bidder
+  const pendingCapHold = activeAuctions.reduce((sum, auction) => {
+    const top = topBid(auction);
+    const myTop = myBids(auction).sort((a, b) => b.effective_value - a.effective_value)[0];
+    if (!myTop || !top) return sum;
+    return myTop.effective_value >= top.effective_value ? sum + myTop.amount : sum;
+  }, 0);
+
   const placeBid = async (auctionId: string) => {
     const rawAmt = parseInt(bidAmounts[auctionId] ?? "");
     if (!rawAmt) return setMsgs((m) => ({ ...m, [auctionId]: { type: "err", text: "Enter an amount" } }));
@@ -215,7 +223,8 @@ function BidTab({ auctions, teamId, contracts, onRefresh }: {
         style={{ ...input }}
       />
       <div style={{ ...innerCard, display: "flex", gap: 20, flexWrap: "wrap" as const }}>
-        <div><span style={{ color: "#555", fontSize: 12 }}>Cap remaining: </span><span style={{ color: "#22d3ee", fontWeight: 700 }}>{fmt(TOTAL_CAP - existingTotal)}</span></div>
+        <div><span style={{ color: "#555", fontSize: 12 }}>Cap remaining: </span><span style={{ color: "#22d3ee", fontWeight: 700 }}>{fmt(TOTAL_CAP - existingTotal - pendingCapHold)}</span></div>
+        {pendingCapHold > 0 && <div><span style={{ color: "#555", fontSize: 12 }}>Bid holds: </span><span style={{ color: "#f59e0b", fontWeight: 600 }}>{fmt(pendingCapHold)}</span></div>}
         <div><span style={{ color: "#555", fontSize: 12 }}>Highest contract: </span><span style={{ color: "#fff", fontWeight: 600 }}>{fmt(maxExisting)}</span></div>
         <div><span style={{ color: "#555", fontSize: 12 }}>Viability max new: </span><span style={{ color: "#f97316", fontWeight: 600 }}>{fmt(MAX_VIABILITY - maxExisting)}</span></div>
       </div>
