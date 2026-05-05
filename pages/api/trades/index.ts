@@ -103,12 +103,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (retention <= 0 || retention > MAX_RETENTION)
           return res.status(400).json({ error: `Retention amount must be between 1 and ${MAX_RETENTION.toLocaleString()}` });
 
-        // Court cap eligibility: team must have 21k–23k court cap (with retention)
+        // Court cap eligibility: contracts + retention must exceed 22k (over court cap) but stay ≤ 23k
         const { data: teamContracts } = await supabase
           .from("contracts").select("amount").eq("team_id", asset.from_team_id).eq("status", "active");
         const courtCap = (teamContracts ?? []).reduce((s: number, c: any) => s + (c.amount as number), 0);
-        if (courtCap < 21000)
-          return res.status(400).json({ error: `Team needs at least 21,000 in court cap to offer retention (current: ${courtCap.toLocaleString()})` });
+        if (courtCap + retention <= 22000)
+          return res.status(400).json({ error: `Court cap + retention must exceed 22,000 to offer retention (${courtCap.toLocaleString()} + ${retention.toLocaleString()} = ${(courtCap + retention).toLocaleString()})` });
         if (courtCap + retention > 23000)
           return res.status(400).json({ error: `Court cap + retention cannot exceed 23,000 (${courtCap.toLocaleString()} + ${retention.toLocaleString()} = ${(courtCap + retention).toLocaleString()})` });
 

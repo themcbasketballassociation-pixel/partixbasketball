@@ -406,7 +406,7 @@ function TradesView({ teamId, leagueSlug, contracts, allTeams, myPicks, onRefres
         </div>
         <input style={{ ...st.input, marginBottom: 10 }} placeholder="Notes (optional)" value={notes} onChange={e => setNotes(e.target.value)} />
         <div style={{ background: "#0a0d12", border: "1px solid #1a2030", borderRadius: 8, padding: "7px 12px", marginBottom: 10, color: "#444", fontSize: 12 }}>
-          Retention: max 1,000 per team total · court cap must be 21k–23k to offer · select "Player" mode and leave player blank to offer standalone retention cash
+          Retention: max 1,000 per team total · contracts + retention must exceed 22k (court cap) and stay ≤ 23k · leave player blank to offer retention cash
         </div>
         {err && <div style={{ color: "#fca5a5", background: "#450a0a", border: "1px solid #7f1d1d", borderRadius: 8, padding: "7px 12px", marginBottom: 8, fontSize: 13 }}>{err}</div>}
         <button onClick={submit} disabled={busy} style={{ ...ownerBtn("primary"), opacity: busy ? 0.5 : 1 }}>{busy ? "Submitting…" : "Propose Trade"}</button>

@@ -487,7 +487,7 @@ function TradeTab({ teamId, league, leagueSlug, contracts, allTeams, seasonTeamI
           <input style={input} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Any notes for the other team / admin…" />
         </div>
         <div style={{ background: "#0d1117", border: "1px solid #1a2030", borderRadius: 8, padding: "8px 12px", marginBottom: 12, fontSize: 12, color: "#555" }}>
-          Retention: max 1,000 per team total · court cap must be 21k–23k to offer · leave player blank to offer standalone retention cash
+          Retention: max 1,000 per team total · contracts + retention must exceed 22k and stay ≤ 23k · leave player blank to offer retention cash
         </div>
         {err && <div style={{ color: "#fca5a5", background: "#450a0a", border: "1px solid #7f1d1d", borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 13 }}>{err}</div>}
         <button onClick={submitTrade} disabled={submitting} style={{ ...btn("primary"), opacity: submitting ? 0.5 : 1 }}>
