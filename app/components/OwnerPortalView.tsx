@@ -247,6 +247,13 @@ function TradeAssetDisplay({ asset }: { asset: TradeAsset }) {
       </div>
     );
   }
+  if (!asset.contract_id && !asset.pick_id && (asset.retention_amount ?? 0) > 0) {
+    return (
+      <div style={{ color: "#a78bfa", fontSize: 12 }}>
+        💰 Retention Cash: {fmt(asset.retention_amount)}
+      </div>
+    );
+  }
   if (asset.contract_id && asset.contracts) {
     return (
       <div style={{ color: "#888", fontSize: 12 }}>
@@ -296,10 +303,13 @@ function TradesView({ teamId, leagueSlug, contracts, allTeams, myPicks, onRefres
     setErr(""); setBusy(true);
 
     const buildAssets = (rows: AssetRow[], fromTeamId: string, ctrts: Contract[], picks: DraftPick[]) =>
-      rows.filter(a => a.type === "contract" ? a.cid : a.pickId).map(a => {
+      rows.filter(a => {
+        if (a.type === "pick") return !!a.pickId;
+        return !!a.cid || (Math.min(parseInt(a.ret) || 0, 1000) > 0);
+      }).map(a => {
         if (a.type === "pick") return { from_team_id: fromTeamId, pick_id: a.pickId };
         const ret = Math.min(parseInt(a.ret) || 0, 1000);
-        return { from_team_id: fromTeamId, contract_id: a.cid, retention_amount: ret };
+        return { from_team_id: fromTeamId, contract_id: a.cid || null, retention_amount: ret };
       });
 
     const assets = [
@@ -358,7 +368,7 @@ function TradesView({ teamId, leagueSlug, contracts, allTeams, myPicks, onRefres
                 <option value="">— Player —</option>
                 {ctrts.map(c => <option key={c.id} value={c.id}>{c.players.mc_username} ({fmt(c.amount)})</option>)}
               </select>
-              {a.cid && (
+              {a.type === "contract" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                   <input type="number" placeholder="Retain $" min={0} max={1000} step={250} value={a.ret}
                     onChange={e => set(p => p.map((x, j) => j === i ? { ...x, ret: e.target.value } : x))}
@@ -396,7 +406,7 @@ function TradesView({ teamId, leagueSlug, contracts, allTeams, myPicks, onRefres
         </div>
         <input style={{ ...st.input, marginBottom: 10 }} placeholder="Notes (optional)" value={notes} onChange={e => setNotes(e.target.value)} />
         <div style={{ background: "#0a0d12", border: "1px solid #1a2030", borderRadius: 8, padding: "7px 12px", marginBottom: 10, color: "#444", fontSize: 12 }}>
-          Retention: max 1,000 per team total · flat amount, no salary % restriction
+          Retention: max 1,000 per team total · court cap must be 21k–23k to offer · select "Player" mode and leave player blank to offer standalone retention cash
         </div>
         {err && <div style={{ color: "#fca5a5", background: "#450a0a", border: "1px solid #7f1d1d", borderRadius: 8, padding: "7px 12px", marginBottom: 8, fontSize: 13 }}>{err}</div>}
         <button onClick={submit} disabled={busy} style={{ ...ownerBtn("primary"), opacity: busy ? 0.5 : 1 }}>{busy ? "Submitting…" : "Propose Trade"}</button>

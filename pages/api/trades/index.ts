@@ -62,8 +62,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     let receiverRetentionTotal = 0;
 
     for (const asset of assets) {
-      if (!asset.from_team_id || (!asset.contract_id && !asset.pick_id))
-        return res.status(400).json({ error: "Each asset requires from_team_id and either contract_id or pick_id" });
+      const retention = Number(asset.retention_amount ?? 0);
+      if (!asset.from_team_id || (!asset.contract_id && !asset.pick_id && retention <= 0))
+        return res.status(400).json({ error: "Each asset requires from_team_id and either contract_id, pick_id, or retention_amount" });
 
       // Draft pick asset — validate ownership + 2-season rule, no retention allowed
       if (asset.pick_id) {
@@ -97,9 +98,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         continue; // no retention validation for picks
       }
 
-      // Contract asset
-      const retention = Number(asset.retention_amount ?? 0);
+      // Retention-only asset (no contract, no pick — standalone cap cash)
+      if (!asset.contract_id) {
+        if (retention <= 0 || retention > MAX_RETENTION)
+          return res.status(400).json({ error: `Retention amount must be between 1 and ${MAX_RETENTION.toLocaleString()}` });
 
+        // Court cap eligibility: team must have 21k–23k court cap (with retention)
+        const { data: teamContracts } = await supabase
+          .from("contracts").select("amount").eq("team_id", asset.from_team_id).eq("status", "active");
+        const courtCap = (teamContracts ?? []).reduce((s: number, c: any) => s + (c.amount as number), 0);
+        if (courtCap < 21000)
+          return res.status(400).json({ error: `Team needs at least 21,000 in court cap to offer retention (current: ${courtCap.toLocaleString()})` });
+        if (courtCap + retention > 23000)
+          return res.status(400).json({ error: `Court cap + retention cannot exceed 23,000 (${courtCap.toLocaleString()} + ${retention.toLocaleString()} = ${(courtCap + retention).toLocaleString()})` });
+
+        const { data: activeRetentions } = await supabase
+          .from("cap_retentions").select("retention_amount").eq("retaining_team_id", asset.from_team_id).eq("status", "active");
+        const existingRetTotal = (activeRetentions ?? []).reduce((s: number, r: any) => s + r.retention_amount, 0);
+        if (existingRetTotal + retention > MAX_RETENTION)
+          return res.status(400).json({ error: `Team's total active retention cannot exceed ${MAX_RETENTION.toLocaleString()} (currently has ${existingRetTotal.toLocaleString()})` });
+
+        if (asset.from_team_id === proposing_team_id) proposerRetentionTotal += retention;
+        else receiverRetentionTotal += retention;
+        continue;
+      }
+
+      // Contract asset
       if (retention > 0) {
         if (retention > MAX_RETENTION)
           return res.status(400).json({ error: `Retention cannot exceed ${MAX_RETENTION.toLocaleString()}` });

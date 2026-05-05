@@ -105,6 +105,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           continue;
         }
 
+        // Retention-only asset (no contract, no pick)
+        if (!asset.contract_id) {
+          const retention = Number(asset.retention_amount ?? 0);
+          if (retention > 0) {
+            await supabase.from("cap_retentions").insert([{
+              league: trade.league,
+              retaining_team_id: asset.from_team_id,
+              mc_uuid: null,
+              original_contract_id: null,
+              retention_amount: retention,
+              status: "active",
+            }]);
+          }
+          continue;
+        }
+
         // Contract transfer
         const contract = asset.contracts;
         if (!contract || !asset.contract_id) continue;
