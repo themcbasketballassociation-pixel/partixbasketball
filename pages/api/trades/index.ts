@@ -163,13 +163,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .single();
     if (tradeErr) return res.status(500).json({ error: tradeErr.message });
 
-    const assetRows = assets.map((a: any) => ({
-      trade_id: trade.id,
-      from_team_id: a.from_team_id,
-      contract_id: a.contract_id ?? null,
-      pick_id: a.pick_id ?? null,
-      retention_amount: Number(a.retention_amount ?? 0),
-    }));
+    const assetRows = assets.map((a: any) => {
+      const row: Record<string, any> = {
+        trade_id: trade.id,
+        from_team_id: a.from_team_id,
+        retention_amount: Number(a.retention_amount ?? 0),
+      };
+      if (a.contract_id) row.contract_id = a.contract_id;
+      if (a.pick_id) row.pick_id = a.pick_id;
+      return row;
+    });
     const { error: assetErr } = await supabase.from("trade_assets").insert(assetRows);
     if (assetErr) return res.status(500).json({ error: assetErr.message });
 
