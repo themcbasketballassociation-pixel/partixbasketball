@@ -6539,7 +6539,7 @@ function BackupTab() {
 }
 
 // ─── SigningsAdminTab ──────────────────────────────────────────────────────────
-function SigningsAdminTab({ league }: { league: string }) {
+function SigningsAdminTab({ league, season }: { league: string; season: string }) {
   type SigningRow = { id: string; mc_uuid: string; amount: number; is_two_season: boolean; phase: number; season: string | null; status: string; players: { mc_uuid: string; mc_username: string }; teams: { id: string; name: string; abbreviation: string } };
   type OfferRow = { id: string; mc_uuid: string; team_id: string; league: string; amount: number; is_two_season: boolean; season: string | null; status: string; offered_at: string; players: { mc_uuid: string; mc_username: string }; teams: { id: string; name: string; abbreviation: string } };
   type PlayerOpt = { mc_uuid: string; mc_username: string };
@@ -6577,7 +6577,7 @@ function SigningsAdminTab({ league }: { league: string }) {
       fetch(`/api/contracts?league=${league}&status=active`).then(r => r.json()),
       fetch(`/api/contract-offers?status=pending`).then(r => r.json()),
       fetch(`/api/players`).then(r => r.json()),
-      fetch(`/api/teams?league=${league}`).then(r => r.json()),
+      fetch(`/api/teams?league=${league}&season=${encodeURIComponent(season)}`).then(r => r.json()),
     ]);
     setSignings(Array.isArray(pend) ? pend : []);
     setActiveContracts(Array.isArray(active) ? active : []);
@@ -6585,7 +6585,7 @@ function SigningsAdminTab({ league }: { league: string }) {
     setAllPlayers(Array.isArray(players) ? players : []);
     setAllTeams(Array.isArray(teams) ? teams : []);
     setLoading(false);
-  }, [league]);
+  }, [league, season]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -7607,7 +7607,7 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
         {activeTab === "Draft Picks" && <DraftPicksTab league={league} />}
         {activeTab === "Auction" && <AuctionAdminTab league={league} />}
         {activeTab === "Trades" && <TradesAdminTab league={league} />}
-        {activeTab === "Signings" && <SigningsAdminTab league={league} />}
+        {activeTab === "Signings" && <SigningsAdminTab league={league} season={season} />}
         {activeTab === "Cuts" && <CutsAdminTab league={league} />}
         {activeTab === "Portal" && <PortalAdminTab league={league} />}
         {activeTab === "Board" && <BoardMembersTab league={league} />}
