@@ -6730,17 +6730,20 @@ function SigningsAdminTab({ league }: { league: string }) {
                             : `Window opens in ${Math.ceil((HOURS_24_MS - elapsed) / 3600000)}h`}
                         </div>
                       </div>
-                      <div className="flex flex-col items-end gap-1">
-                        <button
-                          className={`${btnPrimary} text-xs`}
-                          onClick={() => unlockPlayer(mc_uuid, player.mc_username, offers[0].league)}
-                          disabled={!!msg?.startsWith("Unlock")}
-                          title="Open acceptance window immediately so the player can accept their offer"
-                        >
-                          🔓 Unlock Now
-                        </button>
+                      <div className="flex flex-col items-end gap-2">
+                        {!msg?.startsWith("✓") && (
+                          <button
+                            className="px-4 py-2 rounded-xl text-sm font-bold bg-green-700 hover:bg-green-600 text-white transition disabled:opacity-50"
+                            onClick={() => unlockPlayer(mc_uuid, player.mc_username, offers[0].league)}
+                            disabled={!!msg?.startsWith("Unlock") || canAccept}
+                          >
+                            {canAccept ? "✅ Already Open" : "✅ Let Them Accept Now"}
+                          </button>
+                        )}
                         {msg && (
-                          <span className={`text-xs ${msg.startsWith("✓") ? "text-green-400" : "text-red-400"}`}>{msg}</span>
+                          <span className={`text-sm font-semibold ${msg.startsWith("✓") ? "text-green-400" : "text-red-400"}`}>
+                            {msg.startsWith("✓") ? `✅ ${player.mc_username} can now accept — tell them to go to their profile` : msg}
+                          </span>
                         )}
                       </div>
                     </div>
