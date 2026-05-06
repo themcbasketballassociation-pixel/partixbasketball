@@ -36,6 +36,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       updates.closes_at = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
     } else if (action === "cancel") {
       updates.status = "cancelled";
+      // Invalidate all bids so teams regain their cap holds
+      await supabase.from("auction_bids").update({ is_valid: false }).eq("auction_id", id).eq("is_valid", true);
     } else {
       if (status !== undefined) updates.status = status;
       if (winning_team_id !== undefined) updates.winning_team_id = winning_team_id;

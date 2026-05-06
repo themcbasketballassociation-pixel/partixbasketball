@@ -22,5 +22,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (error) return res.status(500).json({ error: error.message });
 
+  // Invalidate all bids on cancelled auctions so teams regain their cap holds
+  if (data && data.length > 0) {
+    const ids = data.map((a: any) => a.id);
+    await supabase.from("auction_bids").update({ is_valid: false }).in("auction_id", ids).eq("is_valid", true);
+  }
+
   return res.status(200).json({ cancelled: data?.length ?? 0 });
 }
