@@ -6565,7 +6565,7 @@ function SigningsAdminTab({ league }: { league: string }) {
     const [pend, active, offers] = await Promise.all([
       fetch(`/api/contracts?league=${league}&status=pending_approval`).then(r => r.json()),
       fetch(`/api/contracts?league=${league}&status=active`).then(r => r.json()),
-      fetch(`/api/contract-offers?league=${league}&status=pending`).then(r => r.json()),
+      fetch(`/api/contract-offers?status=pending`).then(r => r.json()),
     ]);
     setSignings(Array.isArray(pend) ? pend : []);
     setActiveContracts(Array.isArray(active) ? active : []);
@@ -6678,12 +6678,12 @@ function SigningsAdminTab({ league }: { league: string }) {
           }
           const players = Array.from(byPlayer.entries());
 
-          const unlockPlayer = async (mc_uuid: string, username: string) => {
+          const unlockPlayer = async (mc_uuid: string, username: string, offerLeague: string) => {
             setUnlockMsg(m => ({ ...m, [mc_uuid]: "Unlocking…" }));
             const r = await fetch("/api/contract-offers/unlock", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ mc_uuid, league }),
+              body: JSON.stringify({ mc_uuid, league: offerLeague }),
             });
             const d = await r.json().catch(() => ({})) as { unlocked?: number; error?: string };
             if (!r.ok) {
@@ -6722,6 +6722,7 @@ function SigningsAdminTab({ league }: { league: string }) {
                         <div className="text-slate-400 text-xs mt-0.5">
                           {offers.length} offer{offers.length !== 1 ? "s" : ""} from:{" "}
                           {offers.map(o => o.teams?.abbreviation ?? "?").join(", ")}
+                          {" · "}<span className="text-slate-500">{({ pba: "MBA", pcaa: "MCAA", pbgl: "MBGL" } as Record<string,string>)[offers[0].league] ?? offers[0].league?.toUpperCase()}</span>
                         </div>
                         <div className={`text-xs mt-0.5 ${canAccept ? "text-green-400" : "text-yellow-400"}`}>
                           {canAccept
@@ -6732,7 +6733,7 @@ function SigningsAdminTab({ league }: { league: string }) {
                       <div className="flex flex-col items-end gap-1">
                         <button
                           className={`${btnPrimary} text-xs`}
-                          onClick={() => unlockPlayer(mc_uuid, player.mc_username)}
+                          onClick={() => unlockPlayer(mc_uuid, player.mc_username, offers[0].league)}
                           disabled={!!msg?.startsWith("Unlock")}
                           title="Open acceptance window immediately so the player can accept their offer"
                         >
