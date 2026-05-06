@@ -6574,7 +6574,7 @@ function SigningsAdminTab({ league, season }: { league: string; season: string }
     setLoading(true);
     const [pend, active, offers, players, teams] = await Promise.all([
       fetch(`/api/contracts?league=${league}&status=pending_approval`).then(r => r.json()),
-      fetch(`/api/contracts?league=${league}&status=active`).then(r => r.json()),
+      fetch(`/api/contracts?league=${league}&status=active&season=${encodeURIComponent(season)}`).then(r => r.json()),
       fetch(`/api/contract-offers?status=pending`).then(r => r.json()),
       fetch(`/api/players`).then(r => r.json()),
       fetch(`/api/teams?league=${league}&season=${encodeURIComponent(season)}`).then(r => r.json()),
@@ -6632,6 +6632,16 @@ function SigningsAdminTab({ league, season }: { league: string; season: string }
     const d = await r.json();
     if (!r.ok) { setEditMsg(`Error: ${d.error ?? "failed"}`); return; }
     setEditingId(null); setEditMsg(""); load();
+  };
+
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const deleteContract = async (id: string) => {
+    if (!confirm("Delete this contract? This cannot be undone.")) return;
+    setDeletingId(id);
+    const r = await fetch(`/api/contracts/${id}`, { method: "DELETE" });
+    setDeletingId(null);
+    if (!r.ok) { const d = await r.json(); setEditMsg(`Error: ${d.error ?? "failed"}`); return; }
+    load();
   };
 
   const decide = async (id: string, action: "approve" | "reject") => {
@@ -6877,6 +6887,9 @@ function SigningsAdminTab({ league, season }: { league: string; season: string }
                     </div>
                     {s.amount > 0 && <div className="text-cyan-400 font-bold font-mono">{s.amount.toLocaleString()}</div>}
                     <button onClick={() => startEdit(s)} className={`${btnSecondary} text-xs`}>Edit</button>
+                    <button onClick={() => deleteContract(s.id)} disabled={deletingId === s.id} className="rounded-lg px-3 py-2 text-xs font-semibold bg-red-900 hover:bg-red-800 border border-red-700 text-red-300 transition disabled:opacity-50">
+                      {deletingId === s.id ? "…" : "Remove"}
+                    </button>
                   </div>
                 )}
               </div>
