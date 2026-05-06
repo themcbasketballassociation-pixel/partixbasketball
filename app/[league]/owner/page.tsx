@@ -50,7 +50,7 @@ function CapBar({ contracts, retentions }: { contracts: Contract[]; retentions: 
   const TOTAL_CAP = 25000; // per team
   const COURT_CAP = 22000; // per team, active roster
 
-  const dedupedContracts = contracts.filter((c, i, arr) => arr.findIndex((x) => x.players?.mc_uuid === c.players?.mc_uuid) === i);
+  const dedupedContracts = contracts.filter((c, i, arr) => arr.findIndex((x) => x.mc_uuid === c.mc_uuid) === i);
   const used = dedupedContracts.reduce((s, c) => s + c.amount, 0);
   const retentionTotal = retentions.filter((r) => r.status === "active").reduce((s, r) => s + r.retention_amount, 0);
   const totalHit = used + retentionTotal;
