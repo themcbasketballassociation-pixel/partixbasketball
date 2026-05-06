@@ -872,7 +872,7 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
         <div>
           <div style={{ color: "#555", fontSize: 12, fontWeight: 600, marginBottom: 8, textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>Active Roster</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {contracts.map((c) => (
+            {(() => { const seen = new Set<string>(); return contracts.filter((c) => { if (seen.has(c.players.mc_uuid)) return false; seen.add(c.players.mc_uuid); return true; }); })().map((c) => (
               <div key={c.id} style={{ ...innerCard, display: "flex", alignItems: "center", gap: 12 }}>
                 <img src={`https://minotar.net/avatar/${c.players.mc_username}/32`} style={{ width: 32, height: 32, borderRadius: 6, border: "1px solid #222" }} onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/32"; }} alt="" />
                 <span style={{ color: "#aaa", flex: 1 }}>{c.players.mc_username}</span>
