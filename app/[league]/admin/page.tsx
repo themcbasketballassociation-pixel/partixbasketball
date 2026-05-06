@@ -6541,13 +6541,16 @@ function BackupTab() {
 // ─── SigningsAdminTab ──────────────────────────────────────────────────────────
 function SigningsAdminTab({ league }: { league: string }) {
   type SigningRow = { id: string; mc_uuid: string; amount: number; is_two_season: boolean; phase: number; season: string | null; status: string; players: { mc_uuid: string; mc_username: string }; teams: { id: string; name: string; abbreviation: string } };
+  type OfferRow = { id: string; mc_uuid: string; team_id: string; amount: number; is_two_season: boolean; season: string | null; status: string; offered_at: string; players: { mc_uuid: string; mc_username: string }; teams: { id: string; name: string; abbreviation: string } };
 
-  const [innerTab, setInnerTab] = useState<"pending" | "active">("pending");
+  const [innerTab, setInnerTab] = useState<"offers" | "pending" | "active">("offers");
   const [signings, setSignings] = useState<SigningRow[]>([]);
   const [activeContracts, setActiveContracts] = useState<SigningRow[]>([]);
+  const [pendingOffers, setPendingOffers] = useState<OfferRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionMsg, setActionMsg] = useState<Record<string, string>>({});
   const [syncMsg, setSyncMsg] = useState("");
+  const [unlockMsg, setUnlockMsg] = useState<Record<string, string>>({});
   // Edit contract state
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editAmount, setEditAmount] = useState("");
@@ -6555,14 +6558,18 @@ function SigningsAdminTab({ league }: { league: string }) {
   const [editIs2s, setEditIs2s] = useState(false);
   const [editMsg, setEditMsg] = useState("");
 
+  const HOURS_24_MS = 24 * 60 * 60 * 1000;
+
   const load = useCallback(async () => {
     setLoading(true);
-    const [pend, active] = await Promise.all([
+    const [pend, active, offers] = await Promise.all([
       fetch(`/api/contracts?league=${league}&status=pending_approval`).then(r => r.json()),
       fetch(`/api/contracts?league=${league}&status=active`).then(r => r.json()),
+      fetch(`/api/contract-offers?league=${league}&status=pending`).then(r => r.json()),
     ]);
     setSignings(Array.isArray(pend) ? pend : []);
     setActiveContracts(Array.isArray(active) ? active : []);
+    setPendingOffers(Array.isArray(offers) ? offers : []);
     setLoading(false);
   }, [league]);
 
@@ -6633,9 +6640,11 @@ function SigningsAdminTab({ league }: { league: string }) {
     <div>
       {/* Inner tabs */}
       <div className="flex border-b border-slate-800 mb-4">
-        {([["pending", "Pending Approval"], ["active", "Active Contracts"]] as const).map(([t, label]) => (
+        {([["offers", "Pending Offers"], ["pending", "Pending Approval"], ["active", "Active Contracts"]] as const).map(([t, label]) => (
           <button key={t} onClick={() => setInnerTab(t)} className={`px-5 py-2 text-sm font-semibold transition ${innerTab === t ? "border-b-2 border-blue-500 text-white" : "text-slate-500 hover:text-slate-300"}`}>
-            {label}{t === "pending" && signings.length > 0 ? ` (${signings.length})` : ""}
+            {label}
+            {t === "offers" && pendingOffers.length > 0 ? ` (${pendingOffers.length})` : ""}
+            {t === "pending" && signings.length > 0 ? ` (${signings.length})` : ""}
           </button>
         ))}
         <div className="ml-auto flex gap-2 items-center pb-1">
@@ -6659,6 +6668,87 @@ function SigningsAdminTab({ league }: { league: string }) {
 
       {loading ? (
         <div className="text-slate-600 text-sm text-center py-8">Loading…</div>
+      ) : innerTab === "offers" ? (
+        (() => {
+          // Group pending offers by player (mc_uuid)
+          const byPlayer = new Map<string, OfferRow[]>();
+          for (const o of pendingOffers) {
+            if (!byPlayer.has(o.mc_uuid)) byPlayer.set(o.mc_uuid, []);
+            byPlayer.get(o.mc_uuid)!.push(o);
+          }
+          const players = Array.from(byPlayer.entries());
+
+          const unlockPlayer = async (mc_uuid: string, username: string) => {
+            setUnlockMsg(m => ({ ...m, [mc_uuid]: "Unlocking…" }));
+            const r = await fetch("/api/contract-offers/unlock", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ mc_uuid, league }),
+            });
+            const d = await r.json().catch(() => ({})) as { unlocked?: number; error?: string };
+            if (!r.ok) {
+              setUnlockMsg(m => ({ ...m, [mc_uuid]: `Error: ${d.error ?? "failed"}` }));
+            } else {
+              setUnlockMsg(m => ({ ...m, [mc_uuid]: `✓ ${username}'s offers are now open` }));
+              load();
+            }
+          };
+
+          if (players.length === 0)
+            return <div className="text-slate-600 text-sm text-center py-8">No pending contract offers.</div>;
+
+          return (
+            <div className="flex flex-col gap-3">
+              {players.map(([mc_uuid, offers]) => {
+                const player = offers[0].players;
+                const mostRecentAt = offers.reduce((best, o) =>
+                  new Date(o.offered_at) > new Date(best.offered_at) ? o : best
+                ).offered_at;
+                const elapsed = Date.now() - new Date(mostRecentAt).getTime();
+                const canAccept = elapsed >= HOURS_24_MS;
+                const msg = unlockMsg[mc_uuid];
+
+                return (
+                  <div key={mc_uuid} className={card}>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <img
+                        src={`https://minotar.net/avatar/${player.mc_username}/40`}
+                        className="w-10 h-10 rounded-lg border border-slate-700"
+                        onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/40"; }}
+                        alt=""
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-white font-bold">{player.mc_username}</div>
+                        <div className="text-slate-400 text-xs mt-0.5">
+                          {offers.length} offer{offers.length !== 1 ? "s" : ""} from:{" "}
+                          {offers.map(o => o.teams?.abbreviation ?? "?").join(", ")}
+                        </div>
+                        <div className={`text-xs mt-0.5 ${canAccept ? "text-green-400" : "text-yellow-400"}`}>
+                          {canAccept
+                            ? "✓ Window open — can accept now"
+                            : `Window opens in ${Math.ceil((HOURS_24_MS - elapsed) / 3600000)}h`}
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <button
+                          className={`${btnPrimary} text-xs`}
+                          onClick={() => unlockPlayer(mc_uuid, player.mc_username)}
+                          disabled={!!msg?.startsWith("Unlock")}
+                          title="Open acceptance window immediately so the player can accept their offer"
+                        >
+                          🔓 Unlock Now
+                        </button>
+                        {msg && (
+                          <span className={`text-xs ${msg.startsWith("✓") ? "text-green-400" : "text-red-400"}`}>{msg}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()
       ) : innerTab === "pending" ? (
         signings.length === 0 ? (
           <div className="text-slate-600 text-sm text-center py-8">No pending signing requests.</div>
