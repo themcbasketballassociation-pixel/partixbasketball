@@ -6822,7 +6822,6 @@ function SigningsAdminTab({ league }: { league: string }) {
               );
             })}
           </div>
-        )
       ) : innerTab === "pending" ? (
         signings.length === 0 ? (
           <div className="text-slate-600 text-sm text-center py-8">No pending signing requests.</div>
