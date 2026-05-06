@@ -6574,6 +6574,7 @@ function SigningsAdminTab({ league, season }: { league: string; season: string }
   const [ds2s, setDs2s] = useState(false);
   const [dsMsg, setDsMsg] = useState("");
   const [dsSigning, setDsSigning] = useState(false);
+  const [dsSendWebhook, setDsSendWebhook] = useState(true);
   const [playerSearch, setPlayerSearch] = useState("");
   // Edit contract state
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -6733,14 +6734,20 @@ function SigningsAdminTab({ league, season }: { league: string; season: string }
           {league !== "mcaa" && league !== "mbgl" && (
             <input type="number" className="w-full rounded-lg bg-slate-800 border border-slate-700 text-white px-3 py-2 text-sm" placeholder="Salary amount" value={dsAmount} onChange={e => setDsAmount(e.target.value)} />
           )}
-          <label className="flex items-center gap-2 text-slate-400 text-sm cursor-pointer">
-            <input type="checkbox" checked={ds2s} onChange={e => setDs2s(e.target.checked)} className="accent-blue-500" />
-            2-season contract
-          </label>
+          <div className="flex items-center gap-4 flex-wrap">
+            <label className="flex items-center gap-2 text-slate-400 text-sm cursor-pointer">
+              <input type="checkbox" checked={ds2s} onChange={e => setDs2s(e.target.checked)} className="accent-blue-500" />
+              2-season contract
+            </label>
+            <label className="flex items-center gap-2 text-slate-400 text-sm cursor-pointer">
+              <input type="checkbox" checked={dsSendWebhook} onChange={e => setDsSendWebhook(e.target.checked)} className="accent-blue-500" />
+              Post to #transactions
+            </label>
+          </div>
           {dsMsg && <div className={`text-sm rounded-lg px-3 py-2 border ${dsMsg.startsWith("✓") ? "text-green-400 bg-green-950 border-green-800" : "text-red-400 bg-red-950 border-red-800"}`}>{dsMsg}</div>}
           <button className={`${btnPrimary} w-full`} disabled={dsSigning || !dsPlayer || !dsTeam} onClick={async () => {
             setDsSigning(true); setDsMsg("");
-            const r = await fetch("/api/contracts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ league, mc_uuid: dsPlayer, team_id: dsTeam, amount: parseInt(dsAmount) || 0, is_two_season: ds2s }) });
+            const r = await fetch("/api/contracts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ league, mc_uuid: dsPlayer, team_id: dsTeam, amount: parseInt(dsAmount) || 0, is_two_season: ds2s, skip_webhook: !dsSendWebhook }) });
             const d = await r.json().catch(() => ({} as any));
             setDsSigning(false);
             if (!r.ok) { setDsMsg(`Error: ${d.error ?? "failed"}`); }

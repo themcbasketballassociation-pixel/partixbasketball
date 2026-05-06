@@ -26,7 +26,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "POST") {
     const admin = await requireAdmin(req, res);
     if (!admin) return;
-    const { league: leagueRaw, mc_uuid, team_id, amount, is_two_season, season } = req.body;
+    const { league: leagueRaw, mc_uuid, team_id, amount, is_two_season, season, skip_webhook } = req.body;
     const league = resolveLeague(leagueRaw);
     if (!league || !mc_uuid || !team_id)
       return res.status(400).json({ error: "league, mc_uuid, team_id required" });
@@ -87,7 +87,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       footer: { text: `${leagueDisplay} · ${teamAbbr}`, icon_url: `${BASE_URL}/logos/${league === "pba" ? "mba" : league === "pcaa" ? "mcaa" : "MBGL"}.${league === "pbgl" ? "png" : "webp"}` },
       timestamp: new Date().toISOString(),
     };
-    await sendWebhookEmbed(getWebhookUrl(league, "transaction"), embed);
+    if (!skip_webhook) await sendWebhookEmbed(getWebhookUrl(league, "transaction"), embed);
 
     return res.status(200).json(data);
   }
