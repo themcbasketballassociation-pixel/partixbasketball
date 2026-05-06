@@ -17,6 +17,23 @@ const BID_INCREMENT = 250;
 const VIABILITY_MAX = COURT_CAP - 2 * MIN_PLAYER_VALUE; // 20,000
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Admin-only: invalidate all bids from a team on an auction
+  if (req.method === "DELETE") {
+    const discordId = await getSessionDiscordId(req, res);
+    if (!discordId) return;
+    if (!isAdminId(discordId)) return res.status(403).json({ error: "Admin only" });
+    const { auction_id, team_id } = req.body;
+    if (!auction_id || !team_id) return res.status(400).json({ error: "auction_id and team_id required" });
+    const { error } = await supabase
+      .from("auction_bids")
+      .update({ is_valid: false })
+      .eq("auction_id", auction_id)
+      .eq("team_id", team_id)
+      .eq("is_valid", true);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json({ success: true });
+  }
+
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   const discordId = await getSessionDiscordId(req, res);

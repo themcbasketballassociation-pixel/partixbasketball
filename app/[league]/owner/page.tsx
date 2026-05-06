@@ -159,13 +159,14 @@ function RosterTab({ contracts, retentions, leagueSlug }: { contracts: Contract[
 }
 
 // ── BidTab ─────────────────────────────────────────────────────────────────────
-function BidTab({ auctions, teamId, contracts, retentions, onRefresh }: {
-  auctions: Auction[]; teamId: string; contracts: Contract[]; retentions: CapRetention[]; onRefresh: () => void;
+function BidTab({ auctions, teamId, contracts, retentions, onRefresh, isAdmin = false }: {
+  auctions: Auction[]; teamId: string; contracts: Contract[]; retentions: CapRetention[]; onRefresh: () => void; isAdmin?: boolean;
 }) {
   const [bidAmounts, setBidAmounts] = useState<Record<string, string>>({});
   const [twoSeason, setTwoSeason] = useState<Record<string, boolean>>({});
   const [msgs, setMsgs] = useState<Record<string, { type: "ok" | "err"; text: string }>>({});
   const [loading, setLoading] = useState<Record<string, boolean>>({});
+  const [removing, setRemoving] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState("");
 
   const activeAuctions = auctions.filter((a) => a.status === "active");
@@ -211,6 +212,23 @@ function BidTab({ auctions, teamId, contracts, retentions, onRefresh }: {
     } else {
       setBidAmounts((b) => ({ ...b, [auctionId]: "" }));
       setMsgs((m) => ({ ...m, [auctionId]: { type: "ok", text: d.warning ?? "Bid placed!" } }));
+      onRefresh();
+    }
+  };
+
+  const removeBid = async (auctionId: string) => {
+    setRemoving((r) => ({ ...r, [auctionId]: true }));
+    const res = await fetch("/api/auction/bid", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ auction_id: auctionId, team_id: teamId }),
+    });
+    const d = await res.json();
+    setRemoving((r) => ({ ...r, [auctionId]: false }));
+    if (!res.ok) {
+      setMsgs((m) => ({ ...m, [auctionId]: { type: "err", text: d.error } }));
+    } else {
+      setMsgs((m) => ({ ...m, [auctionId]: { type: "ok", text: "Bid removed — cap space freed." } }));
       onRefresh();
     }
   };
@@ -278,10 +296,21 @@ function BidTab({ auctions, teamId, contracts, retentions, onRefresh }: {
             </div>
 
             {myLatest && (
-              <div style={{ background: "#0a1a1f", border: "1px solid #164e63", borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 12 }}>
-                <span style={{ color: "#555" }}>Your bid: </span>
-                <span style={{ color: "#22d3ee", fontWeight: 600 }}>{fmt(myLatest.effective_value)} eff.</span>
-                <span style={{ color: "#555" }}> ({fmt(myLatest.amount)}{myLatest.is_two_season ? " 2yr" : ""})</span>
+              <div style={{ background: "#0a1a1f", border: "1px solid #164e63", borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 12, display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ flex: 1 }}>
+                  <span style={{ color: "#555" }}>Current bid: </span>
+                  <span style={{ color: "#22d3ee", fontWeight: 600 }}>{fmt(myLatest.effective_value)} eff.</span>
+                  <span style={{ color: "#555" }}> ({fmt(myLatest.amount)}{myLatest.is_two_season ? " 2yr" : ""})</span>
+                </div>
+                {isAdmin && (
+                  <button
+                    onClick={() => removeBid(auction.id)}
+                    disabled={removing[auction.id]}
+                    style={{ ...btn("danger"), fontSize: 11, padding: "4px 10px", opacity: removing[auction.id] ? 0.5 : 1 }}
+                  >
+                    {removing[auction.id] ? "Removing…" : "Remove Bid"}
+                  </button>
+                )}
               </div>
             )}
 
@@ -1487,7 +1516,7 @@ export default function OwnerPage() {
         <div style={{ padding: "16px" }}>
           {tab === "roster" && <RosterTab contracts={contracts} retentions={retentions} leagueSlug={leagueSlug} />}
           {tab === "signings" && <SigningsTab teamId={effectiveTeamId} league={effectiveLeague} leagueSlug={leagueSlug} contracts={contracts} ownerSeason={effectiveSeason} onRefresh={loadAll} />}
-          {tab === "bid" && <BidTab auctions={auctions} teamId={effectiveTeamId} contracts={contracts} retentions={retentions} onRefresh={loadAll} />}
+          {tab === "bid" && <BidTab auctions={auctions} teamId={effectiveTeamId} contracts={contracts} retentions={retentions} onRefresh={loadAll} isAdmin={isAdmin} />}
           {tab === "trades" && <TradeTab teamId={effectiveTeamId} league={effectiveLeague} leagueSlug={leagueSlug} contracts={contracts} allTeams={allTeams} seasonTeamIds={seasonTeamIds} onRefresh={loadAll} />}
           {tab === "coaches" && <CoachesTab teamId={effectiveTeamId} leagueSlug={leagueSlug} contracts={contracts} onRefresh={loadAll} />}
           {tab === "cut" && <CutTab teamId={effectiveTeamId} leagueSlug={leagueSlug} contracts={contracts} onRefresh={loadAll} />}
