@@ -7264,17 +7264,181 @@ function CrewAdminTab({ league }: { league: string }) {
   );
 }
 
+// ─── CapRetentionsAdminTab ────────────────────────────────────────────────────
+function CapRetentionsAdminTab({ league }: { league: string }) {
+  type RetentionRow = { id: string; retaining_team_id: string; mc_uuid: string | null; retention_amount: number; status: string; label: string | null; players?: { mc_username: string } | null };
+  type TeamRow = { id: string; name: string; abbreviation: string };
+
+  const [rows, setRows] = useState<RetentionRow[]>([]);
+  const [teams, setTeams] = useState<TeamRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState<Record<string, { amount: string; team_id: string; label: string }>>({});
+  const [saving, setSaving] = useState<string | null>(null);
+  const [msg, setMsg] = useState<Record<string, string>>({});
+  // new row form
+  const [newTeam, setNewTeam] = useState("");
+  const [newAmount, setNewAmount] = useState("");
+  const [newLabel, setNewLabel] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [addMsg, setAddMsg] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const [retRes, teamRes] = await Promise.all([
+      fetch(`/api/cap-retentions?league=${league}&status=active`),
+      fetch(`/api/teams?league=${league}`),
+    ]);
+    const retData = await retRes.json();
+    const teamData = await teamRes.json();
+    setRows(Array.isArray(retData) ? retData : []);
+    setTeams(Array.isArray(teamData) ? teamData : []);
+    setLoading(false);
+  }, [league]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const startEdit = (r: RetentionRow) => {
+    setEditing((e) => ({ ...e, [r.id]: { amount: String(r.retention_amount), team_id: r.retaining_team_id, label: r.label ?? "" } }));
+  };
+
+  const save = async (id: string) => {
+    const e = editing[id];
+    if (!e) return;
+    setSaving(id);
+    const r = await fetch("/api/cap-retentions", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, retention_amount: parseInt(e.amount) || 0, team_id: e.team_id, label: e.label || null }),
+    });
+    const d = await r.json();
+    setSaving(null);
+    if (!r.ok) { setMsg((m) => ({ ...m, [id]: d.error })); return; }
+    setMsg((m) => ({ ...m, [id]: "Saved" }));
+    setEditing((e2) => { const copy = { ...e2 }; delete copy[id]; return copy; });
+    load();
+  };
+
+  const remove = async (id: string) => {
+    if (!confirm("Delete this retention record?")) return;
+    setSaving(id);
+    const r = await fetch("/api/cap-retentions", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    setSaving(null);
+    if (r.ok) load(); else setMsg((m) => ({ ...m, [id]: "Delete failed" }));
+  };
+
+  const addRow = async () => {
+    if (!newTeam || !newAmount) return setAddMsg("Team and amount required");
+    setAdding(true);
+    const r = await fetch("/api/cap-retentions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ league, team_id: newTeam, retention_amount: parseInt(newAmount) || 0, label: newLabel || null }),
+    });
+    const d = await r.json();
+    setAdding(false);
+    if (!r.ok) { setAddMsg(d.error); return; }
+    setNewTeam(""); setNewAmount(""); setNewLabel(""); setAddMsg("Added");
+    load();
+  };
+
+  const teamName = (id: string) => teams.find((t) => t.id === id)?.name ?? id.slice(0, 8);
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <div className="text-sm font-semibold text-slate-300">Cap Retentions</div>
+        <button className={`${btnPrimary} text-xs`} onClick={load}>Refresh</button>
+      </div>
+
+      {loading ? (
+        <div className="text-slate-600 text-sm text-center py-8">Loading…</div>
+      ) : rows.length === 0 ? (
+        <div className="text-slate-600 text-sm text-center py-6">No active cap retentions.</div>
+      ) : (
+        <div className="flex flex-col gap-3 mb-6">
+          {rows.map((r) => {
+            const e = editing[r.id];
+            return (
+              <div key={r.id} className={card}>
+                {e ? (
+                  <div className="flex flex-wrap gap-2 items-end">
+                    <div>
+                      <div className="text-slate-500 text-xs mb-1">Team</div>
+                      <select className={input} value={e.team_id} onChange={(ev) => setEditing((ed) => ({ ...ed, [r.id]: { ...e, team_id: ev.target.value } }))}>
+                        {teams.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.abbreviation})</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <div className="text-slate-500 text-xs mb-1">Amount (can be negative)</div>
+                      <input type="number" className={input} style={{ width: 130 }} value={e.amount} onChange={(ev) => setEditing((ed) => ({ ...ed, [r.id]: { ...e, amount: ev.target.value } }))} />
+                    </div>
+                    <div>
+                      <div className="text-slate-500 text-xs mb-1">Label</div>
+                      <input className={input} style={{ width: 140 }} value={e.label} placeholder="e.g. Cash retention" onChange={(ev) => setEditing((ed) => ({ ...ed, [r.id]: { ...e, label: ev.target.value } }))} />
+                    </div>
+                    <button className={btnPrimary} disabled={saving === r.id} onClick={() => save(r.id)}>{saving === r.id ? "Saving…" : "Save"}</button>
+                    <button className={btnSecondary} onClick={() => setEditing((ed) => { const c = { ...ed }; delete c[r.id]; return c; })}>Cancel</button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1">
+                      <div className="text-white font-semibold">{teamName(r.retaining_team_id)}</div>
+                      <div className="text-slate-500 text-xs">{r.label ?? (r.mc_uuid ? `Retained: ${r.players?.mc_username ?? r.mc_uuid.slice(0,8)}` : "Cash retention")}</div>
+                    </div>
+                    <div className={`font-bold text-sm ${r.retention_amount < 0 ? "text-red-400" : "text-purple-400"}`}>{r.retention_amount > 0 ? "+" : ""}{r.retention_amount.toLocaleString()}/yr</div>
+                    <button className={btnSecondary} onClick={() => startEdit(r)}>Edit</button>
+                    <button className="px-3 py-1.5 rounded-lg border border-red-900 bg-red-950 text-red-400 text-xs font-semibold hover:bg-red-900" disabled={saving === r.id} onClick={() => remove(r.id)}>Delete</button>
+                  </div>
+                )}
+                {msg[r.id] && <div className="text-xs mt-1 text-emerald-400">{msg[r.id]}</div>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Add new */}
+      <div className={card}>
+        <div className="text-slate-300 text-sm font-semibold mb-3">Add Retention</div>
+        <div className="flex flex-wrap gap-2 items-end">
+          <div>
+            <div className="text-slate-500 text-xs mb-1">Team</div>
+            <select className={input} value={newTeam} onChange={(e) => setNewTeam(e.target.value)}>
+              <option value="">— Select team —</option>
+              {teams.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.abbreviation})</option>)}
+            </select>
+          </div>
+          <div>
+            <div className="text-slate-500 text-xs mb-1">Amount (negative = cap credit)</div>
+            <input type="number" className={input} style={{ width: 160 }} value={newAmount} placeholder="e.g. 1000 or -1000" onChange={(e) => setNewAmount(e.target.value)} />
+          </div>
+          <div>
+            <div className="text-slate-500 text-xs mb-1">Label</div>
+            <input className={input} style={{ width: 160 }} value={newLabel} placeholder="Cash retention" onChange={(e) => setNewLabel(e.target.value)} />
+          </div>
+          <button className={btnPrimary} disabled={adding} onClick={addRow}>{adding ? "Adding…" : "Add"}</button>
+        </div>
+        {addMsg && <div className="text-xs mt-2 text-emerald-400">{addMsg}</div>}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Admin Page ──────────────────────────────────────────────────────────
 
 const TAB_GROUPS = {
   Players:      ["Players"],
   Teams:        ["Teams", "Owners", "Draft Picks"],
   Games:        ["Schedule", "Box Scores", "Stats", "Playoffs"],
-  Transactions: ["Auction", "Trades", "Signings", "Cuts", "Portal"],
+  Transactions: ["Auction", "Trades", "Signings", "Cuts", "Portal", "Cap Retentions"],
   Content:      ["Accolades", "Champions", "Articles", "Board", "Press Members"],
 } as const;
 type MainTab = keyof typeof TAB_GROUPS | "Backup";
-type Tab = "Players" | "Teams" | "Owners" | "Draft Picks" | "Schedule" | "Box Scores" | "Stats" | "Playoffs" | "Auction" | "Trades" | "Signings" | "Cuts" | "Portal" | "Accolades" | "Champions" | "Articles" | "Board" | "Press Members" | "Backup";
+type Tab = "Players" | "Teams" | "Owners" | "Draft Picks" | "Schedule" | "Box Scores" | "Stats" | "Playoffs" | "Auction" | "Trades" | "Signings" | "Cuts" | "Portal" | "Cap Retentions" | "Accolades" | "Champions" | "Articles" | "Board" | "Press Members" | "Backup";
 const SEASONS = ["Season 1","Season 1 Playoffs","Season 2","Season 2 Playoffs","Season 3","Season 3 Playoffs","Season 4","Season 4 Playoffs","Season 5","Season 5 Playoffs","Season 6","Season 6 Playoffs","Season 7","Season 7 Playoffs"];
 
 export default function AdminPage({ params }: { params?: Promise<{ league?: string }> }) {
@@ -7610,6 +7774,7 @@ export default function AdminPage({ params }: { params?: Promise<{ league?: stri
         {activeTab === "Signings" && <SigningsAdminTab league={league} season={season} />}
         {activeTab === "Cuts" && <CutsAdminTab league={league} />}
         {activeTab === "Portal" && <PortalAdminTab league={league} />}
+        {activeTab === "Cap Retentions" && <CapRetentionsAdminTab league={league} />}
         {activeTab === "Board" && <BoardMembersTab league={league} />}
         {activeTab === "Press Members" && <PressMembersTab league={league} />}
         {activeTab === "Backup" && (session as any)?.user?.id?.toString() === SUPER_ADMIN_ID && <BackupTab />}
