@@ -6558,8 +6558,6 @@ function SigningsAdminTab({ league }: { league: string }) {
   const [editIs2s, setEditIs2s] = useState(false);
   const [editMsg, setEditMsg] = useState("");
 
-  const HOURS_24_MS = 24 * 60 * 60 * 1000;
-
   const load = useCallback(async () => {
     setLoading(true);
     const [pend, active, offers] = await Promise.all([
@@ -6669,90 +6667,69 @@ function SigningsAdminTab({ league }: { league: string }) {
       {loading ? (
         <div className="text-slate-600 text-sm text-center py-8">Loading…</div>
       ) : innerTab === "offers" ? (
-        (() => {
-          // Group pending offers by player (mc_uuid)
-          const byPlayer = new Map<string, OfferRow[]>();
-          for (const o of pendingOffers) {
-            if (!byPlayer.has(o.mc_uuid)) byPlayer.set(o.mc_uuid, []);
-            byPlayer.get(o.mc_uuid)!.push(o);
-          }
-          const players = Array.from(byPlayer.entries());
-
-          const unlockPlayer = async (mc_uuid: string, username: string, offerLeague: string) => {
-            setUnlockMsg(m => ({ ...m, [mc_uuid]: "Unlocking…" }));
-            const r = await fetch("/api/contract-offers/unlock", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ mc_uuid, league: offerLeague }),
-            });
-            const d = await r.json().catch(() => ({})) as { unlocked?: number; error?: string };
-            if (!r.ok) {
-              setUnlockMsg(m => ({ ...m, [mc_uuid]: `Error: ${d.error ?? "failed"}` }));
-            } else {
-              setUnlockMsg(m => ({ ...m, [mc_uuid]: `✓ ${username}'s offers are now open` }));
-              load();
-            }
-          };
-
-          if (players.length === 0)
-            return <div className="text-slate-600 text-sm text-center py-8">No pending contract offers.</div>;
-
-          return (
-            <div className="flex flex-col gap-3">
-              {players.map(([mc_uuid, offers]) => {
-                const player = offers[0].players;
-                const mostRecentAt = offers.reduce((best, o) =>
-                  new Date(o.offered_at) > new Date(best.offered_at) ? o : best
-                ).offered_at;
-                const elapsed = Date.now() - new Date(mostRecentAt).getTime();
-                const canAccept = elapsed >= HOURS_24_MS;
-                const msg = unlockMsg[mc_uuid];
-
-                return (
-                  <div key={mc_uuid} className={card}>
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <img
-                        src={`https://minotar.net/avatar/${player.mc_username}/40`}
-                        className="w-10 h-10 rounded-lg border border-slate-700"
-                        onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/40"; }}
-                        alt=""
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-white font-bold">{player.mc_username}</div>
-                        <div className="text-slate-400 text-xs mt-0.5">
-                          {offers.length} offer{offers.length !== 1 ? "s" : ""} from:{" "}
-                          {offers.map(o => o.teams?.abbreviation ?? "?").join(", ")}
-                          {" · "}<span className="text-slate-500">{({ pba: "MBA", pcaa: "MCAA", pbgl: "MBGL" } as Record<string,string>)[offers[0].league] ?? offers[0].league?.toUpperCase()}</span>
-                        </div>
-                        <div className={`text-xs mt-0.5 ${canAccept ? "text-green-400" : "text-yellow-400"}`}>
-                          {canAccept
-                            ? "✓ Window open — can accept now"
-                            : `Window opens in ${Math.ceil((HOURS_24_MS - elapsed) / 3600000)}h`}
-                        </div>
-                      </div>
-                      <div className="flex flex-col items-end gap-2">
-                        {!msg?.startsWith("✓") && (
-                          <button
-                            className="px-4 py-2 rounded-xl text-sm font-bold bg-green-700 hover:bg-green-600 text-white transition disabled:opacity-50"
-                            onClick={() => unlockPlayer(mc_uuid, player.mc_username, offers[0].league)}
-                            disabled={!!msg?.startsWith("Unlock") || canAccept}
-                          >
-                            {canAccept ? "✅ Already Open" : "✅ Let Them Accept Now"}
-                          </button>
-                        )}
-                        {msg && (
-                          <span className={`text-sm font-semibold ${msg.startsWith("✓") ? "text-green-400" : "text-red-400"}`}>
-                            {msg.startsWith("✓") ? `✅ ${player.mc_username} can now accept — tell them to go to their profile` : msg}
-                          </span>
-                        )}
+        pendingOffers.length === 0 ? (
+          <div className="text-slate-600 text-sm text-center py-8">No pending contract offers.</div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {pendingOffers.map((o) => {
+              const player = o.players;
+              const team = o.teams;
+              const leagueLabel = ({ pba: "MBA", pcaa: "MCAA", pbgl: "MBGL" } as Record<string,string>)[o.league] ?? o.league?.toUpperCase();
+              const msg = unlockMsg[o.id];
+              return (
+                <div key={o.id} className={card}>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <img
+                      src={`https://minotar.net/avatar/${player?.mc_username}/40`}
+                      className="w-10 h-10 rounded-lg border border-slate-700"
+                      onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/40"; }}
+                      alt=""
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-white font-bold">{player?.mc_username ?? o.mc_uuid}</div>
+                      <div className="text-slate-400 text-sm mt-0.5">
+                        Offered by <span className="text-white font-semibold">{team?.name ?? "?"}</span>
+                        {o.amount > 0 && <span className="text-slate-300"> · ${o.amount.toLocaleString()}</span>}
+                        {o.is_two_season && <span className="text-slate-500"> · 2-season</span>}
+                        <span className="text-slate-600 ml-2">· {leagueLabel}</span>
                       </div>
                     </div>
+                    <div className="flex flex-col items-end gap-1">
+                      {msg?.startsWith("✓") ? (
+                        <span className="text-green-400 font-semibold text-sm">{msg}</span>
+                      ) : (
+                        <button
+                          className="px-4 py-2 rounded-xl text-sm font-bold bg-green-700 hover:bg-green-600 text-white transition disabled:opacity-50"
+                          disabled={msg === "Signing…"}
+                          onClick={async () => {
+                            setUnlockMsg(m => ({ ...m, [o.id]: "Signing…" }));
+                            const r = await fetch(`/api/contract-offers/${o.id}`, {
+                              method: "PUT",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ action: "accept" }),
+                            });
+                            const d = await r.json().catch(() => ({}));
+                            if (!r.ok) {
+                              setUnlockMsg(m => ({ ...m, [o.id]: `Error: ${d.error ?? "failed"}` }));
+                            } else {
+                              setUnlockMsg(m => ({ ...m, [o.id]: `✓ Signed to ${team?.name ?? "team"}` }));
+                              load();
+                            }
+                          }}
+                        >
+                          ✅ Sign to {team?.abbreviation ?? "Team"}
+                        </button>
+                      )}
+                      {msg && !msg.startsWith("✓") && (
+                        <span className={`text-xs ${msg === "Signing…" ? "text-slate-400" : "text-red-400"}`}>{msg}</span>
+                      )}
+                    </div>
                   </div>
-                );
-              })}
-            </div>
-          );
-        })()
+                </div>
+              );
+            })}
+          </div>
+        )
       ) : innerTab === "pending" ? (
         signings.length === 0 ? (
           <div className="text-slate-600 text-sm text-center py-8">No pending signing requests.</div>
