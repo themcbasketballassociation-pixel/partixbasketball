@@ -43,7 +43,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         season: season ?? null,
         status: "active",
       }])
-      .select("*, players(mc_uuid, mc_username), teams(id, name, abbreviation)")
+      .select("*, players(mc_uuid, mc_username), teams(id, name, abbreviation, logo_url)")
       .single();
     if (error) return res.status(500).json({ error: error.message });
 
@@ -60,10 +60,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const playerUuid = (data as any).players?.mc_uuid ?? mc_uuid;
     const teamName   = (data as any).teams?.name ?? team_id;
     const teamAbbr   = (data as any).teams?.abbreviation ?? "";
+    const teamLogo   = (data as any).teams?.logo_url ?? null;
     const leagueDisplay = LEAGUE_LABELS[league] ?? league.toUpperCase();
     const amountLine = finalAmount > 0 ? `**Salary:** $${finalAmount.toLocaleString()}${is_two_season ? " (2-season 🔁)" : ""}` : "";
     const embed: Record<string, unknown> = {
       color: LEAGUE_COLORS[league] ?? 0x22c55e,
+      author: teamLogo
+        ? { name: teamName, icon_url: teamLogo }
+        : { name: teamName },
       title: "✍️ Player Signed",
       description: `**${playerName}** signed to **${teamName}**${amountLine ? `\n${amountLine}` : ""}`,
       thumbnail: { url: `https://mc-heads.net/avatar/${playerUuid}/128` },
