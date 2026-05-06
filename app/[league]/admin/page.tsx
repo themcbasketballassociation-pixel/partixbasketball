@@ -6587,7 +6587,7 @@ function SigningsAdminTab({ league, season }: { league: string; season: string }
     setLoading(true);
     const [pend, active, offers, players, teams] = await Promise.all([
       fetch(`/api/contracts?league=${league}&status=pending_approval`).then(r => r.json()),
-      fetch(`/api/contracts?league=${league}&status=active&season=${encodeURIComponent(season)}`).then(r => r.json()),
+      fetch(`/api/contracts?league=${league}&status=active`).then(r => r.json()),
       fetch(`/api/contract-offers?status=pending`).then(r => r.json()),
       fetch(`/api/players`).then(r => r.json()),
       fetch(`/api/teams?league=${league}&season=${encodeURIComponent(season)}`).then(r => r.json()),
