@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { supabase } from "../../../lib/supabase";
 import { requireAdmin } from "../../../lib/adminAuth";
 import { resolveLeague } from "../../../lib/leagueMapping";
+import { sendWebhookEmbed, getWebhookUrl } from "../../../lib/discordWebhook";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === "GET") {
@@ -67,6 +68,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
       return res.status(500).json({ error: error.message });
     }
+
+    // Fire transactions webhook for GM assignments
+    if (role === "gm" && data) {
+      const LEAGUE_LABELS: Record<string, string> = { pba: "MBA", pcaa: "MCAA", pbgl: "MBGL" };
+      const LEAGUE_COLORS: Record<string, number> = { pba: 0xC8102E, pcaa: 0x003087, pbgl: 0xBB3430 };
+      const BASE_URL = process.env.NEXTAUTH_URL ?? "https://partixbasketball.com";
+      const teamName = (data as any).teams?.name ?? team_id;
+      const teamAbbr = (data as any).teams?.abbreviation ?? "";
+      const teamColor = (data as any).teams?.color2;
+      const leagueDisplay = LEAGUE_LABELS[league] ?? league.toUpperCase();
+      const displayName = (payload.owner_name as string | null) ?? discord_id;
+      const embed: Record<string, unknown> = {
+        color: teamColor ? parseInt(teamColor.replace("#", ""), 16) : (LEAGUE_COLORS[league] ?? 0x9333ea),
+        title: "👔 GM Named",
+        description: `**${displayName}** has been named General Manager of the **${teamName}**`,
+        footer: {
+          text: `${leagueDisplay} · ${teamAbbr}`,
+          icon_url: `${BASE_URL}/logos/${league === "pba" ? "mba" : league === "pcaa" ? "mcaa" : "MBGL"}.${league === "pbgl" ? "png" : "webp"}`,
+        },
+        timestamp: new Date().toISOString(),
+      };
+      await sendWebhookEmbed(getWebhookUrl(league, "transaction"), embed);
+    }
+
     return res.status(200).json(data);
   }
 

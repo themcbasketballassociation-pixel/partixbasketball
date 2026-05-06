@@ -3878,7 +3878,7 @@ function PlayoffsTab({ league, season }: { league: string; season: string }) {
 // ─── Tab: Owners ──────────────────────────────────────────────────────────────
 
 function OwnersTab({ league }: { league: string }) {
-  type OwnerRow = { id: string; discord_id: string; owner_name?: string | null; league: string; season?: string | null; teams: { id: string; name: string; abbreviation: string } };
+  type OwnerRow = { id: string; discord_id: string; owner_name?: string | null; role?: string | null; league: string; season?: string | null; teams: { id: string; name: string; abbreviation: string } };
   type TeamRow = { id: string; name: string; abbreviation: string };
   type PlayerRow = { mc_uuid: string; mc_username: string; discord_id: string | null };
   const [owners, setOwners] = useState<OwnerRow[]>([]);
@@ -3889,6 +3889,7 @@ function OwnersTab({ league }: { league: string }) {
   const [teamId, setTeamId] = useState("");
   const [season, setSeason] = useState("Season 7");
   const [filterSeason, setFilterSeason] = useState("Season 7");
+  const [role, setRole] = useState<"owner" | "gm">("owner");
   const [err, setErr] = useState("");
   const [needsMigration, setNeedsMigration] = useState(false);
   const [resetSeason, setResetSeason] = useState("Season 7");
@@ -3917,7 +3918,7 @@ function OwnersTab({ league }: { league: string }) {
     const r = await fetch("/api/team-owners", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ discord_id: discordId.trim(), owner_name: selectedPlayer?.mc_username ?? null, team_id: teamId, league, season }),
+      body: JSON.stringify({ discord_id: discordId.trim(), owner_name: selectedPlayer?.mc_username ?? null, team_id: teamId, league, season, role }),
     });
     const d = await r.json();
     if (!r.ok) return setErr(d.error);
@@ -3959,7 +3960,7 @@ function OwnersTab({ league }: { league: string }) {
         </div>
       )}
       <div className={card} style={{ marginBottom: 16 }}>
-        <div className="text-sm font-semibold text-slate-300 mb-4">Assign Team Owner</div>
+        <div className="text-sm font-semibold text-slate-300 mb-4">Assign Owner / GM</div>
         <div className="flex gap-3 flex-wrap mb-2">
           <select className={input} value={selectedPlayerUuid} onChange={(e) => setSelectedPlayerUuid(e.target.value)} style={{ flex: 2, minWidth: 160 }}>
             <option value="">— Select player —</option>
@@ -3972,6 +3973,10 @@ function OwnersTab({ league }: { league: string }) {
           </select>
           <select className={input} value={season} onChange={(e) => setSeason(e.target.value)} style={{ flex: 1, minWidth: 120 }}>
             {SEASONS.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <select className={input} value={role} onChange={(e) => setRole(e.target.value as "owner" | "gm")} style={{ minWidth: 110 }}>
+            <option value="owner">Owner</option>
+            <option value="gm">GM</option>
           </select>
           <button className={btnPrimary} onClick={add}>Assign</button>
         </div>
@@ -4011,9 +4016,12 @@ function OwnersTab({ league }: { league: string }) {
         {sorted.map((o) => (
           <div key={o.id} className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-950 px-4 py-3">
             <div className="flex-1">
-              <div className="text-white font-medium text-sm">
-                {o.owner_name && <span className="text-blue-300 font-bold mr-2">{o.owner_name}</span>}
-                {o.teams?.name ?? "Unknown Team"} <span className="text-slate-500">({o.teams?.abbreviation})</span>
+              <div className="flex items-center gap-2 text-white font-medium text-sm">
+                {o.owner_name && <span className="text-blue-300 font-bold">{o.owner_name}</span>}
+                <span>{o.teams?.name ?? "Unknown Team"} <span className="text-slate-500">({o.teams?.abbreviation})</span></span>
+                {o.role === "gm"
+                  ? <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-purple-900 border border-purple-700 text-purple-300">GM</span>
+                  : <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-900 border border-blue-700 text-blue-300">Owner</span>}
               </div>
               <div className="text-slate-500 text-xs font-mono">{o.discord_id}</div>
             </div>
