@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { supabase } from "../../../lib/supabase";
 import { requireAdmin } from "../../../lib/adminAuth";
 import { resolveLeague } from "../../../lib/leagueMapping";
+import { normalizeSeason } from "../../../lib/seasonUtils";
 import { sendWebhookEmbed, getWebhookUrl } from "../../../lib/discordWebhook";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -26,7 +27,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "POST") {
     const admin = await requireAdmin(req, res);
     if (!admin) return;
-    const { league: leagueRaw, mc_uuid, team_id, amount, is_two_season, season, skip_webhook } = req.body;
+    const { league: leagueRaw, mc_uuid, team_id, amount, is_two_season, season: seasonRaw, skip_webhook } = req.body;
+    const season = normalizeSeason(seasonRaw);
     const league = resolveLeague(leagueRaw);
     if (!league || !mc_uuid || !team_id)
       return res.status(400).json({ error: "league, mc_uuid, team_id required" });
