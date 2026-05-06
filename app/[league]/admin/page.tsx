@@ -6541,7 +6541,7 @@ function BackupTab() {
 // ─── SigningsAdminTab ──────────────────────────────────────────────────────────
 function SigningsAdminTab({ league }: { league: string }) {
   type SigningRow = { id: string; mc_uuid: string; amount: number; is_two_season: boolean; phase: number; season: string | null; status: string; players: { mc_uuid: string; mc_username: string }; teams: { id: string; name: string; abbreviation: string } };
-  type OfferRow = { id: string; mc_uuid: string; team_id: string; amount: number; is_two_season: boolean; season: string | null; status: string; offered_at: string; players: { mc_uuid: string; mc_username: string }; teams: { id: string; name: string; abbreviation: string } };
+  type OfferRow = { id: string; mc_uuid: string; team_id: string; league: string; amount: number; is_two_season: boolean; season: string | null; status: string; offered_at: string; players: { mc_uuid: string; mc_username: string }; teams: { id: string; name: string; abbreviation: string } };
 
   const [innerTab, setInnerTab] = useState<"offers" | "pending" | "active">("offers");
   const [signings, setSignings] = useState<SigningRow[]>([]);
