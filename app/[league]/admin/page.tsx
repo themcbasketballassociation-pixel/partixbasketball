@@ -6595,6 +6595,7 @@ function SigningsAdminTab({ league, season }: { league: string; season: string }
     const seasonNum = parseInt(season.replace(/\D/g, ""));
     setSignings(Array.isArray(pend) ? pend : []);
     setActiveContracts(Array.isArray(active) ? active.filter((c: any) => {
+      if (!c.season) return true; // null season = current season
       const n = parseInt((c.season ?? "").replace(/\D/g, ""));
       return n === seasonNum;
     }) : []);
@@ -6751,7 +6752,7 @@ function SigningsAdminTab({ league, season }: { league: string; season: string }
           {dsMsg && <div className={`text-sm rounded-lg px-3 py-2 border ${dsMsg.startsWith("✓") ? "text-green-400 bg-green-950 border-green-800" : "text-red-400 bg-red-950 border-red-800"}`}>{dsMsg}</div>}
           <button className={`${btnPrimary} w-full`} disabled={dsSigning || !dsPlayer || !dsTeam} onClick={async () => {
             setDsSigning(true); setDsMsg("");
-            const r = await fetch("/api/contracts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ league, mc_uuid: dsPlayer, team_id: dsTeam, amount: parseInt(dsAmount) || 0, is_two_season: ds2s, skip_webhook: !dsSendWebhook }) });
+            const r = await fetch("/api/contracts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ league, mc_uuid: dsPlayer, team_id: dsTeam, amount: parseInt(dsAmount) || 0, is_two_season: ds2s, season, skip_webhook: !dsSendWebhook }) });
             const d = await r.json().catch(() => ({} as any));
             setDsSigning(false);
             if (!r.ok) { setDsMsg(`Error: ${d.error ?? "failed"}`); }
