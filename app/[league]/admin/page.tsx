@@ -6542,15 +6542,27 @@ function BackupTab() {
 function SigningsAdminTab({ league }: { league: string }) {
   type SigningRow = { id: string; mc_uuid: string; amount: number; is_two_season: boolean; phase: number; season: string | null; status: string; players: { mc_uuid: string; mc_username: string }; teams: { id: string; name: string; abbreviation: string } };
   type OfferRow = { id: string; mc_uuid: string; team_id: string; league: string; amount: number; is_two_season: boolean; season: string | null; status: string; offered_at: string; players: { mc_uuid: string; mc_username: string }; teams: { id: string; name: string; abbreviation: string } };
+  type PlayerOpt = { mc_uuid: string; mc_username: string };
+  type TeamOpt = { id: string; name: string; abbreviation: string };
 
   const [innerTab, setInnerTab] = useState<"offers" | "pending" | "active">("offers");
   const [signings, setSignings] = useState<SigningRow[]>([]);
   const [activeContracts, setActiveContracts] = useState<SigningRow[]>([]);
   const [pendingOffers, setPendingOffers] = useState<OfferRow[]>([]);
+  const [allPlayers, setAllPlayers] = useState<PlayerOpt[]>([]);
+  const [allTeams, setAllTeams] = useState<TeamOpt[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionMsg, setActionMsg] = useState<Record<string, string>>({});
   const [syncMsg, setSyncMsg] = useState("");
   const [unlockMsg, setUnlockMsg] = useState<Record<string, string>>({});
+  // Direct sign form
+  const [dsPlayer, setDsPlayer] = useState("");
+  const [dsTeam, setDsTeam] = useState("");
+  const [dsAmount, setDsAmount] = useState("0");
+  const [ds2s, setDs2s] = useState(false);
+  const [dsMsg, setDsMsg] = useState("");
+  const [dsSigning, setDsSigning] = useState(false);
+  const [playerSearch, setPlayerSearch] = useState("");
   // Edit contract state
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editAmount, setEditAmount] = useState("");
@@ -6560,14 +6572,18 @@ function SigningsAdminTab({ league }: { league: string }) {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [pend, active, offers] = await Promise.all([
+    const [pend, active, offers, players, teams] = await Promise.all([
       fetch(`/api/contracts?league=${league}&status=pending_approval`).then(r => r.json()),
       fetch(`/api/contracts?league=${league}&status=active`).then(r => r.json()),
       fetch(`/api/contract-offers?status=pending`).then(r => r.json()),
+      fetch(`/api/players`).then(r => r.json()),
+      fetch(`/api/teams?league=${league}`).then(r => r.json()),
     ]);
     setSignings(Array.isArray(pend) ? pend : []);
     setActiveContracts(Array.isArray(active) ? active : []);
     setPendingOffers(Array.isArray(offers) ? offers : []);
+    setAllPlayers(Array.isArray(players) ? players : []);
+    setAllTeams(Array.isArray(teams) ? teams : []);
     setLoading(false);
   }, [league]);
 
@@ -6667,11 +6683,88 @@ function SigningsAdminTab({ league }: { league: string }) {
       {loading ? (
         <div className="text-slate-600 text-sm text-center py-8">Loading…</div>
       ) : innerTab === "offers" ? (
-        pendingOffers.length === 0 ? (
-          <div className="text-slate-600 text-sm text-center py-8">No pending contract offers.</div>
-        ) : (
-          <div className="flex flex-col gap-3">
-            {pendingOffers.map((o) => {
+        <div className="flex flex-col gap-4">
+          {/* ── Direct Admin Sign ── */}
+          <div className={card}>
+            <div className="text-white font-bold mb-3">✍️ Sign Any Player to Any Team</div>
+            <div className="flex flex-col gap-2">
+              <div>
+                <input
+                  className="w-full rounded-lg bg-slate-800 border border-slate-700 text-white px-3 py-2 text-sm mb-1"
+                  placeholder="Search player name…"
+                  value={playerSearch}
+                  onChange={e => { setPlayerSearch(e.target.value); setDsPlayer(""); }}
+                />
+                {playerSearch.length >= 2 && (
+                  <div className="bg-slate-800 border border-slate-700 rounded-lg max-h-48 overflow-y-auto">
+                    {allPlayers
+                      .filter(p => p.mc_username?.toLowerCase().includes(playerSearch.toLowerCase()))
+                      .slice(0, 20)
+                      .map(p => (
+                        <div
+                          key={p.mc_uuid}
+                          className={`px-3 py-2 text-sm cursor-pointer hover:bg-slate-700 ${dsPlayer === p.mc_uuid ? "bg-slate-700 text-white font-bold" : "text-slate-300"}`}
+                          onClick={() => { setDsPlayer(p.mc_uuid); setPlayerSearch(p.mc_username); }}
+                        >
+                          {p.mc_username}
+                        </div>
+                      ))}
+                    {allPlayers.filter(p => p.mc_username?.toLowerCase().includes(playerSearch.toLowerCase())).length === 0 && (
+                      <div className="px-3 py-2 text-slate-500 text-sm">No players found</div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <select
+                className="w-full rounded-lg bg-slate-800 border border-slate-700 text-white px-3 py-2 text-sm"
+                value={dsTeam}
+                onChange={e => setDsTeam(e.target.value)}
+              >
+                <option value="">Select team…</option>
+                {allTeams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.abbreviation})</option>)}
+              </select>
+              {league !== "pcaa" && league !== "pbgl" && (
+                <input
+                  type="number"
+                  className="w-full rounded-lg bg-slate-800 border border-slate-700 text-white px-3 py-2 text-sm"
+                  placeholder="Salary amount"
+                  value={dsAmount}
+                  onChange={e => setDsAmount(e.target.value)}
+                />
+              )}
+              <label className="flex items-center gap-2 text-slate-400 text-sm cursor-pointer">
+                <input type="checkbox" checked={ds2s} onChange={e => setDs2s(e.target.checked)} className="accent-blue-500" />
+                2-season contract
+              </label>
+              {dsMsg && <div className={`text-sm rounded-lg px-3 py-2 border ${dsMsg.startsWith("✓") ? "text-green-400 bg-green-950 border-green-800" : "text-red-400 bg-red-950 border-red-800"}`}>{dsMsg}</div>}
+              <button
+                className={`${btnPrimary} w-full`}
+                disabled={dsSigning || !dsPlayer || !dsTeam}
+                onClick={async () => {
+                  setDsSigning(true); setDsMsg("");
+                  const r = await fetch("/api/contracts", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ league, mc_uuid: dsPlayer, team_id: dsTeam, amount: parseInt(dsAmount) || 0, is_two_season: ds2s }),
+                  });
+                  const d = await r.json().catch(() => ({}));
+                  setDsSigning(false);
+                  if (!r.ok) { setDsMsg(`Error: ${d.error ?? "failed"}`); }
+                  else {
+                    setDsMsg(`✓ Signed ${d.players?.mc_username ?? "player"} to ${d.teams?.name ?? "team"}`);
+                    setDsPlayer(""); setPlayerSearch(""); setDsTeam(""); setDsAmount("0"); setDs2s(false);
+                    load();
+                  }
+                }}
+              >
+                {dsSigning ? "Signing…" : "✅ Sign Player"}
+              </button>
+            </div>
+          </div>
+
+          {/* ── Existing pending offers ── */}
+          {pendingOffers.length > 0 && <div className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Pending Offers from Owner Portal</div>}
+          {pendingOffers.map((o) => {
               const player = o.players;
               const team = o.teams;
               const leagueLabel = ({ pba: "MBA", pcaa: "MCAA", pbgl: "MBGL" } as Record<string,string>)[o.league] ?? o.league?.toUpperCase();
