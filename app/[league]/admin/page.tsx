@@ -6592,13 +6592,10 @@ function SigningsAdminTab({ league, season }: { league: string; season: string }
       fetch(`/api/players`).then(r => r.json()),
       fetch(`/api/teams?league=${league}&season=${encodeURIComponent(season)}`).then(r => r.json()),
     ]);
-    const seasonNum = parseInt(season.replace(/\D/g, ""));
     setSignings(Array.isArray(pend) ? pend : []);
-    setActiveContracts(Array.isArray(active) ? active.filter((c: any) => {
-      if (!c.season) return true; // null season = current season
-      const n = parseInt((c.season ?? "").replace(/\D/g, ""));
-      return n === seasonNum;
-    }) : []);
+    setActiveContracts(Array.isArray(active) ? active.filter((c: any) =>
+      !c.season || c.season === season || c.season === `S${season}`
+    ) : []);
     setPendingOffers(Array.isArray(offers) ? offers : []);
     setAllPlayers(Array.isArray(players) ? players : []);
     setAllTeams(Array.isArray(teams) ? teams : []);
