@@ -1260,19 +1260,36 @@ export default function OwnerPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"roster" | "bid" | "trades" | "signings" | "cut" | "portal" | "coaches" | "management">("roster");
   const [isBoardMember, setIsBoardMember] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminViewTeamId, setAdminViewTeamId] = useState<string>("");
+
+  const loadTeamData = useCallback(async (teamId: string) => {
+    const [contractsRes, retentionsRes] = await Promise.all([
+      fetch(`/api/contracts?league=${leagueSlug}&team_id=${teamId}`),
+      fetch(`/api/cap-retentions?league=${leagueSlug}&team_id=${teamId}`),
+    ]);
+    const c = await contractsRes.json();
+    const ret = await retentionsRes.json();
+    setContracts(Array.isArray(c) ? c : []);
+    setRetentions(Array.isArray(ret) ? ret : []);
+  }, [leagueSlug]);
 
   const loadAll = useCallback(async () => {
     if (status === "loading") return;
     if (status !== "authenticated") { setLoading(false); return; }
     try {
-      const [ownerRes, auctionsRes, teamsRes, boardRes] = await Promise.all([
+      const [ownerRes, auctionsRes, teamsRes, boardRes, adminRes] = await Promise.all([
         fetch(`/api/owner/team?league=${leagueSlug}`),
         fetch(`/api/auction?league=${leagueSlug}&status=active`),
         fetch(`/api/teams?league=${leagueSlug}`),
         fetch(`/api/board-members?league=${leagueSlug}&check=me`),
+        fetch(`/api/admin/check`),
       ]);
       const boardData = await boardRes.json().catch(() => ({}));
       setIsBoardMember(!!boardData.isMember);
+      const adminData = await adminRes.json().catch(() => ({}));
+      const admin = !!adminData.authorized;
+      setIsAdmin(admin);
       const ownerData = await ownerRes.json();
       const auctionData = await auctionsRes.json();
       const teamsData = await teamsRes.json();
@@ -1280,7 +1297,8 @@ export default function OwnerPage() {
       const record = Array.isArray(ownerData) ? ownerData[0] : null;
       setOwnerRecord(record);
       setAuctions(Array.isArray(auctionData) ? auctionData : []);
-      setAllTeams(Array.isArray(teamsData) ? teamsData : []);
+      const teams = Array.isArray(teamsData) ? teamsData : [];
+      setAllTeams(teams);
 
       // Load team IDs for the owner's season to filter the trade dropdown
       if (record?.season) {
@@ -1291,22 +1309,27 @@ export default function OwnerPage() {
         setSeasonTeamIds([]);
       }
 
-      if (record?.teams?.id) {
-        const [contractsRes, retentionsRes] = await Promise.all([
-          fetch(`/api/contracts?league=${leagueSlug}&team_id=${record.teams.id}`),
-          fetch(`/api/cap-retentions?league=${leagueSlug}&team_id=${record.teams.id}`),
-        ]);
-        const c = await contractsRes.json();
-        const ret = await retentionsRes.json();
-        setContracts(Array.isArray(c) ? c : []);
-        setRetentions(Array.isArray(ret) ? ret : []);
+      const ownerTeamId = record?.teams?.id;
+      if (admin && !ownerTeamId && teams.length > 0) {
+        // Admin with no own team — default to first team
+        const firstId = teams[0].id;
+        setAdminViewTeamId(firstId);
+        await loadTeamData(firstId);
+      } else if (ownerTeamId) {
+        await loadTeamData(ownerTeamId);
       }
     } finally {
       setLoading(false);
     }
-  }, [status, leagueSlug]);
+  }, [status, leagueSlug, loadTeamData]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+
+  // When admin switches to a different team, reload that team's data
+  useEffect(() => {
+    if (!isAdmin || !adminViewTeamId) return;
+    loadTeamData(adminViewTeamId);
+  }, [isAdmin, adminViewTeamId, loadTeamData]);
 
   // MBGL has no owner portal
   if (leagueSlug === "mbgl") {
@@ -1331,7 +1354,7 @@ export default function OwnerPage() {
     );
   }
 
-  if (!ownerRecord) {
+  if (!ownerRecord && !isAdmin) {
     return (
       <div style={{ maxWidth: 480, margin: "60px auto", ...card, padding: 40, textAlign: "center" as const }}>
         <div style={{ color: "#fff", fontWeight: 700, fontSize: 22, marginBottom: 8 }}>No Team Found</div>
@@ -1341,29 +1364,55 @@ export default function OwnerPage() {
     );
   }
 
-  const team = ownerRecord.teams;
+  // Admins can view any team; resolve the effective team
+  const effectiveTeamId = isAdmin && adminViewTeamId ? adminViewTeamId : ownerRecord?.teams?.id ?? "";
+  const team: Team = (isAdmin && adminViewTeamId ? allTeams.find((t) => t.id === adminViewTeamId) : null) ?? ownerRecord?.teams ?? allTeams[0];
+  const effectiveLeague = ownerRecord?.league ?? leagueSlug;
+  const effectiveSeason = ownerRecord?.season ?? null;
+  const effectiveRole = ownerRecord?.role ?? null;
+
   const totalUsed = contracts.reduce((s, c) => s + c.amount, 0);
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: "24px 16px" }}>
+      {/* Admin team switcher banner */}
+      {isAdmin && (
+        <div style={{ background: "#1a0a00", border: "1px solid #7c2d12", borderRadius: 12, padding: "10px 16px", marginBottom: 12, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" as const }}>
+          <span style={{ color: "#fb923c", fontWeight: 700, fontSize: 12, whiteSpace: "nowrap" as const }}>ADMIN VIEW</span>
+          <select
+            value={effectiveTeamId}
+            onChange={(e) => setAdminViewTeamId(e.target.value)}
+            style={{ ...input, width: "auto", flex: 1, minWidth: 180, fontSize: 13 }}
+          >
+            {allTeams.map((t) => (
+              <option key={t.id} value={t.id}>{t.name} ({t.abbreviation})</option>
+            ))}
+          </select>
+          <span style={{ color: "#555", fontSize: 11 }}>Viewing as admin — all actions apply to selected team</span>
+        </div>
+      )}
+
       {/* Team header */}
       <div style={{ ...card, marginBottom: 20 }}>
         <div style={{ padding: "20px 24px", display: "flex", alignItems: "center", gap: 16, borderBottom: "1px solid #1a1a1a", flexWrap: "wrap" }}>
-          {team.logo_url ? (
+          {team?.logo_url ? (
             <img src={team.logo_url} style={{ width: 56, height: 56, objectFit: "contain", borderRadius: 8, border: "1px solid #222" }} alt="" />
           ) : (
-            <div style={{ width: 56, height: 56, borderRadius: 8, background: team.color2 ? `${team.color2}22` : "#1a1a1a", border: `2px solid ${team.color2 ?? "#333"}`, display: "flex", alignItems: "center", justifyContent: "center", color: team.color2 ?? "#444", fontWeight: 800, fontSize: 16 }}>
-              {team.abbreviation}
+            <div style={{ width: 56, height: 56, borderRadius: 8, background: team?.color2 ? `${team.color2}22` : "#1a1a1a", border: `2px solid ${team?.color2 ?? "#333"}`, display: "flex", alignItems: "center", justifyContent: "center", color: team?.color2 ?? "#444", fontWeight: 800, fontSize: 16 }}>
+              {team?.abbreviation}
             </div>
           )}
           <div style={{ flex: 1 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ color: "#fff", fontWeight: 800, fontSize: 22 }}>{team.name}</span>
-              {ownerRecord.role === "gm" && (
+              <span style={{ color: "#fff", fontWeight: 800, fontSize: 22 }}>{team?.name}</span>
+              {!isAdmin && effectiveRole === "gm" && (
                 <span style={{ background: "#1e3a5f", border: "1px solid #1d4ed8", borderRadius: 6, color: "#93c5fd", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>GM</span>
               )}
+              {isAdmin && (
+                <span style={{ background: "#431407", border: "1px solid #7c2d12", borderRadius: 6, color: "#fb923c", fontSize: 11, fontWeight: 700, padding: "2px 8px" }}>ADMIN</span>
+              )}
             </div>
-            <div style={{ color: "#555", fontSize: 13 }}>{leagueSlug.toUpperCase()} · {team.division ?? "League"}</div>
+            <div style={{ color: "#555", fontSize: 13 }}>{leagueSlug.toUpperCase()} · {team?.division ?? "League"}</div>
           </div>
           {leagueSlug !== "mcaa" && leagueSlug !== "mbgl" && (
             <div style={{ textAlign: "right" }}>
@@ -1386,11 +1435,11 @@ export default function OwnerPage() {
         <div style={{ display: "flex", borderBottom: "1px solid #1a1a1a", overflowX: "auto" }}>
           {[
             ...(leagueSlug === "mcaa"
-              ? [["roster", "My Roster"], ["coaches", "Coaches"], ["signings", "Signings"], ["cut", "Cut Player"], ["portal", "Transfer Portal"]]
-              : [["roster", "My Roster"], ["signings", "Signings"], ["bid", `Live Auctions (${auctions.filter((a) => a.status === "active").length})`], ["trades", "Trades"]]
+              ? [["roster", "Roster"], ["coaches", "Coaches"], ["signings", "Signings"], ["cut", "Cut Player"], ["portal", "Transfer Portal"]]
+              : [["roster", "Roster"], ["signings", "Signings"], ["bid", `Live Auctions (${auctions.filter((a) => a.status === "active").length})`], ["trades", "Trades"]]
             ),
-            // Only actual owners (not GMs) can manage the GM roster
-            ...(ownerRecord.role !== "gm" ? [["management", "👑 Owner"]] : []),
+            // Only actual owners (not GMs, not admin-view) can manage the GM roster
+            ...(!isAdmin && effectiveRole !== "gm" ? [["management", "👑 Owner"]] : []),
           ].map(([t, label]) => (
             <button
               key={t}
@@ -1408,14 +1457,14 @@ export default function OwnerPage() {
 
         <div style={{ padding: "16px" }}>
           {tab === "roster" && <RosterTab contracts={contracts} retentions={retentions} leagueSlug={leagueSlug} />}
-          {tab === "signings" && <SigningsTab teamId={team.id} league={ownerRecord.league} leagueSlug={leagueSlug} contracts={contracts} ownerSeason={ownerRecord.season ?? null} onRefresh={loadAll} />}
-          {tab === "bid" && <BidTab auctions={auctions} teamId={team.id} contracts={contracts} retentions={retentions} onRefresh={loadAll} />}
-          {tab === "trades" && <TradeTab teamId={team.id} league={ownerRecord.league} leagueSlug={leagueSlug} contracts={contracts} allTeams={allTeams} seasonTeamIds={seasonTeamIds} onRefresh={loadAll} />}
-          {tab === "coaches" && <CoachesTab teamId={team.id} leagueSlug={leagueSlug} contracts={contracts} onRefresh={loadAll} />}
-          {tab === "cut" && <CutTab teamId={team.id} leagueSlug={leagueSlug} contracts={contracts} onRefresh={loadAll} />}
-          {tab === "portal" && <PortalTab teamId={team.id} leagueSlug={leagueSlug} contracts={contracts} onRefresh={loadAll} />}
-          {tab === "management" && ownerRecord.role !== "gm" && (
-            <GMTab teamId={team.id} league={ownerRecord.league} season={ownerRecord.season ?? null} onRefresh={loadAll} />
+          {tab === "signings" && <SigningsTab teamId={effectiveTeamId} league={effectiveLeague} leagueSlug={leagueSlug} contracts={contracts} ownerSeason={effectiveSeason} onRefresh={loadAll} />}
+          {tab === "bid" && <BidTab auctions={auctions} teamId={effectiveTeamId} contracts={contracts} retentions={retentions} onRefresh={loadAll} />}
+          {tab === "trades" && <TradeTab teamId={effectiveTeamId} league={effectiveLeague} leagueSlug={leagueSlug} contracts={contracts} allTeams={allTeams} seasonTeamIds={seasonTeamIds} onRefresh={loadAll} />}
+          {tab === "coaches" && <CoachesTab teamId={effectiveTeamId} leagueSlug={leagueSlug} contracts={contracts} onRefresh={loadAll} />}
+          {tab === "cut" && <CutTab teamId={effectiveTeamId} leagueSlug={leagueSlug} contracts={contracts} onRefresh={loadAll} />}
+          {tab === "portal" && <PortalTab teamId={effectiveTeamId} leagueSlug={leagueSlug} contracts={contracts} onRefresh={loadAll} />}
+          {tab === "management" && !isAdmin && effectiveRole !== "gm" && (
+            <GMTab teamId={effectiveTeamId} league={effectiveLeague} season={effectiveSeason} onRefresh={loadAll} />
           )}
         </div>
       </div>
