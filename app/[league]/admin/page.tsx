@@ -6593,7 +6593,7 @@ function SigningsAdminTab({ league }: { league: string }) {
     if (!r.ok) {
       setNotifyMsg(`Error: ${d.error ?? "failed"}`);
     } else if (d.notified === 0) {
-      setNotifyMsg(d.message ?? `✓ No offers ready to send yet (${d.total_groups ?? 0} groups checked)`);
+      setNotifyMsg(d.message ?? `⚠ ${d.total_groups ?? 0} player(s) with offers but none DM'd — they may not have Discord linked on their profile`);
     } else {
       setNotifyMsg(`✓ Sent DMs to ${d.notified} player${d.notified !== 1 ? "s" : ""}`);
     }

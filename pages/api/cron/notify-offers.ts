@@ -74,7 +74,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Most recent offer (already sorted descending)
     const mostRecentOffer = offers[0];
     const elapsed = now - new Date(mostRecentOffer.offered_at).getTime();
-    if (elapsed < HOURS_24_MS) continue; // 12-hour window hasn't passed yet
+    // Cron: skip if 24-hour window hasn't opened yet. Admin manual send: always notify.
+    if (!isAdminPost && elapsed < HOURS_24_MS) continue;
 
     const league = offers[0].league as string;
     const label = LEAGUE_LABELS[league] ?? league.toUpperCase();
