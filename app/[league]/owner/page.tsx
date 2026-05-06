@@ -1256,6 +1256,7 @@ export default function OwnerPage() {
   const [retentions, setRetentions] = useState<CapRetention[]>([]);
   const [auctions, setAuctions] = useState<Auction[]>([]);
   const [allTeams, setAllTeams] = useState<Team[]>([]);
+  const [currentSeasonTeams, setCurrentSeasonTeams] = useState<Team[]>([]);
   const [seasonTeamIds, setSeasonTeamIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"roster" | "bid" | "trades" | "signings" | "cut" | "portal" | "coaches" | "management">("roster");
@@ -1300,19 +1301,47 @@ export default function OwnerPage() {
       const teams = Array.isArray(teamsData) ? teamsData : [];
       setAllTeams(teams);
 
-      // Load team IDs for the owner's season to filter the trade dropdown
+      // Fetch all team-owners to determine the current (latest) season
+      const allOwnersRes = await fetch(`/api/team-owners?league=${leagueSlug}`);
+      const allOwnersData: any[] = await allOwnersRes.json().catch(() => []);
+
+      // Find the latest season by parsing "Season N" → N
+      const latestSeason = Array.isArray(allOwnersData)
+        ? allOwnersData
+            .map((o) => o.season as string | null)
+            .filter(Boolean)
+            .reduce((best, s) => {
+              const n = parseInt((s ?? "").replace(/\D/g, "")) || 0;
+              const b = parseInt((best ?? "").replace(/\D/g, "")) || 0;
+              return n > b ? s : best;
+            }, null as string | null)
+        : null;
+
+      // Team IDs active in the current season
+      const currentSeasonIds = new Set(
+        Array.isArray(allOwnersData) && latestSeason
+          ? allOwnersData.filter((o) => o.season === latestSeason).map((o) => o.team_id as string).filter(Boolean)
+          : []
+      );
+
+      const inSeasonTeams = teams.filter((t) => currentSeasonIds.has(t.id));
+      setCurrentSeasonTeams(inSeasonTeams);
+
+      // Load trade-dropdown team IDs for the owner's season
       if (record?.season) {
-        const ownersRes = await fetch(`/api/team-owners?league=${leagueSlug}&season=${encodeURIComponent(record.season)}`);
-        const ownersData = await ownersRes.json().catch(() => []);
-        setSeasonTeamIds(Array.isArray(ownersData) ? ownersData.map((o: any) => o.team_id).filter(Boolean) : []);
+        setSeasonTeamIds(
+          Array.isArray(allOwnersData)
+            ? allOwnersData.filter((o) => o.season === record.season).map((o) => o.team_id).filter(Boolean)
+            : []
+        );
       } else {
         setSeasonTeamIds([]);
       }
 
       const ownerTeamId = record?.teams?.id;
-      if (admin && !ownerTeamId && teams.length > 0) {
-        // Admin with no own team — default to first team
-        const firstId = teams[0].id;
+      if (admin && !ownerTeamId && inSeasonTeams.length > 0) {
+        // Admin with no own team — default to first current-season team
+        const firstId = inSeasonTeams[0].id;
         setAdminViewTeamId(firstId);
         await loadTeamData(firstId);
       } else if (ownerTeamId) {
@@ -1366,7 +1395,7 @@ export default function OwnerPage() {
 
   // Admins can view any team; resolve the effective team
   const effectiveTeamId = isAdmin && adminViewTeamId ? adminViewTeamId : ownerRecord?.teams?.id ?? "";
-  const team: Team = (isAdmin && adminViewTeamId ? allTeams.find((t) => t.id === adminViewTeamId) : null) ?? ownerRecord?.teams ?? allTeams[0];
+  const team: Team = (isAdmin && adminViewTeamId ? currentSeasonTeams.find((t) => t.id === adminViewTeamId) : null) ?? ownerRecord?.teams ?? currentSeasonTeams[0];
   const effectiveLeague = ownerRecord?.league ?? leagueSlug;
   const effectiveSeason = ownerRecord?.season ?? null;
   const effectiveRole = ownerRecord?.role ?? null;
@@ -1384,7 +1413,7 @@ export default function OwnerPage() {
             onChange={(e) => setAdminViewTeamId(e.target.value)}
             style={{ ...input, width: "auto", flex: 1, minWidth: 180, fontSize: 13 }}
           >
-            {allTeams.map((t) => (
+            {currentSeasonTeams.map((t) => (
               <option key={t.id} value={t.id}>{t.name} ({t.abbreviation})</option>
             ))}
           </select>
