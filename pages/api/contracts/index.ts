@@ -52,6 +52,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .from("player_teams")
       .upsert([{ mc_uuid, team_id, league, season: season ?? null }], { onConflict: "mc_uuid,league" });
 
+    // Cancel any active/pending auctions for this player and invalidate their bids
+    const { data: openAuctions } = await supabase
+      .from("auctions")
+      .update({ status: "cancelled" })
+      .eq("mc_uuid", mc_uuid)
+      .eq("league", league)
+      .in("status", ["active", "pending", "player_choice"])
+      .select("id");
+    if (openAuctions && openAuctions.length > 0) {
+      const auctionIds = openAuctions.map((a: any) => a.id);
+      await supabase.from("auction_bids").update({ is_valid: false }).in("auction_id", auctionIds).eq("is_valid", true);
+    }
+
     // Fire transactions webhook
     const LEAGUE_LABELS: Record<string, string> = { pba: "MBA", pcaa: "MCAA", pbgl: "MBGL" };
     const LEAGUE_COLORS: Record<string, number>  = { pba: 0xC8102E, pcaa: 0x003087, pbgl: 0xBB3430 };
