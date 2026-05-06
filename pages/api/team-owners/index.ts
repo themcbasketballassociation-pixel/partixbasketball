@@ -33,12 +33,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === "POST") {
-    const admin = await requireAdmin(req, res);
-    if (!admin) return;
+    const { getServerSession } = await import("next-auth");
+    const { authOptions } = await import("../auth/[...nextauth]");
+    const session = await getServerSession(req, res, authOptions as any);
+    if (!session) return res.status(401).json({ error: "Unauthorized" });
+    const callerId = ((session as any).user as any)?.id?.toString();
+    const isAdmin = process.env.ADMIN_DISCORD_IDS?.split(",").map((s) => s.trim()).includes(callerId ?? "");
+
     const { discord_id, team_id, league: leagueRaw, season, owner_name, role } = req.body;
     const league = resolveLeague(leagueRaw);
     if (!discord_id || !team_id || !league)
       return res.status(400).json({ error: "discord_id, team_id, league required" });
+
+    // Non-admins can only add GMs to their own team (must be owner, not gm)
+    if (!isAdmin) {
+      if (role !== "gm") return res.status(403).json({ error: "Only admins can assign owners" });
+      const { data: callerRecord } = await supabase
+        .from("team_owners")
+        .select("role")
+        .eq("discord_id", callerId ?? "")
+        .eq("team_id", team_id)
+        .eq("league", league)
+        .maybeSingle();
+      if (!callerRecord || (callerRecord as any).role !== "owner")
+        return res.status(403).json({ error: "Only the team owner can add a GM" });
+    }
 
     // Remove any existing assignment for this discord+team+league (owner or gm)
     await supabase.from("team_owners").delete().match({ discord_id, team_id, league });
