@@ -696,7 +696,7 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [playerTeams, setPlayerTeams] = useState<{ mc_uuid: string; team_id: string; players: Player }[]>([]);
   const [addingToTeam, setAddingToTeam] = useState<Record<string, string>>({});
-  const [contracts, setContracts] = useState<{ mc_uuid: string; team_id: string; amount: number; status: string }[]>([]);
+  const [contracts, setContracts] = useState<{ id: string; mc_uuid: string; team_id: string; amount: number; status: string; players?: { mc_uuid: string; mc_username: string } }[]>([]);
   const [connectFrom, setConnectFrom] = useState(SEASONS[SEASONS.length - 1]);
   const [connectTo, setConnectTo] = useState(SEASONS[SEASONS.length - 2] ?? SEASONS[0]);
   const [connecting, setConnecting] = useState(false);
@@ -1134,12 +1134,14 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
                     </div>
                     {/* Roster */}
                     {(() => {
-                      const roster = playerTeams.filter((pt) => pt.team_id === t.id);
-                      const assigned = new Set(playerTeams.map((pt) => pt.mc_uuid));
+                      // Source roster from contracts (matches team portal), dedup by mc_uuid
+                      const teamContracts = contracts.filter((c) => c.team_id === t.id);
+                      const seenUuids = new Set<string>();
+                      const roster = teamContracts.filter((c) => { if (seenUuids.has(c.mc_uuid)) return false; seenUuids.add(c.mc_uuid); return true; });
+                      const assigned = new Set(contracts.map((c) => c.mc_uuid));
                       const unassigned = allPlayers.filter((p) => !assigned.has(p.mc_uuid));
-                      const contractMap = Object.fromEntries(contracts.filter((c) => c.team_id === t.id).map((c) => [c.mc_uuid, c.amount]));
                       const TOTAL_CAP = 25000;
-                      const capUsed = contracts.filter((c) => c.team_id === t.id).reduce((s, c) => s + c.amount, 0);
+                      const capUsed = roster.reduce((s, c) => s + c.amount, 0);
                       return (
                         <div className="mt-3 pt-3 border-t border-slate-800">
                           <div className="flex items-center justify-between mb-2">
@@ -1152,25 +1154,25 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
                           </div>
                           {roster.length > 0 && (
                             <div className="flex flex-wrap gap-1.5 mb-3">
-                              {roster.map((pt) => {
-                                const salary = contractMap[pt.mc_uuid];
+                              {roster.map((c) => {
+                                const username = c.players?.mc_username ?? c.mc_uuid;
                                 return (
-                                  <div key={pt.mc_uuid} className="flex items-center gap-1.5 rounded-lg bg-slate-800 border border-slate-700 pl-1 pr-2 py-1">
+                                  <div key={c.mc_uuid} className="flex items-center gap-1.5 rounded-lg bg-slate-800 border border-slate-700 pl-1 pr-2 py-1">
                                     <img
-                                      src={`https://minotar.net/avatar/${pt.players?.mc_username ?? "MHF_Steve"}/20`}
-                                      alt={pt.players?.mc_username}
+                                      src={`https://minotar.net/avatar/${username}/20`}
+                                      alt={username}
                                       className="w-5 h-5 rounded-full flex-shrink-0"
                                       onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/20"; }}
                                     />
-                                    <span className="text-xs text-white font-semibold">{pt.players?.mc_username}</span>
-                                    {salary != null && (
+                                    <span className="text-xs text-white font-semibold">{username}</span>
+                                    {c.amount > 0 && (
                                       <span className="text-[10px] font-bold text-green-400 bg-green-950/60 border border-green-800/50 rounded px-1">
-                                        ${salary.toLocaleString()}
+                                        ${c.amount.toLocaleString()}
                                       </span>
                                     )}
                                     <button
                                       className="text-slate-500 hover:text-red-400 transition text-xs leading-none ml-0.5"
-                                      onClick={() => removeFromTeam(pt.mc_uuid)}
+                                      onClick={() => removeFromTeam(c.mc_uuid)}
                                       title="Remove from team"
                                     >✕</button>
                                   </div>

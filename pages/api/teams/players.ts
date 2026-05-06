@@ -74,6 +74,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
+    // Always expire any existing active contracts to prevent duplicates
+    await supabase
+      .from("contracts")
+      .update({ status: "expired" })
+      .eq("mc_uuid", mc_uuid)
+      .eq("league", league)
+      .in("status", ["active", "pending_approval"]);
+
     if (contractAmount != null && contractAmount > 0) {
       // Cancel any active or pending auction for this player
       await supabase
@@ -82,14 +90,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .eq("mc_uuid", mc_uuid)
         .eq("league", league)
         .in("status", ["active", "pending"]);
-
-      // Expire any existing active contracts so there's no duplicate
-      await supabase
-        .from("contracts")
-        .update({ status: "expired" })
-        .eq("mc_uuid", mc_uuid)
-        .eq("league", league)
-        .in("status", ["active", "pending_approval"]);
 
       // Create the new contract
       const { error: contractErr } = await supabase

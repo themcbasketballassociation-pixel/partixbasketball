@@ -91,8 +91,12 @@ function CapBar({ contracts, retentions }: { contracts: Contract[]; retentions: 
 // ── RosterTab ──────────────────────────────────────────────────────────────────
 function RosterTab({ contracts, retentions, leagueSlug }: { contracts: Contract[]; retentions: CapRetention[]; leagueSlug: string }) {
   const showCap = leagueSlug !== "mcaa" && leagueSlug !== "mbgl";
-  const players = contracts.filter((c) => c.phase !== 0);
-  const coaches = contracts.filter((c) => c.phase === 0);
+  const dedup = (arr: Contract[]) => {
+    const seen = new Set<string>();
+    return arr.filter((c) => { if (seen.has(c.players.mc_uuid)) return false; seen.add(c.players.mc_uuid); return true; });
+  };
+  const players = dedup(contracts.filter((c) => c.phase !== 0));
+  const coaches = dedup(contracts.filter((c) => c.phase === 0));
   return (
     <div>
       {showCap && <CapBar contracts={contracts} retentions={retentions} />}
