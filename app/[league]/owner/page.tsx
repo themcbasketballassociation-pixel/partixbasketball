@@ -144,7 +144,11 @@ function RosterTab({ contracts, retentions, leagueSlug }: { contracts: Contract[
           <div style={{ color: "#555", fontSize: 12, fontWeight: 600, marginBottom: 8, textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>Cap Retentions</div>
           {retentions.filter((r) => r.status === "active").map((r) => (
             <div key={r.id} style={{ ...innerCard, display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-              <span style={{ color: "#aaa", fontSize: 13 }}>Retained: {r.mc_uuid.slice(0, 8)}…</span>
+              <span style={{ color: "#aaa", fontSize: 13 }}>
+                {r.mc_uuid
+                  ? `Retained: ${(r as any).players?.mc_username ?? r.mc_uuid.slice(0, 8) + "…"}`
+                  : "Cash retention"}
+              </span>
               <span style={{ color: "#a855f7", fontWeight: 600 }}>{fmt(r.retention_amount)}/yr</span>
             </div>
           ))}
