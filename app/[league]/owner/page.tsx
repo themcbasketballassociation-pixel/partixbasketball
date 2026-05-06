@@ -53,8 +53,11 @@ function CapBar({ contracts, retentions }: { contracts: Contract[]; retentions: 
   const used = contracts.reduce((s, c) => s + c.amount, 0);
   const retentionTotal = retentions.filter((r) => r.status === "active").reduce((s, r) => s + r.retention_amount, 0);
   const totalHit = used + retentionTotal;
+  // Cash received (negative retention) raises the effective court cap ceiling
+  const cashReceived = Math.max(0, -retentionTotal);
+  const effectiveCourtCap = COURT_CAP + cashReceived;
   const pct = Math.min((totalHit / TOTAL_CAP) * 100, 100);
-  const courtPct = Math.min((used / COURT_CAP) * 100, 100);
+  const courtPct = Math.min((used / effectiveCourtCap) * 100, 100);
 
   const color = totalHit > TOTAL_CAP * 0.9 ? "#ef4444" : totalHit > TOTAL_CAP * 0.75 ? "#f97316" : "#22d3ee";
 
@@ -68,12 +71,17 @@ function CapBar({ contracts, retentions }: { contracts: Contract[]; retentions: 
         <div style={{ background: color, width: `${pct}%`, height: "100%", transition: "width 0.3s", borderRadius: 4 }} />
       </div>
       <div style={{ display: "flex", justifyContent: "space-between" }}>
-        <span style={{ color: "#555", fontSize: 12 }}>Court cap: {fmt(used + retentionTotal)} / {fmt(COURT_CAP)}</span>
+        <span style={{ color: "#555", fontSize: 12 }}>Court cap: {fmt(used)} / {fmt(effectiveCourtCap)}</span>
         <span style={{ color: "#555", fontSize: 12 }}>Remaining: {fmt(TOTAL_CAP - totalHit)}</span>
       </div>
       {retentionTotal > 0 && (
         <div style={{ color: "#a78bfa", fontSize: 12, marginTop: 4 }}>
           Includes {fmt(retentionTotal)} in retained salary
+        </div>
+      )}
+      {cashReceived > 0 && (
+        <div style={{ color: "#22d3ee", fontSize: 12, marginTop: 4 }}>
+          +{fmt(cashReceived)} cash received — court cap raised to {fmt(effectiveCourtCap)}
         </div>
       )}
     </div>
@@ -147,9 +155,11 @@ function RosterTab({ contracts, retentions, leagueSlug }: { contracts: Contract[
               <span style={{ color: "#aaa", fontSize: 13 }}>
                 {r.mc_uuid
                   ? `Retained: ${(r as any).players?.mc_username ?? r.mc_uuid.slice(0, 8) + "…"}`
-                  : "Cash retention"}
+                  : r.retention_amount < 0 ? "Cash received" : "Cash paid"}
               </span>
-              <span style={{ color: "#a855f7", fontWeight: 600 }}>{fmt(r.retention_amount)}/yr</span>
+              <span style={{ color: r.retention_amount < 0 ? "#22d3ee" : "#a855f7", fontWeight: 600 }}>
+                {r.retention_amount < 0 ? "+" : ""}{fmt(Math.abs(r.retention_amount))}/yr
+              </span>
             </div>
           ))}
         </div>
