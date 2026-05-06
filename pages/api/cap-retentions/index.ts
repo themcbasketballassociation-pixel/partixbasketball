@@ -27,13 +27,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { requireAdmin } = await import("../../../lib/adminAuth");
     const admin = await requireAdmin(req, res);
     if (!admin) return;
-    const { league: leagueRaw, team_id, mc_uuid, retention_amount, status: retStatus, label } = req.body;
+    const { league: leagueRaw, team_id, mc_uuid, retention_amount, status: retStatus } = req.body;
     const league = resolveLeague(leagueRaw);
     if (!league || !team_id || retention_amount == null)
       return res.status(400).json({ error: "league, team_id, retention_amount required" });
     const { data, error } = await supabase
       .from("cap_retentions")
-      .insert([{ league, retaining_team_id: team_id, mc_uuid: mc_uuid || null, retention_amount: Number(retention_amount), status: retStatus ?? "active", label: label || null }])
+      .insert([{ league, retaining_team_id: team_id, mc_uuid: mc_uuid || null, retention_amount: Number(retention_amount), status: retStatus ?? "active" }])
       .select()
       .single();
     if (error) return res.status(500).json({ error: error.message });
@@ -44,13 +44,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { requireAdmin } = await import("../../../lib/adminAuth");
     const admin = await requireAdmin(req, res);
     if (!admin) return;
-    const { id, retention_amount, status: retStatus, team_id, label } = req.body;
+    const { id, retention_amount, status: retStatus, team_id } = req.body;
     if (!id) return res.status(400).json({ error: "id required" });
     const updates: Record<string, unknown> = {};
     if (retention_amount != null) updates.retention_amount = Number(retention_amount);
     if (retStatus) updates.status = retStatus;
     if (team_id) updates.retaining_team_id = team_id;
-    if (label !== undefined) updates.label = label;
     const { data, error } = await supabase.from("cap_retentions").update(updates).eq("id", id).select().single();
     if (error) return res.status(500).json({ error: error.message });
     return res.status(200).json(data);

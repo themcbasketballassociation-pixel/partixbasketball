@@ -7266,19 +7266,18 @@ function CrewAdminTab({ league }: { league: string }) {
 
 // ─── CapRetentionsAdminTab ────────────────────────────────────────────────────
 function CapRetentionsAdminTab({ league }: { league: string }) {
-  type RetentionRow = { id: string; retaining_team_id: string; mc_uuid: string | null; retention_amount: number; status: string; label: string | null; players?: { mc_username: string } | null };
+  type RetentionRow = { id: string; retaining_team_id: string; mc_uuid: string | null; retention_amount: number; status: string; players?: { mc_username: string } | null };
   type TeamRow = { id: string; name: string; abbreviation: string };
 
   const [rows, setRows] = useState<RetentionRow[]>([]);
   const [teams, setTeams] = useState<TeamRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState<Record<string, { amount: string; team_id: string; label: string }>>({});
+  const [editing, setEditing] = useState<Record<string, { amount: string; team_id: string }>>({});
   const [saving, setSaving] = useState<string | null>(null);
   const [msg, setMsg] = useState<Record<string, string>>({});
   // new row form
   const [newTeam, setNewTeam] = useState("");
   const [newAmount, setNewAmount] = useState("");
-  const [newLabel, setNewLabel] = useState("");
   const [adding, setAdding] = useState(false);
   const [addMsg, setAddMsg] = useState("");
 
@@ -7316,7 +7315,7 @@ function CapRetentionsAdminTab({ league }: { league: string }) {
   useEffect(() => { load(); }, [load]);
 
   const startEdit = (r: RetentionRow) => {
-    setEditing((e) => ({ ...e, [r.id]: { amount: String(r.retention_amount), team_id: r.retaining_team_id, label: r.label ?? "" } }));
+    setEditing((e) => ({ ...e, [r.id]: { amount: String(r.retention_amount), team_id: r.retaining_team_id } }));
   };
 
   const save = async (id: string) => {
@@ -7326,7 +7325,7 @@ function CapRetentionsAdminTab({ league }: { league: string }) {
     const r = await fetch("/api/cap-retentions", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, retention_amount: parseInt(e.amount) || 0, team_id: e.team_id, label: e.label || null }),
+      body: JSON.stringify({ id, retention_amount: parseInt(e.amount) || 0, team_id: e.team_id }),
     });
     const d = await r.json();
     setSaving(null);
@@ -7354,12 +7353,12 @@ function CapRetentionsAdminTab({ league }: { league: string }) {
     const r = await fetch("/api/cap-retentions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ league, team_id: newTeam, retention_amount: parseInt(newAmount) || 0, label: newLabel || null }),
+      body: JSON.stringify({ league, team_id: newTeam, retention_amount: parseInt(newAmount) || 0 }),
     });
     const d = await r.json();
     setAdding(false);
     if (!r.ok) { setAddMsg(d.error); return; }
-    setNewTeam(""); setNewAmount(""); setNewLabel(""); setAddMsg("Added");
+    setNewTeam(""); setNewAmount(""); setAddMsg("Added");
     load();
   };
 
@@ -7394,10 +7393,6 @@ function CapRetentionsAdminTab({ league }: { league: string }) {
                       <div className="text-slate-500 text-xs mb-1">Amount (can be negative)</div>
                       <input type="number" className={input} style={{ width: 130 }} value={e.amount} onChange={(ev) => setEditing((ed) => ({ ...ed, [r.id]: { ...e, amount: ev.target.value } }))} />
                     </div>
-                    <div>
-                      <div className="text-slate-500 text-xs mb-1">Label</div>
-                      <input className={input} style={{ width: 140 }} value={e.label} placeholder="e.g. Cash retention" onChange={(ev) => setEditing((ed) => ({ ...ed, [r.id]: { ...e, label: ev.target.value } }))} />
-                    </div>
                     <button className={btnPrimary} disabled={saving === r.id} onClick={() => save(r.id)}>{saving === r.id ? "Saving…" : "Save"}</button>
                     <button className={btnSecondary} onClick={() => setEditing((ed) => { const c = { ...ed }; delete c[r.id]; return c; })}>Cancel</button>
                   </div>
@@ -7405,7 +7400,7 @@ function CapRetentionsAdminTab({ league }: { league: string }) {
                   <div className="flex items-center gap-3">
                     <div className="flex-1">
                       <div className="text-white font-semibold">{teamName(r.retaining_team_id)}</div>
-                      <div className="text-slate-500 text-xs">{r.label ?? (r.mc_uuid ? `Retained: ${r.players?.mc_username ?? r.mc_uuid.slice(0,8)}` : "Cash retention")}</div>
+                      <div className="text-slate-500 text-xs">{r.mc_uuid ? `Retained: ${r.players?.mc_username ?? r.mc_uuid.slice(0,8)}` : "Cash retention"}</div>
                     </div>
                     <div className={`font-bold text-sm ${r.retention_amount < 0 ? "text-red-400" : "text-purple-400"}`}>{r.retention_amount > 0 ? "+" : ""}{r.retention_amount.toLocaleString()}/yr</div>
                     <button className={btnSecondary} onClick={() => startEdit(r)}>Edit</button>
@@ -7433,10 +7428,6 @@ function CapRetentionsAdminTab({ league }: { league: string }) {
           <div>
             <div className="text-slate-500 text-xs mb-1">Amount (negative = cap credit)</div>
             <input type="number" className={input} style={{ width: 160 }} value={newAmount} placeholder="e.g. 1000 or -1000" onChange={(e) => setNewAmount(e.target.value)} />
-          </div>
-          <div>
-            <div className="text-slate-500 text-xs mb-1">Label</div>
-            <input className={input} style={{ width: 160 }} value={newLabel} placeholder="Cash retention" onChange={(e) => setNewLabel(e.target.value)} />
           </div>
           <button className={btnPrimary} disabled={adding} onClick={addRow}>{adding ? "Adding…" : "Add"}</button>
         </div>
