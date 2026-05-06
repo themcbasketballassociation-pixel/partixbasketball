@@ -7284,14 +7284,32 @@ function CapRetentionsAdminTab({ league }: { league: string }) {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [retRes, teamRes] = await Promise.all([
+    const [retRes, teamRes, ownersRes] = await Promise.all([
       fetch(`/api/cap-retentions?league=${league}&status=active`),
       fetch(`/api/teams?league=${league}`),
+      fetch(`/api/team-owners?league=${league}`),
     ]);
     const retData = await retRes.json();
-    const teamData = await teamRes.json();
+    const allTeamsRaw: TeamRow[] = await teamRes.json().then((d) => Array.isArray(d) ? d : []).catch(() => []);
+    const ownersData: any[] = await ownersRes.json().catch(() => []);
+
+    // Find latest season
+    const latestSeason = Array.isArray(ownersData)
+      ? ownersData.map((o) => o.season as string | null).filter(Boolean)
+          .reduce((best, s) => {
+            const n = parseInt((s ?? "").replace(/\D/g, "")) || 0;
+            const b = parseInt((best ?? "").replace(/\D/g, "")) || 0;
+            return n > b ? s : best;
+          }, null as string | null)
+      : null;
+    const currentIds = new Set(
+      Array.isArray(ownersData) && latestSeason
+        ? ownersData.filter((o) => o.season === latestSeason).map((o) => o.team_id as string).filter(Boolean)
+        : []
+    );
+
     setRows(Array.isArray(retData) ? retData : []);
-    setTeams(Array.isArray(teamData) ? teamData : []);
+    setTeams(allTeamsRaw.filter((t) => currentIds.has(t.id)));
     setLoading(false);
   }, [league]);
 
