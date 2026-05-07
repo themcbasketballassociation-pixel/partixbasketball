@@ -573,13 +573,23 @@ export default function TeamsPage({ params }: { params?: Promise<{ league?: stri
     setLoading(true);
     Promise.all([
       fetch(`/api/teams?league=${slug}&season=${encodeURIComponent(season)}`).then(r => r.json()),
-      fetch(`/api/teams/players?league=${slug}&season=${encodeURIComponent(season)}`).then(r => r.json()),
-      fetch(`/api/contracts?league=${slug}&season=${encodeURIComponent(season)}&status=active`).then(r => r.json()),
-    ]).then(([t, pt, c]) => {
+      fetch(`/api/contracts?league=${slug}&status=active`).then(r => r.json()),
+    ]).then(([t, c]) => {
       const loadedTeams: Team[] = Array.isArray(t) ? t : [];
       setTeams(loadedTeams);
-      setPlayerTeams(Array.isArray(pt) ? pt : []);
-      setContracts(Array.isArray(c) ? c : []);
+      const contractsData: ContractFull[] = Array.isArray(c) ? c : [];
+      setContracts(contractsData);
+      // Build deduped PlayerTeam list from contracts so roster matches admin tab
+      const seenPerTeam = new Map<string, Set<string>>();
+      const ptFromContracts: PlayerTeam[] = [];
+      for (const ct of contractsData) {
+        if (!seenPerTeam.has(ct.team_id)) seenPerTeam.set(ct.team_id, new Set());
+        if (!seenPerTeam.get(ct.team_id)!.has(ct.mc_uuid)) {
+          seenPerTeam.get(ct.team_id)!.add(ct.mc_uuid);
+          ptFromContracts.push({ mc_uuid: ct.mc_uuid, team_id: ct.team_id, season: ct.season, players: ct.players });
+        }
+      }
+      setPlayerTeams(ptFromContracts);
       setLoading(false);
       // Auto-open team from URL param
       if (urlTeamId && !selectedTeam) {
@@ -597,7 +607,14 @@ export default function TeamsPage({ params }: { params?: Promise<{ league?: stri
 
   const capByTeam = React.useMemo(() => {
     const m = new Map<string, number>();
-    for (const c of contracts) m.set(c.team_id, (m.get(c.team_id) ?? 0) + c.amount);
+    const seen = new Map<string, Set<string>>();
+    for (const c of contracts) {
+      if (!seen.has(c.team_id)) seen.set(c.team_id, new Set());
+      if (!seen.get(c.team_id)!.has(c.mc_uuid)) {
+        seen.get(c.team_id)!.add(c.mc_uuid);
+        m.set(c.team_id, (m.get(c.team_id) ?? 0) + c.amount);
+      }
+    }
     return m;
   }, [contracts]);
 
