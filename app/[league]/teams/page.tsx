@@ -545,7 +545,7 @@ export default function TeamsPage({ params }: { params?: Promise<{ league?: stri
 
   const [teams, setTeams] = React.useState<Team[]>([]);
   const [playerTeams, setPlayerTeams] = React.useState<PlayerTeam[]>([]);
-  const [contracts, setContracts] = React.useState<ContractSimple[]>([]);
+  const [contracts, setContracts] = React.useState<ContractFull[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [seasons, setSeasons] = React.useState<string[]>([]);
   const [season, setSeason] = React.useState<string>("");
