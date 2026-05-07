@@ -1511,8 +1511,8 @@ export default function OwnerPage() {
               ? [["roster", "Roster"], ["coaches", "Coaches"], ["signings", "Signings"], ["cut", "Cut Player"], ["portal", "Transfer Portal"]]
               : [["roster", "Roster"], ["signings", "Signings"], ["bid", `Live Auctions (${auctions.filter((a) => a.status === "active").length})`], ["trades", "Trades"]]
             ),
-            // Only actual owners (not GMs, not admin-view) can manage the GM roster
-            ...(!isAdmin && effectiveRole !== "gm" ? [["management", "👑 Owner"]] : []),
+            // Owners and admins can manage the GM roster (not GMs themselves)
+            ...(effectiveRole !== "gm" ? [["management", "👑 Owner"]] : []),
           ].map(([t, label]) => (
             <button
               key={t}
@@ -1536,7 +1536,7 @@ export default function OwnerPage() {
           {tab === "coaches" && <CoachesTab teamId={effectiveTeamId} leagueSlug={leagueSlug} contracts={contracts} onRefresh={loadAll} />}
           {tab === "cut" && <CutTab teamId={effectiveTeamId} leagueSlug={leagueSlug} contracts={contracts} onRefresh={loadAll} />}
           {tab === "portal" && <PortalTab teamId={effectiveTeamId} leagueSlug={leagueSlug} contracts={contracts} onRefresh={loadAll} />}
-          {tab === "management" && !isAdmin && effectiveRole !== "gm" && (
+          {tab === "management" && effectiveRole !== "gm" && (
             <GMTab teamId={effectiveTeamId} league={effectiveLeague} season={effectiveSeason} onRefresh={loadAll} />
           )}
         </div>
