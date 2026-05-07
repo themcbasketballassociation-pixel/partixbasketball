@@ -514,10 +514,42 @@ function TradeTab({ teamId, league, leagueSlug, contracts, allTeams, seasonTeamI
     </div>
   );
 
+  const AssetList = ({ assets }: { assets: Trade["trade_assets"] }) => (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      {assets.length === 0
+        ? <div style={{ color: "#333", fontSize: 12 }}>—</div>
+        : assets.map((a) => (
+          <div key={a.id} style={{ ...innerCard, display: "flex", alignItems: "center", gap: 8, padding: "6px 10px" }}>
+            {a.contracts && (
+              <img
+                src={`https://minotar.net/avatar/${a.contracts.players.mc_username}/24`}
+                style={{ width: 24, height: 24, borderRadius: 4, border: "1px solid #222", flexShrink: 0 }}
+                onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/24"; }}
+                alt=""
+              />
+            )}
+            <span style={{ color: "#aaa", fontSize: 12, flex: 1 }}>
+              {a.pick_id && a.draft_picks
+                ? `${a.draft_picks.season ?? ""} R${a.draft_picks.round}${a.draft_picks.original_team ? ` (${a.draft_picks.original_team.abbreviation})` : ""}`
+                : a.contracts
+                  ? a.contracts.players.mc_username
+                  : "Cash retention"}
+            </span>
+            {a.contracts && <span style={{ color: "#22d3ee", fontWeight: 700, fontSize: 12 }}>${fmt(a.contracts.amount)}</span>}
+            {(a.retention_amount ?? 0) > 0 && <span style={{ color: "#a855f7", fontSize: 11, flexShrink: 0 }}>ret. ${fmt(a.retention_amount)}</span>}
+          </div>
+        ))}
+    </div>
+  );
+
   return (
     <div>
+      <div style={{ background: "#0d1117", border: "1px solid #1a2030", borderRadius: 8, padding: "8px 12px", marginBottom: 16, fontSize: 12, color: "#555" }}>
+        Propose trades with other teams · Both teams must agree · Admin reviews before it's official
+      </div>
+
       {/* Propose trade form */}
-      <div style={{ ...innerCard, marginBottom: 20 }}>
+      <div style={{ ...innerCard, marginBottom: 24 }}>
         <div style={{ color: "#aaa", fontWeight: 700, marginBottom: 16 }}>Propose a Trade</div>
         <div style={{ marginBottom: 12 }}>
           <label style={{ color: "#555", fontSize: 12, display: "block", marginBottom: 4 }}>Trade with</label>
@@ -534,8 +566,8 @@ function TradeTab({ teamId, league, leagueSlug, contracts, allTeams, seasonTeamI
           <label style={{ color: "#555", fontSize: 12, display: "block", marginBottom: 4 }}>Notes (optional)</label>
           <input style={input} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Any notes for the other team / admin…" />
         </div>
-        <div style={{ background: "#0d1117", border: "1px solid #1a2030", borderRadius: 8, padding: "8px 12px", marginBottom: 12, fontSize: 12, color: "#555" }}>
-          Retention: max 1,000 per team total · giving 1k retention leaves you 21k court cap space; receiving 1k gives them 23k · leave player blank to offer standalone retention cash
+        <div style={{ background: "#0d1117", border: "1px solid #1a2030", borderRadius: 8, padding: "8px 12px", marginBottom: 12, fontSize: 12, color: "#444" }}>
+          Retention: max 1,000 per team total · leave player blank to offer standalone cash retention
         </div>
         {err && <div style={{ color: "#fca5a5", background: "#450a0a", border: "1px solid #7f1d1d", borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 13 }}>{err}</div>}
         <button onClick={submitTrade} disabled={submitting} style={{ ...btn("primary"), opacity: submitting ? 0.5 : 1 }}>
@@ -555,37 +587,42 @@ function TradeTab({ teamId, league, leagueSlug, contracts, allTeams, seasonTeamI
             const iProposed = t.proposing_team_id === teamId;
             const canAccept = !iProposed && t.status === "pending";
             const canCancel = iProposed && t.status === "pending";
+            const otherTeam = iProposed ? t.receiving_team.name : t.proposing_team.name;
+            const mySide = (t.trade_assets ?? []).filter((a) => a.from_team_id === (iProposed ? t.proposing_team_id : t.receiving_team_id));
+            const theirSide = (t.trade_assets ?? []).filter((a) => a.from_team_id === (iProposed ? t.receiving_team_id : t.proposing_team_id));
             return (
               <div key={t.id} style={{ ...innerCard }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                  <div style={{ color: "#aaa", fontSize: 13, fontWeight: 600 }}>
-                    {iProposed ? `You → ${t.receiving_team.name}` : `${t.proposing_team.name} → You`}
+                {/* Header */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                  <div style={{ color: "#fff", fontSize: 13, fontWeight: 700 }}>
+                    {iProposed ? `You → ${otherTeam}` : `${otherTeam} → You`}
                   </div>
                   {statusBadge(t.status)}
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
-                  {[
-                    { label: iProposed ? "You send" : "They send", assets: (t.trade_assets ?? []).filter((a) => a.from_team_id === t.proposing_team_id) },
-                    { label: iProposed ? "You receive" : "They receive", assets: (t.trade_assets ?? []).filter((a) => a.from_team_id === t.receiving_team_id) },
-                  ].map((side) => (
-                    <div key={side.label}>
-                      <div style={{ color: "#444", fontSize: 11, marginBottom: 4 }}>{side.label}</div>
-                      {side.assets.length === 0 ? <div style={{ color: "#333", fontSize: 12 }}>—</div> : side.assets.map((a) => (
-                        <div key={a.id} style={{ color: "#888", fontSize: 12, marginBottom: 2 }}>
-                          {a.contracts?.players.mc_username ?? "Unknown"} ({fmt(a.contracts?.amount ?? 0)})
-                          {(a.retention_amount ?? 0) > 0 && <span style={{ color: "#a855f7", marginLeft: 4 }}>ret. {fmt(a.retention_amount)}</span>}
-                        </div>
-                      ))}
+                {/* Assets */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+                  <div>
+                    <div style={{ color: "#444", fontSize: 11, fontWeight: 600, textTransform: "uppercase" as const, letterSpacing: "0.05em", marginBottom: 6 }}>
+                      You send
                     </div>
-                  ))}
+                    <AssetList assets={mySide} />
+                  </div>
+                  <div>
+                    <div style={{ color: "#444", fontSize: 11, fontWeight: 600, textTransform: "uppercase" as const, letterSpacing: "0.05em", marginBottom: 6 }}>
+                      You receive
+                    </div>
+                    <AssetList assets={theirSide} />
+                  </div>
                 </div>
                 {t.notes && <div style={{ color: "#555", fontSize: 12, fontStyle: "italic", marginBottom: 8 }}>"{t.notes}"</div>}
                 {t.admin_note && <div style={{ color: "#a78bfa", fontSize: 12, marginBottom: 8 }}>Admin: {t.admin_note}</div>}
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const }}>
-                  {canAccept && <button onClick={() => respondTrade(t.id, "accept")} style={btn("success")}>Accept</button>}
-                  {canAccept && <button onClick={() => respondTrade(t.id, "reject")} style={btn("danger")}>Reject</button>}
-                  {canCancel && <button onClick={() => respondTrade(t.id, "cancel")} style={btn("danger")}>Cancel</button>}
-                </div>
+                {(canAccept || canCancel) && (
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const, marginTop: 4 }}>
+                    {canAccept && <button onClick={() => respondTrade(t.id, "accept")} style={btn("success")}>Accept</button>}
+                    {canAccept && <button onClick={() => respondTrade(t.id, "reject")} style={btn("danger")}>Reject</button>}
+                    {canCancel && <button onClick={() => respondTrade(t.id, "cancel")} style={btn("danger")}>Cancel</button>}
+                  </div>
+                )}
               </div>
             );
           })}
