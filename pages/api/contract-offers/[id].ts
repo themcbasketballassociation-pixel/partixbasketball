@@ -61,31 +61,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!isPlayer && !isAdmin)
       return res.status(403).json({ error: "Only the player can accept this offer" });
 
-    // Enforce 24-hour window
-    const HOURS_24_MS = 24 * 60 * 60 * 1000;
-    const { data: allPending } = await supabase
-      .from("contract_offers")
-      .select("offered_at")
-      .eq("mc_uuid", offer.mc_uuid)
-      .eq("league", offer.league)
-      .eq("status", "pending")
-      .order("offered_at", { ascending: false });
-
-    const mostRecentOfferedAt = (allPending ?? [])[0]?.offered_at;
-    if (mostRecentOfferedAt && !isAdmin) {
-      const elapsed = Date.now() - new Date(mostRecentOfferedAt).getTime();
-      if (elapsed < HOURS_24_MS) {
-        const acceptableAt = new Date(new Date(mostRecentOfferedAt).getTime() + HOURS_24_MS);
-        const remainingMs = acceptableAt.getTime() - Date.now();
-        const h = Math.floor(remainingMs / 3600000);
-        const m = Math.floor((remainingMs % 3600000) / 60000);
-        return res.status(400).json({
-          error: `You cannot accept yet — wait ${h}h ${m}m more (24 hours from your most recent offer).`,
-          acceptable_at: acceptableAt.toISOString(),
-        });
-      }
-    }
-
     // Player must not already have an active/pending contract THIS season
     let contractQuery = supabase
       .from("contracts")
