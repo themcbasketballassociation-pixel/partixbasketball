@@ -730,7 +730,7 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
       fetch(`/api/teams/records?league=${league}&season=${encodeURIComponent(season)}`).then((r) => r.json()).catch(() => []),
       fetch(`/api/players`).then((r) => r.json()).catch(() => []),
       fetch(`/api/teams/players?league=${league}&season=${encodeURIComponent(season)}`).then((r) => r.json()).catch(() => []),
-      fetch(`/api/contracts?league=${league}&season=${encodeURIComponent(season)}&status=active`).then((r) => r.json()).catch(() => []),
+      fetch(`/api/contracts?league=${league}&status=active`).then((r) => r.json()).catch(() => []),
     ]);
     setTeams(Array.isArray(teamsData) ? teamsData : []);
     if (Array.isArray(recData)) {
