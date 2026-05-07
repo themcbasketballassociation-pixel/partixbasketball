@@ -695,11 +695,20 @@ type ContractOffer = {
 };
 
 function OfferCountdown({ offeredAt }: { offeredAt: string }) {
-  const [label, setLabel] = useState("Player can accept now");
+  const [label, setLabel] = useState("");
   useEffect(() => {
-    // No wait window — offers are immediately acceptable
-    setLabel("Player can accept now");
-    return () => {
+    const HOURS_24_MS = 24 * 60 * 60 * 1000;
+    const tick = () => {
+      const elapsed = Date.now() - new Date(offeredAt).getTime();
+      const remaining = HOURS_24_MS - elapsed;
+      if (remaining <= 0) { setLabel("Player can accept now"); return; }
+      const h = Math.floor(remaining / 3600000);
+      const m = Math.floor((remaining % 3600000) / 60000);
+      setLabel(`Acceptable in ${h}h ${m.toString().padStart(2, "0")}m`);
+    };
+    tick();
+    const id = setInterval(tick, 30000);
+    return () => clearInterval(id);
   }, [offeredAt]);
   return <span>{label}</span>;
 }
@@ -785,7 +794,7 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
     const d = await r.json();
     setSubmitting(false);
     if (!r.ok) return setErr(d.error);
-    setSuccessMsg(`Offer sent to ${selectedInfo?.mc_username ?? "player"}${!hideCap ? ` for $${fmt(amt)}` : ""}. They've been DM'd and can accept immediately via Discord or their profile.`);
+    setSuccessMsg(`Offer sent to ${selectedInfo?.mc_username ?? "player"}${!hideCap ? ` for $${fmt(amt)}` : ""}. They've been DM'd and can accept after 24 hours via Discord or their profile.`);
     setSelectedPlayer(""); setOfferAmount("");
     loadData(); onRefresh();
   };
@@ -811,7 +820,7 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
       <div style={{ background: "#0d1117", border: "1px solid #1a2030", borderRadius: 8, padding: "8px 12px", marginBottom: 16, fontSize: 12, color: "#555" }}>
         {isMcaa
           ? "Send offers to available players · Player must accept · Coach signings go directly to admin approval"
-          : "Send a contract offer to any available player · Player is DM'd immediately and can accept right away"}
+          : "Send a contract offer to any available player · Player is DM'd immediately and can accept after 24 hours"}
       </div>
 
       {/* Make Offer / Coach Sign form */}
@@ -898,6 +907,8 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {sentOffers.map((o) => {
+              const elapsed = Date.now() - new Date(o.offered_at).getTime();
+              const canAccept = elapsed >= 24 * 60 * 60 * 1000;
               return (
                 <div key={o.id} style={{ ...innerCard, display: "flex", alignItems: "center", gap: 10 }}>
                   <img
@@ -908,8 +919,8 @@ function SigningsTab({ teamId, leagueSlug, contracts, onRefresh }: {
                   />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ color: "#fff", fontWeight: 600, fontSize: 13 }}>{o.players.mc_username}</div>
-                    <div style={{ color: "#4ade80", fontSize: 11 }}>
-                      Can accept now
+                    <div style={{ color: canAccept ? "#4ade80" : "#888", fontSize: 11 }}>
+                      <OfferCountdown offeredAt={o.offered_at} />
                       {o.dm_sent_at && <span style={{ color: "#6366f1", marginLeft: 8 }}>✉ DM sent</span>}
                       {!o.players.discord_id && <span style={{ color: "#ef4444", marginLeft: 8 }}>⚠ No Discord linked</span>}
                     </div>
