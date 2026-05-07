@@ -214,7 +214,44 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json(data);
     }
 
-    return res.status(400).json({ error: "Invalid action. Use: accept, reject, cancel, approve, deny" });
+    // ── Admin repost ─────────────────────────────────────────────────────────
+    if (action === "repost") {
+      if (!isAdmin) return res.status(403).json({ error: "Admin only" });
+
+      const leagueDisplay = trade.league === "pba" ? "MBA" : trade.league === "pbgl" ? "MBGL" : trade.league === "pcaa" ? "MCAA" : trade.league.toUpperCase();
+      const propAbb: string = (trade.proposing_team as any)?.abbreviation ?? "?";
+      const recvAbb: string = (trade.receiving_team as any)?.abbreviation ?? "?";
+
+      const fmtAsset = (a: any): string => {
+        if (a.pick_id && a.draft_picks) {
+          const orig: string = a.draft_picks.original_team?.abbreviation ?? "?";
+          return `S${a.draft_picks.season} R${a.draft_picks.round} (${orig})`;
+        }
+        if (a.contract_id && a.contracts) {
+          const name: string = a.contracts.players?.mc_username ?? "?";
+          const amt: number = a.contracts.amount;
+          const ret = Number(a.retention_amount ?? 0);
+          return `${name} ($${amt.toLocaleString()})${ret > 0 ? ` ret. $${ret.toLocaleString()}` : ""}`;
+        }
+        const ret = Number(a.retention_amount ?? 0);
+        return ret > 0 ? `$${ret.toLocaleString()} cash retention` : "?";
+      };
+
+      const propAssets = (trade.trade_assets ?? []).filter((a: any) => a.from_team_id === trade.proposing_team_id);
+      const recvAssets = (trade.trade_assets ?? []).filter((a: any) => a.from_team_id === trade.receiving_team_id);
+      const propLine = propAssets.length ? `**${propAbb} sends:** ${propAssets.map(fmtAsset).join(", ")}` : `**${propAbb} sends:** nothing`;
+      const recvLine = recvAssets.length ? `**${recvAbb} sends:** ${recvAssets.map(fmtAsset).join(", ")}` : `**${recvAbb} sends:** nothing`;
+      const noteStr = trade.admin_note ? `\n> ${trade.admin_note}` : "";
+
+      await sendWebhook(
+        getWebhookUrl(trade.league, "transaction"),
+        `✅ **[${leagueDisplay}] Trade Approved**\n${propLine}\n${recvLine}${noteStr}`
+      );
+
+      return res.status(200).json({ ok: true });
+    }
+
+    return res.status(400).json({ error: "Invalid action. Use: accept, reject, cancel, approve, deny, repost" });
   }
 
   return res.status(405).json({ error: "Method not allowed" });

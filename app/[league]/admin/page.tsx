@@ -5166,6 +5166,16 @@ function TradesAdminTab({ league }: { league: string }) {
                   {errs[t.id] && <ErrMsg msg={errs[t.id]} />}
                 </div>
               )}
+              {t.status === "approved" && (
+                <div className="flex items-center gap-2 mt-2">
+                  <button
+                    className="rounded-lg px-3 py-1.5 text-sm font-medium bg-slate-800 hover:bg-blue-900 text-slate-300 hover:text-white border border-slate-700 hover:border-blue-600 transition"
+                    disabled={acting[t.id]}
+                    onClick={() => act(t.id, "repost")}
+                  >🔁 Repost to #trades</button>
+                  {errs[t.id] && <ErrMsg msg={errs[t.id]} />}
+                </div>
+              )}
               {t.admin_note && <div className="text-purple-400 text-sm mt-2">Admin note: {t.admin_note}</div>}
             </div>
           ))}
