@@ -703,6 +703,17 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
   const [connectMsg, setConnectMsg] = useState("");
   const [copyingLogos, setCopyingLogos] = useState(false);
   const [copyLogosMsg, setCopyLogosMsg] = useState("");
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState("");
+
+  const syncRostersFromContracts = async () => {
+    setSyncing(true); setSyncMsg("");
+    const r = await fetch("/api/admin/sync-rosters", { method: "POST" });
+    const d = await r.json().catch(() => ({})) as { synced?: number; error?: string };
+    setSyncMsg(r.ok ? `✓ Synced ${d.synced ?? 0} players` : `Error: ${d.error ?? "failed"}`);
+    setSyncing(false);
+    if (r.ok) refresh();
+  };
   const [swapFrom, setSwapFrom] = useState("");
   const [swapTo, setSwapTo] = useState("");
   const [swapping, setSwapping] = useState(false);
@@ -926,6 +937,19 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
 
   return (
     <div className="space-y-5">
+      {/* Sync Rosters */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <button
+          className={`${btnPrimary} text-sm`}
+          onClick={syncRostersFromContracts}
+          disabled={syncing}
+        >
+          {syncing ? "Syncing…" : "🔄 Update Teams from Contracts"}
+        </button>
+        {syncMsg && <span className={`text-xs ${syncMsg.startsWith("✓") ? "text-green-400" : "text-red-400"}`}>{syncMsg}</span>}
+        <span className="text-xs text-slate-600">Syncs player rosters to match active contracts (same as team portal)</span>
+      </div>
+
       {/* Bulk Import */}
       <div className={card}>
         <div className="flex items-center justify-between mb-3">

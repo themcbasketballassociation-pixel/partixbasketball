@@ -4,8 +4,7 @@ import { requireAdmin } from "../../../lib/adminAuth";
 
 /**
  * POST /api/admin/sync-rosters
- * Admin-only: for every active contract, ensure the player exists in player_teams.
- * Fixes any contracts approved before the season-column upsert bug was patched.
+ * Rebuilds player_teams from active contracts so the Teams tab matches the team portal.
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
@@ -13,21 +12,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const admin = await requireAdmin(req, res);
   if (!admin) return;
 
-  // Fetch all active contracts
-  const { data: contracts, error } = await supabase
-    .from("contracts")
-    .select("mc_uuid, team_id, league")
-    .eq("status", "active");
+  const { league } = req.body ?? {};
 
+  // Fetch all active contracts
+  let query = supabase
+    .from("contracts")
+    .select("mc_uuid, team_id, league, season")
+    .eq("status", "active");
+  if (league) query = query.eq("league", league);
+
+  const { data: contracts, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
   if (!contracts || contracts.length === 0) return res.status(200).json({ synced: 0 });
 
-  // Upsert each into player_teams (no season column)
-  const rows = contracts.map((c) => ({
-    mc_uuid: c.mc_uuid,
-    team_id: c.team_id,
-    league: c.league,
-  }));
+  // Deduplicate by mc_uuid+league (keep first — highest amount since contracts API orders by amount desc)
+  const seen = new Set<string>();
+  const rows = contracts
+    .filter((c) => {
+      const key = `${c.mc_uuid}:${c.league}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .map((c) => ({ mc_uuid: c.mc_uuid, team_id: c.team_id, league: c.league, season: c.season ?? null }));
 
   const { error: upsertErr } = await supabase
     .from("player_teams")
