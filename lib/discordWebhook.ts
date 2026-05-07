@@ -33,6 +33,23 @@ export async function sendWebhookEmbed(url: string | undefined, embed: Record<st
 }
 
 /**
+ * Sends multiple rich Discord embeds in a single webhook message (max 10).
+ * Silently no-ops if the URL is not configured.
+ */
+export async function sendWebhookEmbeds(url: string | undefined, embeds: Record<string, unknown>[]): Promise<void> {
+  if (!url) return;
+  try {
+    await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ embeds }),
+    });
+  } catch {
+    // Don't break the API response if the webhook fails
+  }
+}
+
+/**
  * Returns the correct webhook URL for a given league and action type.
  *
  * Env vars (set in Vercel):

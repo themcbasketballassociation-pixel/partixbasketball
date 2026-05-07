@@ -1,7 +1,73 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { supabase } from "../../../lib/supabase";
 import { getSessionDiscordId, isAdminId } from "../../../lib/ownerAuth";
-import { sendWebhook, getWebhookUrl } from "../../../lib/discordWebhook";
+import { sendWebhookEmbeds, getWebhookUrl } from "../../../lib/discordWebhook";
+
+const LEAGUE_LABELS: Record<string, string> = { pba: "MBA", pcaa: "MCAA", pbgl: "MBGL" };
+const LEAGUE_COLORS: Record<string, number>  = { pba: 0xC8102E, pcaa: 0x003087, pbgl: 0xBB3430 };
+const BASE_URL = process.env.NEXTAUTH_URL ?? "https://partixbasketball.com";
+
+function parseColor(hex: string | null | undefined, fallback: number): number {
+  if (!hex) return fallback;
+  const cleaned = hex.replace("#", "");
+  const n = parseInt(cleaned, 16);
+  return isNaN(n) ? fallback : n;
+}
+
+function fmtAssetDesc(a: any): string {
+  if (a.pick_id && a.draft_picks) {
+    const orig: string = a.draft_picks.original_team?.abbreviation ?? "?";
+    return `🏀 ${a.draft_picks.season ?? ""} R${a.draft_picks.round} (${orig})`;
+  }
+  if (a.contract_id && a.contracts) {
+    const name: string = a.contracts.players?.mc_username ?? "?";
+    const amt: number = a.contracts.amount;
+    const ret = Number(a.retention_amount ?? 0);
+    const retStr = ret > 0 ? ` *(ret. $${ret.toLocaleString()})*` : "";
+    return amt > 0 ? `**${name}** — $${amt.toLocaleString()}${retStr}` : `**${name}**`;
+  }
+  const ret = Number(a.retention_amount ?? 0);
+  return ret > 0 ? `💵 $${ret.toLocaleString()} cash` : "?";
+}
+
+async function postTradeWebhook(trade: any, adminNote: string | null): Promise<void> {
+  const league: string = trade.league;
+  const leagueDisplay = LEAGUE_LABELS[league] ?? league.toUpperCase();
+  const leagueLogoSlug = league === "pba" ? "mba" : league === "pcaa" ? "mcaa" : "MBGL";
+  const leagueLogoExt  = league === "pbgl" ? "png" : "webp";
+  const leagueIconUrl  = `${BASE_URL}/logos/${leagueLogoSlug}.${leagueLogoExt}`;
+  const leagueFallbackColor = LEAGUE_COLORS[league] ?? 0x22c55e;
+
+  const propTeam = trade.proposing_team as any;
+  const recvTeam = trade.receiving_team as any;
+  const propAssets = (trade.trade_assets ?? []).filter((a: any) => a.from_team_id === trade.proposing_team_id);
+  const recvAssets = (trade.trade_assets ?? []).filter((a: any) => a.from_team_id === trade.receiving_team_id);
+  const noteStr = adminNote ? `\n> ${adminNote}` : "";
+  const timestamp = new Date().toISOString();
+
+  const makeEmbed = (sendingTeam: any, receivingTeam: any, assets: any[]): Record<string, unknown> => {
+    const description = assets.length
+      ? assets.map(fmtAssetDesc).join("\n")
+      : "_Nothing_";
+    const embed: Record<string, unknown> = {
+      color: parseColor(sendingTeam?.color2, leagueFallbackColor),
+      author: { name: `🔄 Trade · ${leagueDisplay}`, icon_url: leagueIconUrl },
+      title: `${sendingTeam?.abbreviation ?? "?"} → ${receivingTeam?.abbreviation ?? "?"}`,
+      description: description + noteStr,
+      footer: { text: `${leagueDisplay} · ${sendingTeam?.name ?? ""}`, icon_url: leagueIconUrl },
+      timestamp,
+    };
+    if (sendingTeam?.logo_url) embed.thumbnail = { url: sendingTeam.logo_url };
+    return embed;
+  };
+
+  const embeds = [
+    makeEmbed(propTeam, recvTeam, propAssets),
+    makeEmbed(recvTeam, propTeam, recvAssets),
+  ];
+
+  await sendWebhookEmbeds(getWebhookUrl(league, "transaction"), embeds);
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { id } = req.query;
@@ -37,8 +103,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .from("trade_proposals")
       .select(`
         *,
-        proposing_team:teams!trade_proposals_proposing_team_id_fkey(id, name, abbreviation),
-        receiving_team:teams!trade_proposals_receiving_team_id_fkey(id, name, abbreviation),
+        proposing_team:teams!trade_proposals_proposing_team_id_fkey(id, name, abbreviation, logo_url, color2),
+        receiving_team:teams!trade_proposals_receiving_team_id_fkey(id, name, abbreviation, logo_url, color2),
         trade_assets(
           id, from_team_id, contract_id, pick_id, retention_amount,
           contracts(mc_uuid, amount, players(mc_uuid, mc_username)),
@@ -180,36 +246,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .single();
       if (error) return res.status(500).json({ error: error.message });
 
-      // Post trade approval to Discord transactions channel
-      const leagueDisplay = trade.league === "pba" ? "MBA" : trade.league === "pbgl" ? "MBGL" : trade.league === "pcaa" ? "MCAA" : trade.league.toUpperCase();
-      const propAbb: string = (trade.proposing_team as any)?.abbreviation ?? "?";
-      const recvAbb: string = (trade.receiving_team as any)?.abbreviation ?? "?";
-
-      const fmtAsset = (a: any): string => {
-        if (a.pick_id && a.draft_picks) {
-          const orig: string = a.draft_picks.original_team?.abbreviation ?? "?";
-          return `S${a.draft_picks.season} R${a.draft_picks.round} (${orig})`;
-        }
-        if (a.contract_id && a.contracts) {
-          const name: string = a.contracts.players?.mc_username ?? "?";
-          const amt: number = a.contracts.amount;
-          const ret = Number(a.retention_amount ?? 0);
-          return `${name} ($${amt.toLocaleString()})${ret > 0 ? ` ret. $${ret.toLocaleString()}` : ""}`;
-        }
-        const ret = Number(a.retention_amount ?? 0);
-        return ret > 0 ? `$${ret.toLocaleString()} cash retention` : "?";
-      };
-
-      const propAssets = (trade.trade_assets ?? []).filter((a: any) => a.from_team_id === trade.proposing_team_id);
-      const recvAssets = (trade.trade_assets ?? []).filter((a: any) => a.from_team_id === trade.receiving_team_id);
-      const propLine = propAssets.length ? `**${propAbb} sends:** ${propAssets.map(fmtAsset).join(", ")}` : `**${propAbb} sends:** nothing`;
-      const recvLine = recvAssets.length ? `**${recvAbb} sends:** ${recvAssets.map(fmtAsset).join(", ")}` : `**${recvAbb} sends:** nothing`;
-      const noteStr = admin_note ? `\n> ${admin_note}` : "";
-
-      await sendWebhook(
-        getWebhookUrl(trade.league, "transaction"),
-        `✅ **[${leagueDisplay}] Trade Approved**\n${propLine}\n${recvLine}${noteStr}`
-      );
+      await postTradeWebhook(trade, admin_note ?? null);
 
       return res.status(200).json(data);
     }
@@ -217,37 +254,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // ── Admin repost ─────────────────────────────────────────────────────────
     if (action === "repost") {
       if (!isAdmin) return res.status(403).json({ error: "Admin only" });
-
-      const leagueDisplay = trade.league === "pba" ? "MBA" : trade.league === "pbgl" ? "MBGL" : trade.league === "pcaa" ? "MCAA" : trade.league.toUpperCase();
-      const propAbb: string = (trade.proposing_team as any)?.abbreviation ?? "?";
-      const recvAbb: string = (trade.receiving_team as any)?.abbreviation ?? "?";
-
-      const fmtAsset = (a: any): string => {
-        if (a.pick_id && a.draft_picks) {
-          const orig: string = a.draft_picks.original_team?.abbreviation ?? "?";
-          return `S${a.draft_picks.season} R${a.draft_picks.round} (${orig})`;
-        }
-        if (a.contract_id && a.contracts) {
-          const name: string = a.contracts.players?.mc_username ?? "?";
-          const amt: number = a.contracts.amount;
-          const ret = Number(a.retention_amount ?? 0);
-          return `${name} ($${amt.toLocaleString()})${ret > 0 ? ` ret. $${ret.toLocaleString()}` : ""}`;
-        }
-        const ret = Number(a.retention_amount ?? 0);
-        return ret > 0 ? `$${ret.toLocaleString()} cash retention` : "?";
-      };
-
-      const propAssets = (trade.trade_assets ?? []).filter((a: any) => a.from_team_id === trade.proposing_team_id);
-      const recvAssets = (trade.trade_assets ?? []).filter((a: any) => a.from_team_id === trade.receiving_team_id);
-      const propLine = propAssets.length ? `**${propAbb} sends:** ${propAssets.map(fmtAsset).join(", ")}` : `**${propAbb} sends:** nothing`;
-      const recvLine = recvAssets.length ? `**${recvAbb} sends:** ${recvAssets.map(fmtAsset).join(", ")}` : `**${recvAbb} sends:** nothing`;
-      const noteStr = trade.admin_note ? `\n> ${trade.admin_note}` : "";
-
-      await sendWebhook(
-        getWebhookUrl(trade.league, "transaction"),
-        `✅ **[${leagueDisplay}] Trade Approved**\n${propLine}\n${recvLine}${noteStr}`
-      );
-
+      await postTradeWebhook(trade, trade.admin_note ?? null);
       return res.status(200).json({ ok: true });
     }
 
