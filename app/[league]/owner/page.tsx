@@ -384,11 +384,16 @@ function TradeTab({ teamId, league, leagueSlug, contracts, allTeams, seasonTeamI
   const [trades, setTrades] = useState<Trade[]>([]);
   const [loadingTrades, setLoadingTrades] = useState(true);
 
+  type AssetEntry = { type: "contract" | "pick" | "cash"; contract_id: string; pick_id: string; retention: string };
+  const blankAsset = (): AssetEntry => ({ type: "contract", contract_id: "", pick_id: "", retention: "" });
+
   // Propose form state
   const [targetTeamId, setTargetTeamId] = useState("");
-  const [myAssets, setMyAssets] = useState<{ contract_id: string; retention: string }[]>([{ contract_id: "", retention: "" }]);
+  const [myAssets, setMyAssets] = useState<AssetEntry[]>([blankAsset()]);
   const [theirContracts, setTheirContracts] = useState<Contract[]>([]);
-  const [theirAssets, setTheirAssets] = useState<{ contract_id: string; retention: string }[]>([{ contract_id: "", retention: "" }]);
+  const [theirAssets, setTheirAssets] = useState<AssetEntry[]>([blankAsset()]);
+  const [myPicks, setMyPicks] = useState<any[]>([]);
+  const [theirPicks, setTheirPicks] = useState<any[]>([]);
   const [notes, setNotes] = useState("");
   const [err, setErr] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -402,11 +407,22 @@ function TradeTab({ teamId, league, leagueSlug, contracts, allTeams, seasonTeamI
 
   useEffect(() => { loadTrades(); }, [loadTrades]);
 
+  // Fetch my own picks on mount
   useEffect(() => {
-    if (!targetTeamId) { setTheirContracts([]); return; }
-    fetch(`/api/contracts?league=${leagueSlug}&team_id=${targetTeamId}`)
+    fetch(`/api/draft-picks?league=${leagueSlug}&team_id=${teamId}&status=active`)
       .then((r) => r.json())
-      .then((d) => setTheirContracts(Array.isArray(d) ? d : []));
+      .then((d) => setMyPicks(Array.isArray(d) ? d : []));
+  }, [leagueSlug, teamId]);
+
+  useEffect(() => {
+    if (!targetTeamId) { setTheirContracts([]); setTheirPicks([]); return; }
+    Promise.all([
+      fetch(`/api/contracts?league=${leagueSlug}&team_id=${targetTeamId}`).then((r) => r.json()),
+      fetch(`/api/draft-picks?league=${leagueSlug}&team_id=${targetTeamId}&status=active`).then((r) => r.json()),
+    ]).then(([c, p]) => {
+      setTheirContracts(Array.isArray(c) ? c : []);
+      setTheirPicks(Array.isArray(p) ? p : []);
+    });
   }, [targetTeamId, leagueSlug]);
 
   // Only show teams from the same season (via team_owners season filter)
@@ -416,16 +432,18 @@ function TradeTab({ teamId, league, leagueSlug, contracts, allTeams, seasonTeamI
     if (!targetTeamId) return setErr("Select a team to trade with");
     setErr(""); setSubmitting(true);
 
+    const mapAsset = (a: AssetEntry, fromTeamId: string) => {
+      if (a.type === "pick" && a.pick_id) return { from_team_id: fromTeamId, pick_id: a.pick_id, retention_amount: 0 };
+      if (a.type === "cash" && parseInt(a.retention) > 0) return { from_team_id: fromTeamId, retention_amount: Math.min(parseInt(a.retention), 1000) };
+      if (a.type === "contract" && a.contract_id) return { from_team_id: fromTeamId, contract_id: a.contract_id, retention_amount: Math.min(parseInt(a.retention) || 0, 1000) };
+      return null;
+    };
+
     const assets = [
-      ...myAssets.filter((a) => a.contract_id || (parseInt(a.retention) > 0)).map((a) => ({
-        from_team_id: teamId, contract_id: a.contract_id || null,
-        retention_amount: Math.min(parseInt(a.retention) || 0, 1000),
-      })),
-      ...theirAssets.filter((a) => a.contract_id || (parseInt(a.retention) > 0)).map((a) => ({
-        from_team_id: targetTeamId, contract_id: a.contract_id || null,
-        retention_amount: Math.min(parseInt(a.retention) || 0, 1000),
-      })),
-    ];
+      ...myAssets.map((a) => mapAsset(a, teamId)),
+      ...theirAssets.map((a) => mapAsset(a, targetTeamId)),
+    ].filter(Boolean);
+
     if (assets.length === 0) { setSubmitting(false); return setErr("Add at least one asset"); }
 
     const r = await fetch("/api/trades", {
@@ -436,8 +454,8 @@ function TradeTab({ teamId, league, leagueSlug, contracts, allTeams, seasonTeamI
     const d = await r.json();
     setSubmitting(false);
     if (!r.ok) return setErr(d.error);
-    setMyAssets([{ contract_id: "", retention: "" }]);
-    setTheirAssets([{ contract_id: "", retention: "" }]);
+    setMyAssets([blankAsset()]);
+    setTheirAssets([blankAsset()]);
     setNotes(""); setTargetTeamId("");
     loadTrades(); onRefresh();
   };
@@ -468,49 +486,83 @@ function TradeTab({ teamId, league, leagueSlug, contracts, allTeams, seasonTeamI
     );
   };
 
-  const AssetRow = ({ assets, setAssets, contracts: ctrts, label }: { assets: typeof myAssets; setAssets: React.Dispatch<React.SetStateAction<typeof myAssets>>; contracts: Contract[]; label: string }) => (
+  const AssetRow = ({ assets, setAssets, contracts: ctrts, picks, label }: {
+    assets: AssetEntry[];
+    setAssets: React.Dispatch<React.SetStateAction<AssetEntry[]>>;
+    contracts: Contract[];
+    picks: any[];
+    label: string;
+  }) => (
     <div>
       <div style={{ color: "#555", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>{label}</div>
       {assets.map((a, i) => {
-        const selectedContract = ctrts.find(c => c.id === a.contract_id);
+        const setField = (patch: Partial<AssetEntry>) =>
+          setAssets((prev) => prev.map((x, j) => j === i ? { ...x, ...patch } : x));
+        const selectedContract = ctrts.find((c) => c.id === a.contract_id);
         return (
           <div key={i} style={{ marginBottom: 10 }}>
-            <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
-              <select
-                style={{ ...input, flex: 2 }}
-                value={a.contract_id}
-                onChange={(e) => setAssets((prev) => prev.map((x, j) => j === i ? { ...x, contract_id: e.target.value, retention: "" } : x))}
-              >
-                <option value="">— Select player —</option>
-                {ctrts.map((c) => <option key={c.id} value={c.id}>{c.players.mc_username} ({fmt(c.amount)})</option>)}
-              </select>
-              <input
-                type="number"
-                placeholder="Retain $"
-                value={a.retention}
-                onChange={(e) => setAssets((prev) => prev.map((x, j) => j === i ? { ...x, retention: e.target.value } : x))}
-                style={{ ...input, flex: 1, minWidth: 80 }}
-                step={250}
-                min={0}
-                max={1000}
-              />
-              <button onClick={() => setAssets((prev) => prev.filter((_, j) => j !== i))} style={{ ...btn("danger"), padding: "6px 10px" }}>✕</button>
-            </div>
-            {selectedContract && (
-              <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 11, color: "#555", paddingLeft: 2 }}>
-                <span>Max retention: <span style={{ color: "#a855f7" }}>1,000</span></span>
+            {/* Type toggle */}
+            <div style={{ display: "flex", gap: 4, marginBottom: 6 }}>
+              {(["contract", "pick", "cash"] as const).map((t) => (
                 <button
-                  onClick={() => setAssets((prev) => prev.map((x, j) => j === i ? { ...x, retention: "1000" } : x))}
-                  style={{ ...btn(), fontSize: 11, padding: "2px 6px", color: "#a855f7", borderColor: "#4c1d95" }}
+                  key={t}
+                  onClick={() => setField({ type: t, contract_id: "", pick_id: "", retention: "" })}
+                  style={{
+                    padding: "3px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer", border: "1px solid",
+                    borderColor: a.type === t ? "#3b82f6" : "#222",
+                    background: a.type === t ? "#1e3a5f" : "#0d1117",
+                    color: a.type === t ? "#93c5fd" : "#555",
+                  }}
                 >
-                  Set max
+                  {t === "contract" ? "🏀 Player" : t === "pick" ? "🎯 Pick" : "💵 Cash"}
                 </button>
+              ))}
+              <button onClick={() => setAssets((prev) => prev.filter((_, j) => j !== i))} style={{ ...btn("danger"), padding: "3px 8px", fontSize: 11, marginLeft: "auto" }}>✕</button>
+            </div>
+
+            {/* Contract */}
+            {a.type === "contract" && (
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <select style={{ ...input, flex: 2 }} value={a.contract_id} onChange={(e) => setField({ contract_id: e.target.value, retention: "" })}>
+                  <option value="">— Select player —</option>
+                  {ctrts.map((c) => <option key={c.id} value={c.id}>{c.players.mc_username} (${fmt(c.amount)})</option>)}
+                </select>
+                <input type="number" placeholder="Retain $" value={a.retention}
+                  onChange={(e) => setField({ retention: e.target.value })}
+                  style={{ ...input, flex: 1, minWidth: 80 }} step={250} min={0} max={1000} />
               </div>
+            )}
+            {a.type === "contract" && selectedContract && (
+              <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 11, color: "#555", marginTop: 4 }}>
+                <span>Max retention: <span style={{ color: "#a855f7" }}>1,000</span></span>
+                <button onClick={() => setField({ retention: "1000" })} style={{ ...btn(), fontSize: 11, padding: "2px 6px", color: "#a855f7", borderColor: "#4c1d95" }}>Set max</button>
+              </div>
+            )}
+
+            {/* Draft pick */}
+            {a.type === "pick" && (
+              picks.length === 0
+                ? <div style={{ color: "#555", fontSize: 12 }}>No draft picks available.</div>
+                : <select style={input} value={a.pick_id} onChange={(e) => setField({ pick_id: e.target.value })}>
+                    <option value="">— Select pick —</option>
+                    {picks.map((p: any) => (
+                      <option key={p.id} value={p.id}>
+                        {p.season} R{p.round}{p.pick_number != null ? ` #${p.pick_number}` : ""}{p.original_team && p.original_team.abbreviation !== p.current_team?.abbreviation ? ` (via ${p.original_team.abbreviation})` : ""}
+                      </option>
+                    ))}
+                  </select>
+            )}
+
+            {/* Cash retention */}
+            {a.type === "cash" && (
+              <input type="number" placeholder="Cash amount ($)" value={a.retention}
+                onChange={(e) => setField({ retention: e.target.value })}
+                style={input} step={250} min={0} max={1000} />
             )}
           </div>
         );
       })}
-      <button onClick={() => setAssets((prev) => [...prev, { contract_id: "", retention: "" }])} style={{ ...btn(), fontSize: 12, padding: "4px 10px" }}>+ Add player</button>
+      <button onClick={() => setAssets((prev) => [...prev, blankAsset()])} style={{ ...btn(), fontSize: 12, padding: "4px 10px" }}>+ Add asset</button>
     </div>
   );
 
@@ -559,8 +611,8 @@ function TradeTab({ teamId, league, leagueSlug, contracts, allTeams, seasonTeamI
           </select>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 12 }}>
-          <AssetRow assets={myAssets} setAssets={setMyAssets} contracts={contracts} label="You send" />
-          <AssetRow assets={theirAssets} setAssets={setTheirAssets} contracts={theirContracts} label="You receive" />
+          <AssetRow assets={myAssets} setAssets={setMyAssets} contracts={contracts} picks={myPicks} label="You send" />
+          <AssetRow assets={theirAssets} setAssets={setTheirAssets} contracts={theirContracts} picks={theirPicks} label="You receive" />
         </div>
         <div style={{ marginBottom: 12 }}>
           <label style={{ color: "#555", fontSize: 12, display: "block", marginBottom: 4 }}>Notes (optional)</label>
