@@ -10,7 +10,7 @@ type Contract = { id: string; league: string; mc_uuid: string; team_id: string; 
 type CapRetention = { id: string; mc_uuid: string; retention_amount: number; original_contract_id: string; status: string };
 type Bid = { id: string; team_id: string; amount: number; is_two_season: boolean; effective_value: number; placed_at: string; is_valid: boolean; teams: Team };
 type Auction = { id: string; mc_uuid: string; min_price: number; status: string; closes_at: string; phase: number; season: string | null; players: Player; winning_team_id: string | null; auction_bids: Bid[] };
-type TradeAsset = { id: string; from_team_id: string; contract_id: string; retention_amount: number; contracts: { id: string; mc_uuid: string; amount: number; is_two_season: boolean; players: Player } | null; from_team: { id: string; name: string; abbreviation: string } | null };
+type TradeAsset = { id: string; from_team_id: string; contract_id: string | null; pick_id: string | null; retention_amount: number; contracts: { id: string; mc_uuid: string; amount: number; is_two_season: boolean; players: Player } | null; draft_picks: { id: string; season: string | null; round: number; pick_number: number | null; original_team: { id: string; abbreviation: string } | null } | null; from_team: { id: string; name: string; abbreviation: string } | null };
 type Trade = { id: string; league: string; proposing_team_id: string; receiving_team_id: string; status: string; proposed_at: string; resolved_at: string | null; notes: string | null; admin_note: string | null; proposing_team: Team; receiving_team: Team; trade_assets: TradeAsset[] };
 
 // ── Style helpers ──────────────────────────────────────────────────────────────
