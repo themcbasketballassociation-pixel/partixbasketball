@@ -2,6 +2,12 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { supabase } from "../../../lib/supabase";
 import { requireOwner } from "../../../lib/ownerAuth";
 import { resolveLeague } from "../../../lib/leagueMapping";
+import { sendDiscordDm } from "../../../lib/discordDm";
+
+const LEAGUE_LABELS: Record<string, string> = { pba: "MBA", pcaa: "MCAA", pbgl: "MBGL" };
+const LEAGUE_COLORS: Record<string, number> = { pba: 0xc8102e, pcaa: 0x003087, pbgl: 0xbb3430 };
+const BASE_URL = process.env.NEXTAUTH_URL ?? "https://partixbasketball.com";
+function leagueSlug(l: string) { return l === "pba" ? "mba" : l === "pcaa" ? "mcaa" : l === "pbgl" ? "mbgl" : l; }
 
 const TOTAL_CAP = 25000;
 
@@ -114,10 +120,57 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         offered_by_discord_id: owner.discordId,
         notes: notes ?? null,
       }])
-      .select("*, players(mc_uuid, mc_username), teams(id, name, abbreviation)")
+      .select("*, players(mc_uuid, mc_username, discord_id), teams(id, name, abbreviation, logo_url)")
       .single();
 
     if (error) return res.status(500).json({ error: error.message });
+
+    // Send DM immediately (no 24-hour wait)
+    const playerDiscordId: string | null = (offer as any).players?.discord_id ?? null;
+    if (playerDiscordId) {
+      const team = (offer as any).teams;
+      const playerName: string = (offer as any).players?.mc_username ?? mc_uuid;
+      const label = LEAGUE_LABELS[league] ?? league.toUpperCase();
+      const color = LEAGUE_COLORS[league] ?? 0x5865f2;
+      const slug = leagueSlug(league);
+      const showSalary = league !== "pcaa" && league !== "pbgl";
+      const salary = showSalary && finalAmount > 0 ? ` — **$${finalAmount.toLocaleString()}**` : "";
+      const twoSeason = (is_two_season ?? false) ? " *(2-season)*" : "";
+      const profileUrl = `${BASE_URL}/${slug}/profile`;
+
+      const embed = {
+        color,
+        title: `🏀 You have a contract offer!`,
+        description:
+          `**${team?.name ?? "A team"}** has offered you a contract in the **${label}**.\n\n` +
+          `**${team?.name ?? "?"} (${team?.abbreviation ?? "?"})**${salary}${twoSeason}` +
+          `\n\n> Accept or decline from your [profile page](${profileUrl}).`,
+        thumbnail: team?.logo_url ? { url: team.logo_url } : undefined,
+        footer: { text: `Partix Basketball · ${label}` },
+        timestamp: new Date().toISOString(),
+      };
+
+      const acceptBtn = {
+        type: 2, style: 3,
+        label: `✅ Accept ${team?.abbreviation ?? "?"}`,
+        custom_id: `accept_offer:${(offer as any).id}`,
+      };
+      const declineBtn = {
+        type: 2, style: 4,
+        label: "❌ Decline",
+        custom_id: `decline_all_offers:${mc_uuid}:${league}`,
+      };
+      const components = [{ type: 1, components: [acceptBtn, declineBtn] }];
+
+      const sent = await sendDiscordDm(playerDiscordId, { embeds: [embed], components });
+      if (sent) {
+        await supabase
+          .from("contract_offers")
+          .update({ dm_sent_at: new Date().toISOString() })
+          .eq("id", (offer as any).id);
+      }
+    }
+
     return res.status(200).json(offer);
   }
 
