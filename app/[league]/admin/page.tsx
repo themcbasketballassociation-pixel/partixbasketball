@@ -937,19 +937,6 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
 
   return (
     <div className="space-y-5">
-      {/* Sync Rosters */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <button
-          className={`${btnPrimary} text-sm`}
-          onClick={syncRostersFromContracts}
-          disabled={syncing}
-        >
-          {syncing ? "Syncing…" : "🔄 Update Teams from Contracts"}
-        </button>
-        {syncMsg && <span className={`text-xs ${syncMsg.startsWith("✓") ? "text-green-400" : "text-red-400"}`}>{syncMsg}</span>}
-        <span className="text-xs text-slate-600">Syncs player rosters to match active contracts (same as team portal)</span>
-      </div>
-
       {/* Bulk Import */}
       <div className={card}>
         <div className="flex items-center justify-between mb-3">
@@ -1170,11 +1157,19 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
                         <div className="mt-3 pt-3 border-t border-slate-800">
                           <div className="flex items-center justify-between mb-2">
                             <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Roster ({roster.length})</span>
-                            {capUsed > 0 && (
-                              <span className={`text-xs font-bold ${capUsed > TOTAL_CAP ? "text-red-400" : "text-green-400"}`}>
-                                ${capUsed.toLocaleString()} / ${TOTAL_CAP.toLocaleString()} cap
-                              </span>
-                            )}
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={syncRostersFromContracts}
+                                disabled={syncing}
+                                className="text-xs px-2 py-0.5 rounded bg-slate-700 hover:bg-blue-700 text-slate-300 hover:text-white border border-slate-600 hover:border-blue-500 transition disabled:opacity-50"
+                                title="Sync roster from active contracts"
+                              >{syncing ? "…" : "🔄 Update"}</button>
+                              {capUsed > 0 && (
+                                <span className={`text-xs font-bold ${capUsed > TOTAL_CAP ? "text-red-400" : "text-green-400"}`}>
+                                  ${capUsed.toLocaleString()} / ${TOTAL_CAP.toLocaleString()} cap
+                                </span>
+                              )}
+                            </div>
                           </div>
                           {roster.length > 0 && (
                             <div className="flex flex-wrap gap-1.5 mb-3">
