@@ -1595,7 +1595,7 @@ export default function OwnerPage() {
           {[
             ...(leagueSlug === "mcaa"
               ? [["roster", "Roster"], ["coaches", "Coaches"], ["signings", "Signings"], ["cut", "Cut Player"], ["portal", "Transfer Portal"]]
-              : [["roster", "Roster"], ["signings", "Signings"], ["bid", `Live Auctions (${auctions.filter((a) => a.status === "active").length})`], ["trades", "Trades"]]
+              : [["roster", "Roster"], ["signings", "Signings"], ["bid", `Live Auctions (${auctions.filter((a) => a.status === "active").length})`], ["trades", "Trades"], ["cut", "✂️ Cut Player"]]
             ),
             // Owners and admins can manage the GM roster (not GMs themselves)
             ...(effectiveRole !== "gm" ? [["management", "👑 Owner"]] : []),
