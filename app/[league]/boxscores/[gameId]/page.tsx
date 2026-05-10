@@ -509,7 +509,7 @@ export default function BoxscorePage({ params }: { params?: Promise<{ league?: s
     Promise.all([
       fetch(`/api/games/${gameId}`).then(r => r.json()),
       fetch(`/api/game-stats?game_id=${gameId}`).then(r => r.json()),
-      fetch(`/api/teams/players?league=${slug}`).then(r => r.json()),
+      fetch(`/api/contracts?league=${slug}&status=active`).then(r => r.json()),
     ]).then(([g, s, pt]) => {
       if (!g || g.error) { setNotFound(true); setLoading(false); return; }
       setGame(g);
