@@ -573,7 +573,7 @@ export default function TeamsPage({ params }: { params?: Promise<{ league?: stri
     setLoading(true);
     Promise.all([
       fetch(`/api/teams?league=${slug}&season=${encodeURIComponent(season)}`).then(r => r.json()),
-      fetch(`/api/contracts?league=${slug}&status=active`).then(r => r.json()),
+      fetch(`/api/contracts?league=${slug}&status=active&season=${encodeURIComponent(season)}`).then(r => r.json()),
     ]).then(([t, c]) => {
       const loadedTeams: Team[] = Array.isArray(t) ? t : [];
       setTeams(loadedTeams);
