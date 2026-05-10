@@ -3,6 +3,7 @@ import { supabase } from "../../../lib/supabase";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../auth/[...nextauth]";
 import { isAdminId } from "../../../lib/ownerAuth";
+import { sendWebhook, getWebhookUrl } from "../../../lib/discordWebhook";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { id } = req.query;
