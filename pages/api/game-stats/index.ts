@@ -24,7 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "POST") {
     const admin = await requireAdmin(req, res);
     if (!admin) return;
-    const { game_id, mc_uuid, points, rebounds_off, rebounds_def, assists, steals, blocks, turnovers, minutes_played, fg_made, fg_attempted, three_pt_made, three_pt_attempted, pass_attempts, possession_time } = req.body;
+    const { game_id, mc_uuid, points, rebounds_off, rebounds_def, assists, steals, blocks, turnovers, minutes_played, fg_made, fg_attempted, three_pt_made, three_pt_attempted, pass_attempts, possession_time, ft_made, ft_attempted, fouls } = req.body;
     if (!game_id || !mc_uuid) return res.status(400).json({ error: "game_id, mc_uuid required" });
     const { data, error } = await supabase
       .from("game_stats")
@@ -36,6 +36,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         fg_made: fg_made ?? null, fg_attempted: fg_attempted ?? null,
         three_pt_made: three_pt_made ?? null, three_pt_attempted: three_pt_attempted ?? null,
         pass_attempts: pass_attempts ?? null, possession_time: possession_time ?? null,
+        ft_made: ft_made ?? null, ft_attempted: ft_attempted ?? null, fouls: fouls ?? null,
       }], { onConflict: "game_id,mc_uuid" })
       .select("*, players(mc_uuid, mc_username)")
       .single();

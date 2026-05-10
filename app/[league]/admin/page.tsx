@@ -24,6 +24,7 @@ type GameStat = {
   fg_made: number | null; fg_attempted: number | null;
   three_pt_made: number | null; three_pt_attempted: number | null;
   pass_attempts: number | null; possession_time: number | null;
+  ft_made: number | null; ft_attempted: number | null; fouls: number | null;
   players: Player;
 };
 type Accolade = {
@@ -1849,11 +1850,14 @@ function parseStatBlock(text: string, players: Player[]): ParsedStat[] {
       const ext = (pat: RegExp) => line.match(pat)?.[1] ?? "";
       const fgM = line.match(/\bFG\s+(\d+)\/(\d+)/i);
       const tfgM = line.match(/\b3FG\s+(\d+)\/(\d+)/i);
+      const ftM = line.match(/\bFT\s+(\d+)\/(\d+)/i);
       fields = {
         minutes_played: ext(/\bMIN\s+(\d+:\d+)/i),
         points: ext(/\bPTS\s+(\d+)/i),
         fg: fgM ? `${fgM[1]}/${fgM[2]}` : "",
         three_fg: tfgM ? `${tfgM[1]}/${tfgM[2]}` : "",
+        ft: ftM ? `${ftM[1]}/${ftM[2]}` : "",
+        fouls: ext(/\bFOUL\s+(\d+)/i),
         assists: ext(/\bAST(?:\/PASS)?\s+(\d+)/i),
         rebounds_off: ext(/\bOREB\s+(\d+)/i),
         rebounds_def: ext(/\bDREB\s+(\d+)/i),
@@ -2023,6 +2027,7 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
     for (const [uuid, fields] of Object.entries(statForm)) {
       const [fgMade, fgAtt] = parseSlash(fields.fg);
       const [tpMade, tpAtt] = parseSlash(fields.three_fg);
+      const [ftMade, ftAtt] = parseSlash(fields.ft);
       const r = await fetch("/api/game-stats", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2034,6 +2039,8 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
           turnovers: ni(fields.turnovers), minutes_played: nm(fields.minutes_played),
           fg_made: fgMade, fg_attempted: fgAtt,
           three_pt_made: tpMade, three_pt_attempted: tpAtt,
+          ft_made: ftMade, ft_attempted: ftAtt,
+          fouls: ni(fields.fouls),
           pass_attempts: ni(fields.pass_attempts),
           possession_time: ni(fields.possession_time),
         }),
@@ -2045,8 +2052,8 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
     setPostMsg("");
   };
 
-  const statCols = ["points","rebounds_off","rebounds_def","assists","steals","blocks","turnovers","minutes_played","fg","three_fg","pass_attempts","possession_time"] as const;
-  const colLabels: Record<string, string> = { points:"PTS", rebounds_off:"ORB", rebounds_def:"DRB", assists:"AST", steals:"STL", blocks:"BLK", turnovers:"TO", minutes_played:"MIN", fg:"FG", three_fg:"3FG", pass_attempts:"PASS", possession_time:"POSS" };
+  const statCols = ["points","rebounds_off","rebounds_def","assists","steals","blocks","turnovers","minutes_played","fg","three_fg","ft","fouls","pass_attempts","possession_time"] as const;
+  const colLabels: Record<string, string> = { points:"PTS", rebounds_off:"ORB", rebounds_def:"DRB", assists:"AST", steals:"STL", blocks:"BLK", turnovers:"TO", minutes_played:"MIN", fg:"FG", three_fg:"3FG", ft:"FT", fouls:"FOUL", pass_attempts:"PASS", possession_time:"POSS" };
 
   const applyPastePreview = () => {
     if (!pastePreview) return;

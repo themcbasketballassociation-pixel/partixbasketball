@@ -9,7 +9,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "PUT") {
     const admin = await requireAdmin(req, res);
     if (!admin) return;
-    const { points, rebounds_off, rebounds_def, assists, steals, blocks, turnovers, minutes_played, fg_made, fg_attempted, three_pt_made, three_pt_attempted } = req.body;
+    const { points, rebounds_off, rebounds_def, assists, steals, blocks, turnovers, minutes_played, fg_made, fg_attempted, three_pt_made, three_pt_attempted, ft_made, ft_attempted, fouls } = req.body;
     const updates: Record<string, unknown> = {};
     if (points !== undefined) updates.points = points;
     if (rebounds_off !== undefined) updates.rebounds_off = rebounds_off;
@@ -23,6 +23,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (fg_attempted !== undefined) updates.fg_attempted = fg_attempted;
     if (three_pt_made !== undefined) updates.three_pt_made = three_pt_made;
     if (three_pt_attempted !== undefined) updates.three_pt_attempted = three_pt_attempted;
+    if (ft_made !== undefined) updates.ft_made = ft_made;
+    if (ft_attempted !== undefined) updates.ft_attempted = ft_attempted;
+    if (fouls !== undefined) updates.fouls = fouls;
     const { data, error } = await supabase.from("game_stats").update(updates).eq("id", id).select("*, players(mc_uuid, mc_username)").single();
     if (error) return res.status(500).json({ error: error.message });
     return res.status(200).json(data);

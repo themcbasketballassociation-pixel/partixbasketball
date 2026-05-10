@@ -17,6 +17,7 @@ type GameStat = {
   assists: number | null; steals: number | null; blocks: number | null; turnovers: number | null;
   minutes_played: number | null; fg_made: number | null; fg_attempted: number | null;
   three_pt_made: number | null; three_pt_attempted: number | null; possession_time: number | null;
+  ft_made: number | null; ft_attempted: number | null; fouls: number | null;
   players: { mc_uuid: string; mc_username: string };
 };
 type PlayerTeam = {
@@ -49,6 +50,8 @@ const COLS: { key: string; label: string; render: (s: GameStat) => string }[] = 
   { key: "tov", label: "TO",  render: s => na(s.turnovers) },
   { key: "fg",  label: "FG",  render: s => fmtFg(s.fg_made, s.fg_attempted) },
   { key: "3fg", label: "3FG", render: s => fmtFg(s.three_pt_made, s.three_pt_attempted) },
+  { key: "ft",  label: "FT",  render: s => fmtFg(s.ft_made, s.ft_attempted) },
+  { key: "foul", label: "FOUL", render: s => na(s.fouls) },
   { key: "pt",  label: "PT",  render: s => s.possession_time === null ? "—" : String(s.possession_time) },
 ];
 
@@ -66,6 +69,8 @@ function sumCol(stats: GameStat[], key: string): string {
     case "tov": return String(stats.reduce((a, s) => a + (s.turnovers ?? 0), 0));
     case "fg":  return `${stats.reduce((a,s)=>a+(s.fg_made??0),0)}/${stats.reduce((a,s)=>a+(s.fg_attempted??0),0)}`;
     case "3fg": return `${stats.reduce((a,s)=>a+(s.three_pt_made??0),0)}/${stats.reduce((a,s)=>a+(s.three_pt_attempted??0),0)}`;
+    case "ft":  return `${stats.reduce((a,s)=>a+(s.ft_made??0),0)}/${stats.reduce((a,s)=>a+(s.ft_attempted??0),0)}`;
+    case "foul": return String(stats.reduce((a, s) => a + (s.fouls ?? 0), 0));
     case "pt":  return String(stats.reduce((a, s) => a + (s.possession_time ?? 0), 0));
     default: return "—";
   }
