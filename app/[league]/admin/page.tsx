@@ -2002,6 +2002,8 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
             minutes_played: s.minutes_played === null ? "" : fmtMins(s.minutes_played),
             fg: fmtSlash(s.fg_made, s.fg_attempted),
             three_fg: fmtSlash(s.three_pt_made, s.three_pt_attempted),
+            ft: fmtSlash(s.ft_made, s.ft_attempted),
+            fouls: s.fouls === null ? "" : String(s.fouls),
             pass_attempts: s.pass_attempts === null ? "" : String(s.pass_attempts),
             possession_time: s.possession_time === null ? "" : String(s.possession_time),
           };
