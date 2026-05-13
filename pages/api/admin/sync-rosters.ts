@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { supabase } from "../../../lib/supabase";
 import { requireAdmin } from "../../../lib/adminAuth";
+import { resolveLeague } from "../../../lib/leagueMapping";
 
 /**
  * POST /api/admin/sync-rosters
@@ -12,7 +13,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const admin = await requireAdmin(req, res);
   if (!admin) return;
 
-  const { league } = req.body ?? {};
+  const { league: leagueRaw } = req.body ?? {};
+  const league = leagueRaw ? resolveLeague(leagueRaw) : null;
 
   // Fetch all active contracts
   let query = supabase
