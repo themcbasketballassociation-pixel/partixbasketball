@@ -34,6 +34,26 @@ type Tab = "overview" | "stats" | "gamelog";
 const fmt = (v: number | null | undefined, dec = 0) =>
   v == null ? "—" : dec > 0 ? v.toFixed(dec) : String(Math.round(v));
 
+const computeVORP = (player: StatRow | null, all: StatRow[]): number | null => {
+  if (!player || (player.gp ?? 0) === 0) return null;
+  const qualified = all.filter(s => (s.gp ?? 0) >= 1);
+  if (qualified.length === 0) return null;
+  const eff = (s: StatRow) => (s.ppg ?? 0) + 1.2 * (s.rpg ?? 0) + 1.5 * (s.apg ?? 0) + 2 * (s.spg ?? 0) + 2 * (s.bpg ?? 0);
+  const avgEff = qualified.reduce((sum, s) => sum + eff(s), 0) / qualified.length;
+  const bpm = eff(player) - avgEff;
+  const maxGP = Math.max(1, ...qualified.map(s => s.gp ?? 0));
+  return Math.round((bpm + 2.0) * ((player.gp ?? 0) / maxGP) * 10) / 10;
+};
+
+const vorpContext = (v: number): { label: string; color: string } => {
+  if (v >= 8)  return { label: "MVP Candidate",     color: "#f59e0b" };
+  if (v >= 5)  return { label: "All-Star Caliber",  color: "#14b8a6" };
+  if (v >= 2)  return { label: "Solid Starter",     color: "#22c55e" };
+  if (v >= 1)  return { label: "Rotation Player",   color: "#60a5fa" };
+  if (v >= 0)  return { label: "Replacement Level", color: "#94a3b8" };
+  return           { label: "Below Replacement",  color: "#ef4444" };
+};
+
 const ordinal = (n: number) => {
   if (n >= 11 && n <= 13) return `${n}th`;
   switch (n % 10) {
@@ -249,6 +269,10 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
   })() : null;
   void pctile;
 
+  const vorp = computeVORP(activeStats, activeLeagueAll);
+  const leagueMaxVorp = Math.max(0.1, ...activeLeagueAll.filter(s => (s.gp ?? 0) >= 1).map(s => computeVORP(s, activeLeagueAll) ?? 0));
+  const vorpCtx = vorp != null ? vorpContext(vorp) : null;
+
   if (loading) {
     return (
       <div className="rounded-2xl border border-slate-800 bg-slate-900 p-16 text-center text-slate-500">
@@ -435,6 +459,67 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* VORP Card */}
+            <div className="rounded-xl border border-slate-800 bg-slate-950 overflow-hidden">
+              <div className="flex items-center gap-2.5 px-5 py-4 border-b border-slate-800">
+                <span className="text-xs font-black text-white uppercase tracking-widest">VORP</span>
+                <span className="text-[10px] text-slate-600">Value Over Replacement Player</span>
+              </div>
+              {statsLoading ? (
+                <p className="text-slate-600 text-sm text-center py-6">Loading…</p>
+              ) : !activeStats || vorp == null ? (
+                <p className="text-slate-600 text-sm text-center py-6">No stats for this period.</p>
+              ) : (
+                <div className="px-5 py-5">
+                  <div className="flex items-end gap-4 mb-4">
+                    <span className="text-5xl font-black tabular-nums leading-none" style={{ color: vorpCtx?.color ?? "#fff" }}>
+                      {vorp >= 0 ? "+" : ""}{vorp.toFixed(1)}
+                    </span>
+                    <div className="pb-1">
+                      <div className="text-sm font-bold" style={{ color: vorpCtx?.color ?? "#fff" }}>{vorpCtx?.label}</div>
+                      <div className="text-[10px] text-slate-600 mt-0.5">vs replacement baseline (−2.0 BPM)</div>
+                    </div>
+                  </div>
+                  {/* VORP bar */}
+                  <div className="relative mb-2">
+                    <div className="h-3 rounded-full bg-slate-800 overflow-hidden">
+                      <div className="h-full rounded-full transition-all duration-700"
+                        style={{ width: `${Math.max(2, Math.min(100, (Math.max(0, vorp) / Math.max(leagueMaxVorp, 1)) * 100))}%`, background: vorpCtx?.color ?? "#64748b" }} />
+                    </div>
+                  </div>
+                  {/* Scale labels */}
+                  <div className="flex justify-between text-[9px] text-slate-600 font-bold mb-4 px-0.5">
+                    <span>0.0<br/>Replacement</span>
+                    <span className="text-center">2.0<br/>Starter</span>
+                    <span className="text-center">5.0<br/>All-Star</span>
+                    <span className="text-right">8.0+<br/>MVP</span>
+                  </div>
+                  {/* VORP breakdown */}
+                  <div className="grid grid-cols-3 gap-2 border-t border-slate-800 pt-4">
+                    {[
+                      { label: "Scoring",    color: "#ef4444", val: (activeStats.ppg ?? 0) },
+                      { label: "Rebounding", color: "#3b82f6", val: 1.2 * (activeStats.rpg ?? 0) },
+                      { label: "Playmaking", color: "#22c55e", val: 1.5 * (activeStats.apg ?? 0) },
+                      { label: "Defense",    color: "#a855f7", val: 2 * ((activeStats.spg ?? 0) + (activeStats.bpg ?? 0)) },
+                      { label: "GP Weight",  color: "#f59e0b", val: (activeStats.gp ?? 0) },
+                      { label: "BPM",        color: vorpCtx?.color ?? "#94a3b8", val: null },
+                    ].map(({ label, color, val }, i) => (
+                      <div key={label} className="rounded-lg bg-slate-900 border border-slate-800 px-2 py-2 text-center">
+                        <div className="text-[9px] text-slate-500 uppercase tracking-wide mb-0.5">{label}</div>
+                        {i === 4 ? (
+                          <div className="text-sm font-black tabular-nums" style={{ color }}>{activeStats.gp ?? "—"} GP</div>
+                        ) : i === 5 ? (
+                          <div className="text-sm font-black tabular-nums" style={{ color }}>{vorp >= 0 ? "+" : ""}{vorp.toFixed(1)}</div>
+                        ) : (
+                          <div className="text-sm font-black tabular-nums" style={{ color }}>+{val.toFixed(1)}</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Performance Profile (radar) */}

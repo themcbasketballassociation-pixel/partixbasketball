@@ -459,9 +459,14 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
           .slice(0, 3);
         setUpcomingGames(upcoming);
 
-        // Compute standings from all completed games
+        // Filter standings to the current (highest) season only
+        const parseSeasonNum = (s: string | null | undefined) => { const m = s?.match(/\d+/); return m ? parseInt(m[0]) : 0; };
+        const maxSeason = Math.max(0, ...data.map(g => parseSeasonNum(g.season)));
+        const currentCompleted = maxSeason > 0 ? completed.filter(g => parseSeasonNum(g.season) === maxSeason) : completed;
+
+        // Compute standings from current season games only
         const teamMap: Record<string, TeamRecord> = {};
-        for (const g of completed) {
+        for (const g of currentCompleted) {
           if (!teamMap[g.home_team.id]) teamMap[g.home_team.id] = { team: g.home_team, wins: 0, losses: 0 };
           if (!teamMap[g.away_team.id]) teamMap[g.away_team.id] = { team: g.away_team, wins: 0, losses: 0 };
           const homeWon = (g.home_score ?? 0) > (g.away_score ?? 0);
