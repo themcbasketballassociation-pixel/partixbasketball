@@ -70,6 +70,7 @@ export default function AccoladesPage({ params }: { params?: Promise<{ league?: 
   const leagueDisplay = leagueNames[slug] ?? slug.toUpperCase();
 
   const [accolades, setAccolades] = React.useState<Accolade[]>([]);
+  const [gameRecords, setGameRecords] = React.useState<Accolade[]>([]);
   const [records, setRecords] = React.useState<Records | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [season, setSeason] = React.useState("All");
@@ -80,9 +81,9 @@ export default function AccoladesPage({ params }: { params?: Promise<{ league?: 
       fetch(`/api/accolades?league=${slug}`).then((r) => r.json()),
       fetch(`/api/stats/records?league=${slug}`).then((r) => r.json()),
     ]).then(([accoladesData, recordsData]) => {
-      const filtered = Array.isArray(accoladesData)
-        ? accoladesData.filter((a: Accolade) => a.type !== "Finals Champion")
-        : [];
+      const all = Array.isArray(accoladesData) ? accoladesData : [];
+      setGameRecords(all.filter((a: Accolade) => a.type.startsWith("Single Game Record:")));
+      const filtered = all.filter((a: Accolade) => a.type !== "Finals Champion" && !a.type.startsWith("Single Game Record:"));
       setAccolades(filtered);
       if (recordsData && !recordsData.error) setRecords(recordsData);
       setLoading(false);
@@ -110,20 +111,30 @@ export default function AccoladesPage({ params }: { params?: Promise<{ league?: 
             <p className="text-slate-500 text-xs mt-0.5">{leagueDisplay} — all-time bests from box scores</p>
           </div>
           <div className="p-4 space-y-5">
-            {/* Game Records */}
-            {records.game && (
-              <div>
-                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Single Game</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                  <RecordCard label="Most Points in a Game"    entry={records.game?.points} />
-                  <RecordCard label="Most Rebounds in a Game"  entry={records.game?.rebounds} />
-                  <RecordCard label="Most Assists in a Game"   entry={records.game?.assists} />
-                  <RecordCard label="Most Steals in a Game"    entry={records.game?.steals} />
-                  <RecordCard label="Most Blocks in a Game"    entry={records.game?.blocks} />
-                  <RecordCard label="Most Turnovers in a Game" entry={records.game?.turnovers} />
+            {/* Game Records — sourced from accolades table */}
+            {(() => {
+              const sgMap: Record<string, RecordEntry> = {};
+              for (const a of gameRecords) {
+                const key = a.type.replace("Single Game Record:", "").trim().toLowerCase();
+                const val = parseFloat((a.description ?? "").match(/^(\d+(\.\d+)?)/)?.[1] ?? "0");
+                sgMap[key] = { mc_uuid: a.mc_uuid, mc_username: a.players?.mc_username ?? a.mc_uuid, value: val, season: a.season };
+              }
+              const hasAny = Object.keys(sgMap).length > 0;
+              if (!hasAny) return null;
+              return (
+                <div>
+                  <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Single Game</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                    <RecordCard label="Most Points in a Game"    entry={sgMap["pts"]} />
+                    <RecordCard label="Most Rebounds in a Game"  entry={sgMap["reb"]} />
+                    <RecordCard label="Most Assists in a Game"   entry={sgMap["ast"]} />
+                    <RecordCard label="Most Steals in a Game"    entry={sgMap["stl"]} />
+                    <RecordCard label="Most Blocks in a Game"    entry={sgMap["blk"]} />
+                    <RecordCard label="Most Turnovers in a Game" entry={sgMap["tov"]} />
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Season Records */}
             <div>
