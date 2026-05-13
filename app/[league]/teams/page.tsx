@@ -117,8 +117,11 @@ function TeamDetailModal({ team, league, seasons, defaultSeason, onClose }: {
   const capUsed = contracts.reduce((sum, c) => sum + c.amount, 0);
   const showCap = league !== "mcaa" && league !== "mbgl";
 
-  // Team stats for selected season (filtered to roster — use contracts as source of truth)
-  const rosterUuids = React.useMemo(() => new Set(contracts.map(c => c.mc_uuid)), [contracts]);
+  // Roster UUIDs: contracts when available (current season), else player_teams (past seasons with expired contracts)
+  const rosterUuids = React.useMemo(
+    () => new Set(contracts.length > 0 ? contracts.map(c => c.mc_uuid) : seasonRoster.map(pt => pt.mc_uuid)),
+    [contracts, seasonRoster]
+  );
   const teamStats = React.useMemo(() => stats.filter(s => rosterUuids.has(s.mc_uuid)), [stats, rosterUuids]);
 
   // Team totals per game = sum of each player's per-game averages

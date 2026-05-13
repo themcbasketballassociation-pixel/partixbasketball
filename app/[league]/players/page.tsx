@@ -66,13 +66,11 @@ export default function PlayersPage({ params }: { params?: Promise<{ league?: st
   }, [slug]);
 
   const getRecord = (uuid: string) => {
-    const teams = playerTeams.filter(pt => pt.mc_uuid === uuid);
-    let wins = 0, losses = 0;
-    for (const pt of teams) {
-      const rec = recordMap[pt.team_id];
-      if (rec) { wins += rec.wins; losses += rec.losses; }
-    }
-    return { wins, losses };
+    // Use only the team shown in the stats row (current season team) to avoid
+    // summing records across multiple seasons
+    const teamId = (statsMap[uuid]?.team as { id?: string } | null)?.id;
+    if (!teamId) return { wins: 0, losses: 0 };
+    return recordMap[teamId] ?? { wins: 0, losses: 0 };
   };
 
   const filtered = search.trim()

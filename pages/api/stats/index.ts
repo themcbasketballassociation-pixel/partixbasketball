@@ -244,15 +244,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     for (const row of teamRows ?? []) {
       if (row.mc_uuid && row.teams) teamMap[row.mc_uuid] = row.teams;
     }
-    // 2. Fallback to active contracts for players still unresolved (handles null/SSeason seasons)
+    // 2. Fallback to contracts for players still unresolved.
+    // When a specific season is requested, match by season (any status) so old seasons don't
+    // bleed the current active contract's team. For season=all, use active contracts only.
     const unresolvedUuids = uuids.filter((u) => !teamMap[u]);
     if (unresolvedUuids.length > 0) {
-      const { data: contractTeamRows } = await supabase
+      let contractQuery = supabase
         .from("contracts")
         .select("mc_uuid, teams(id, name, abbreviation, logo_url)")
         .eq("league", league as string)
-        .eq("status", "active")
         .in("mc_uuid", unresolvedUuids);
+      if (lookupSeason) {
+        contractQuery = contractQuery.eq("season", lookupSeason);
+      } else {
+        contractQuery = contractQuery.eq("status", "active");
+      }
+      const { data: contractTeamRows } = await contractQuery;
       for (const row of contractTeamRows ?? []) {
         if (row.mc_uuid && row.teams && !teamMap[row.mc_uuid]) teamMap[row.mc_uuid] = row.teams;
       }

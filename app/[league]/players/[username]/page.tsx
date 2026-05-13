@@ -187,12 +187,15 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
         setCurrentTeam(teamsArr.find(t => t.id === match.team_id) ?? null);
       }
 
-      let wins = 0, losses = 0;
-      for (const pt of mine) {
-        const rec = recArr.find(r => r.team_id === pt.team_id);
-        if (rec) { wins += rec.wins; losses += rec.losses; }
-      }
-      setRecord({ wins, losses });
+      // Only show record for current team (active contract or most recent assignment)
+      const currentTeamId = activeContract?.team_id ??
+        ([...mine].sort((a, b) => {
+          const na = a.season ? parseInt(a.season.replace(/\D/g, "") || "0") : Infinity;
+          const nb = b.season ? parseInt(b.season.replace(/\D/g, "") || "0") : Infinity;
+          return nb - na;
+        })[0]?.team_id);
+      const currentRec = currentTeamId ? recArr.find(r => r.team_id === currentTeamId) : null;
+      setRecord({ wins: currentRec?.wins ?? 0, losses: currentRec?.losses ?? 0 });
       setLoading(false);
     });
   }, [slug, username]);
