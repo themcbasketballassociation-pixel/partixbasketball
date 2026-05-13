@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { supabase } from "../../../lib/supabase";
 import { resolveLeague } from "../../../lib/leagueMapping";
 import { requireAdmin } from "../../../lib/adminAuth";
+import { recomputeRecords } from "../admin/recompute-records";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === "GET") {
@@ -60,6 +61,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .select("*, players(mc_uuid, mc_username)")
       .single();
     if (error) return res.status(500).json({ error: error.message });
+
+    // Auto-update single-game records after every stat save
+    const { data: game } = await supabase.from("games").select("league").eq("id", game_id).single();
+    if (game?.league) {
+      recomputeRecords(game.league).catch(() => {}); // fire-and-forget, don't block response
+    }
+
     return res.status(200).json(data);
   }
 

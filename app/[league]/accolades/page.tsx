@@ -239,7 +239,10 @@ export default function AccoladesPage({ params }: { params?: Promise<{ league?: 
                         </div>
                       </div>
                       <div className="rounded-md bg-slate-800/50 border border-slate-700/60 px-2.5 py-1.5">
-                        <div className="font-bold text-white text-xs">{a.type}</div>
+                        <div className="font-bold text-white text-xs flex items-center gap-1.5">
+                          {a.type.startsWith("Single Game Record:") && <span className="text-yellow-400">📋</span>}
+                          {a.type.startsWith("Single Game Record:") ? a.type.replace("Single Game Record:", "Single Game").trim() + " Record" : a.type}
+                        </div>
                         {a.description && <div className="text-slate-400 text-[10px] mt-0.5">{a.description}</div>}
                       </div>
                     </div>

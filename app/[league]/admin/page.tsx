@@ -2136,6 +2136,20 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
               {syncing ? "Syncing..." : "🔄 Sync Rosters"}
             </button>
             <button
+              className={btnSecondary}
+              disabled={cleaning}
+              onClick={async () => {
+                setCleaning(true); setCleanMsg(""); setSyncMsg("");
+                const r = await fetch(`/api/admin/recompute-records?league=${league}`, { method: "POST" });
+                const d = await r.json();
+                setCleaning(false);
+                if (r.ok) setCleanMsg(`🏆 Records updated (${d.updated} categories)`);
+                else setCleanMsg(`Error: ${d.error}`);
+              }}
+            >
+              🏆 Recompute Records
+            </button>
+            <button
               className={btnDanger}
               disabled={cleaning}
               onClick={async () => {
