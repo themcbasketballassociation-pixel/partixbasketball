@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { supabase } from "../../../lib/supabase";
+import { resolveLeague } from "../../../lib/leagueMapping";
 import { requireAdmin } from "../../../lib/adminAuth";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -11,7 +12,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const { data: games } = await supabase
         .from("games")
         .select("id")
-        .eq("league", (league as string).toLowerCase())
+        .eq("league", resolveLeague(league as string))
         .eq("season", season as string);
       const ids = (games ?? []).map(g => g.id);
       if (ids.length === 0) return res.status(200).json([]);

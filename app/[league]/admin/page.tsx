@@ -2112,7 +2112,7 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
               className={showStatted ? btnPrimary : btnSecondary}
               onClick={() => setShowStatted(v => !v)}
             >
-              {showStatted ? "Showing All Games" : "Show Already Statted"}
+              {showStatted ? "Hide Statted Games" : "Show All Games"}
             </button>
             <button
               className={btnDanger}

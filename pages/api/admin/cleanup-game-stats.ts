@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { supabase } from "../../../lib/supabase";
 import { requireAdmin } from "../../../lib/adminAuth";
+import { resolveLeague } from "../../../lib/leagueMapping";
 
 // POST /api/admin/cleanup-game-stats?league=mba&season=Season+7
 // Deletes game_stats rows where the player is not on either team for that game's season.
@@ -11,7 +12,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!admin) return;
 
   const { league: leagueRaw, season } = req.query;
-  const league = (leagueRaw as string)?.toLowerCase();
+  const league = resolveLeague(leagueRaw as string);
   if (!league || !season) return res.status(400).json({ error: "league and season required" });
 
   // 1. Get all games for this league + season
