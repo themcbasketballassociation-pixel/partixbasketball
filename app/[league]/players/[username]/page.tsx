@@ -147,7 +147,8 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
       fetch(`/api/teams/records?league=${slug}`).then(r => r.json()),
       fetch(`/api/teams/players?league=${slug}`).then(r => r.json()),
       fetch(`/api/teams?league=${slug}`).then(r => r.json()),
-    ]).then(([players, accs, records, playerTeams, teams]) => {
+      fetch(`/api/stats/seasons?league=${slug}`).then(r => r.json()).catch(() => []),
+    ]).then(([players, accs, records, playerTeams, teams, seasonsData]) => {
       const playersArr: Player[] = Array.isArray(players) ? players : [];
       const found = playersArr.find(p => p.mc_username.toLowerCase() === username.toLowerCase());
       if (!found) { setNotFound(true); setLoading(false); return; }
@@ -159,15 +160,24 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
       const recArr: TeamRecord[] = Array.isArray(records) ? records : [];
       const teamsArr: Team[] = Array.isArray(teams) ? teams : [];
 
+      // Determine the current (most recent non-playoff) season
+      const seasonsList: string[] = Array.isArray(seasonsData)
+        ? [...new Set((seasonsData as { season: string }[]).map(d => d.season).filter(s => s && !s.toLowerCase().includes("playoff")))].sort((a, b) => b.localeCompare(a))
+        : [];
+      const currentSeason = seasonsList[0] ?? null;
+
       const mine = ptArr.filter(pt => pt.mc_uuid === found.mc_uuid);
       setPlayerTeamIds(new Set(mine.map(pt => pt.team_id)));
       if (mine.length > 0) {
-        const sorted = [...mine].sort((a, b) => {
-          const na = a.season ? parseInt(a.season.replace(/\D/g, "") || "0") : Infinity;
-          const nb = b.season ? parseInt(b.season.replace(/\D/g, "") || "0") : Infinity;
-          return nb - na;
-        });
-        setCurrentTeam(teamsArr.find(t => t.id === sorted[0].team_id) ?? null);
+        // Prefer the entry matching the current season, fall back to highest season number
+        const match =
+          (currentSeason ? mine.find(pt => pt.season === currentSeason) : null) ??
+          [...mine].sort((a, b) => {
+            const na = a.season ? parseInt(a.season.replace(/\D/g, "") || "0") : Infinity;
+            const nb = b.season ? parseInt(b.season.replace(/\D/g, "") || "0") : Infinity;
+            return nb - na;
+          })[0];
+        setCurrentTeam(teamsArr.find(t => t.id === match.team_id) ?? null);
       }
 
       let wins = 0, losses = 0;
