@@ -110,15 +110,17 @@ export default function AccoladesPage({ params }: { params?: Promise<{ league?: 
             <p className="text-slate-500 text-xs mt-0.5">{leagueDisplay} — all-time bests from box scores</p>
           </div>
           <div className="p-4 space-y-5">
-            {/* Game Records — MBA only */}
-            {slug === "mba" && (
+            {/* Game Records */}
+            {records.game && (
               <div>
                 <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Single Game</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                  <RecordCard
-                    label="Most Points in a Game"
-                    entry={{ mc_uuid: "73b2620d-970a-444f-9459-e45789d36584", mc_username: "yeatgf", value: 81, season: "Season 6" }}
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                  <RecordCard label="Most Points in a Game"   entry={records.game?.points} />
+                  <RecordCard label="Most Rebounds in a Game" entry={records.game?.rebounds} />
+                  <RecordCard label="Most Assists in a Game"  entry={records.game?.assists} />
+                  <RecordCard label="Most Steals in a Game"   entry={records.game?.steals} />
+                  <RecordCard label="Most Blocks in a Game"   entry={records.game?.blocks} />
+                  <RecordCard label="Most Turnovers in a Game" entry={records.game?.turnovers} />
                 </div>
               </div>
             )}
