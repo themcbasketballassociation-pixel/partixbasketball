@@ -47,13 +47,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
   const gameIds = Object.keys(gameMap);
 
-  // Track individual game highs for blocks
-  let gameBlocksRecord: RecordEntry = { mc_uuid: "", mc_username: "", value: 0, season: "" };
+  // Track individual game highs
+  let gamePtsRecord:  RecordEntry = { mc_uuid: "", mc_username: "", value: 0, season: "" };
+  let gameRebRecord:  RecordEntry = { mc_uuid: "", mc_username: "", value: 0, season: "" };
+  let gameAstRecord:  RecordEntry = { mc_uuid: "", mc_username: "", value: 0, season: "" };
+  let gameStlRecord:  RecordEntry = { mc_uuid: "", mc_username: "", value: 0, season: "" };
+  let gameBlkRecord:  RecordEntry = { mc_uuid: "", mc_username: "", value: 0, season: "" };
+  let gameTovRecord:  RecordEntry = { mc_uuid: "", mc_username: "", value: 0, season: "" };
 
   if (gameIds.length) {
     const { data: gsRows } = await supabase
       .from("game_stats")
-      .select("game_id, mc_uuid, points, rebounds_off, rebounds_def, assists, steals, blocks")
+      .select("game_id, mc_uuid, points, rebounds_off, rebounds_def, assists, steals, blocks, turnovers")
       .in("game_id", gameIds);
 
     const gsUuids = [...new Set((gsRows ?? []).map((r) => r.mc_uuid as string))];
@@ -90,19 +95,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       careerTotals[uuid].blocks += blk;
       careerGameCount[uuid] = (careerGameCount[uuid] ?? 0) + 1;
 
-      // Track single-game blocks record
-      if (blk > gameBlocksRecord.value) {
-        gameBlocksRecord = {
-          mc_uuid: uuid,
-          mc_username: playerMap[uuid] ?? uuid,
-          value: blk,
-          season,
-        };
-      }
+      const tov = (row.turnovers as number) ?? 0;
+
+      // Track single-game records
+      if (pts > gamePtsRecord.value) gamePtsRecord = { mc_uuid: uuid, mc_username: playerMap[uuid] ?? uuid, value: pts, season };
+      if (reb > gameRebRecord.value) gameRebRecord = { mc_uuid: uuid, mc_username: playerMap[uuid] ?? uuid, value: reb, season };
+      if (ast > gameAstRecord.value) gameAstRecord = { mc_uuid: uuid, mc_username: playerMap[uuid] ?? uuid, value: ast, season };
+      if (stl > gameStlRecord.value) gameStlRecord = { mc_uuid: uuid, mc_username: playerMap[uuid] ?? uuid, value: stl, season };
+      if (blk > gameBlkRecord.value) gameBlkRecord = { mc_uuid: uuid, mc_username: playerMap[uuid] ?? uuid, value: blk, season };
+      if (tov > gameTovRecord.value) gameTovRecord = { mc_uuid: uuid, mc_username: playerMap[uuid] ?? uuid, value: tov, season };
     }
-    // Re-resolve usernames for game record (playerMap is now fully populated)
-    if (gameBlocksRecord.mc_uuid) {
-      gameBlocksRecord.mc_username = playerMap[gameBlocksRecord.mc_uuid] ?? gameBlocksRecord.mc_uuid;
+    // Re-resolve usernames (playerMap is now fully populated)
+    for (const rec of [gamePtsRecord, gameRebRecord, gameAstRecord, gameStlRecord, gameBlkRecord, gameTovRecord]) {
+      if (rec.mc_uuid) rec.mc_username = playerMap[rec.mc_uuid] ?? rec.mc_uuid;
     }
   }
 
@@ -259,7 +264,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       bpg: bestCareerAvg("blocks"),
     },
     game: {
-      blocks: gameBlocksRecord,
+      points:    gamePtsRecord,
+      rebounds:  gameRebRecord,
+      assists:   gameAstRecord,
+      steals:    gameStlRecord,
+      blocks:    gameBlkRecord,
+      turnovers: gameTovRecord,
     },
   };
 
