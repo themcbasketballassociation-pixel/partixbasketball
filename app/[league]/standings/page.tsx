@@ -64,14 +64,14 @@ function StandingsTable({ rows, games, accent }: { rows: StandingRow[]; games: G
   const leader = sorted[0];
   return (
     <div style={{ overflowX: "auto" }}>
-      <table style={{ width: "100%", fontSize: "0.875rem", borderCollapse: "collapse" }}>
+      <table style={{ width: "100%", fontSize: "0.78rem", borderCollapse: "collapse" }}>
         <thead>
           <tr style={{ borderBottom: "1px solid #1c2028" }}>
             {["#", "Team", "W", "L", "PCT", "GB", "CONF", "DIFF"].map((h) => (
               <th key={h} style={{
-                padding: "10px 12px",
-                fontSize: "0.65rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em",
-                color: "#444", textAlign: h === "Team" ? "left" : "center", whiteSpace: "nowrap",
+                padding: "7px 9px",
+                fontSize: "0.58rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em",
+                color: "#3a3a3a", textAlign: h === "Team" ? "left" : "center", whiteSpace: "nowrap",
               }}>{h}</th>
             ))}
           </tr>
@@ -83,31 +83,31 @@ function StandingsTable({ rows, games, accent }: { rows: StandingRow[]; games: G
             const isFirst = i === 0;
             return (
               <tr key={row.team.id} style={{
-                borderTop: "1px solid #171b26",
-                background: isFirst ? "rgba(255,255,255,0.02)" : undefined,
+                borderTop: "1px solid #131720",
+                background: isFirst ? "rgba(255,255,255,0.015)" : undefined,
                 transition: "background 0.1s",
               }}>
-                <td style={{ padding: "11px 14px", textAlign: "center", color: "#444", fontSize: "0.7rem", fontWeight: 600 }}>{i + 1}</td>
-                <td style={{ padding: "11px 12px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <TeamLogo team={row.team} size={26} />
+                <td style={{ padding: "8px 10px", textAlign: "center", color: "#3a3a3a", fontSize: "0.65rem", fontWeight: 600 }}>{i + 1}</td>
+                <td style={{ padding: "8px 9px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <TeamLogo team={row.team} size={22} />
                     <div>
-                      <div style={{ fontWeight: 600, color: "#fff", fontSize: "0.875rem", lineHeight: 1.2 }}>{row.team.name}</div>
-                      <div style={{ fontSize: "0.7rem", color: "#555", fontFamily: "monospace" }}>{row.team.abbreviation}</div>
+                      <div style={{ fontWeight: 600, color: "#ddd", fontSize: "0.78rem", lineHeight: 1.2 }}>{row.team.name}</div>
+                      <div style={{ fontSize: "0.6rem", color: "#444", fontFamily: "monospace" }}>{row.team.abbreviation}</div>
                     </div>
                   </div>
                 </td>
-                <td style={{ padding: "11px 10px", textAlign: "center", fontWeight: 700, color: "#4ade80", fontSize: "0.875rem" }}>{row.w}</td>
-                <td style={{ padding: "11px 10px", textAlign: "center", color: "#f87171", fontSize: "0.875rem" }}>{row.l}</td>
-                <td style={{ padding: "11px 10px", textAlign: "center", fontWeight: 600, color: "#fff", fontSize: "0.8rem" }}>
+                <td style={{ padding: "8px 8px", textAlign: "center", fontWeight: 700, color: "#4ade80", fontSize: "0.78rem" }}>{row.w}</td>
+                <td style={{ padding: "8px 8px", textAlign: "center", color: "#f87171", fontSize: "0.78rem" }}>{row.l}</td>
+                <td style={{ padding: "8px 8px", textAlign: "center", fontWeight: 600, color: "#bbb", fontSize: "0.72rem" }}>
                   {gp > 0 ? row.pct.toFixed(3).replace(/^0/, "") : ".000"}
                 </td>
-                <td style={{ padding: "11px 10px", textAlign: "center", color: "#555", fontSize: "0.75rem" }}>{gb}</td>
-                <td style={{ padding: "11px 10px", textAlign: "center", color: "#666", fontSize: "0.75rem" }}>
+                <td style={{ padding: "8px 8px", textAlign: "center", color: "#444", fontSize: "0.68rem" }}>{gb}</td>
+                <td style={{ padding: "8px 8px", textAlign: "center", color: "#555", fontSize: "0.68rem" }}>
                   {row.confW + row.confL > 0 ? `${row.confW}-${row.confL}` : "—"}
                 </td>
-                <td style={{ padding: "11px 10px", textAlign: "center", fontWeight: 600, fontSize: "0.75rem",
-                  color: row.diff > 0 ? "#4ade80" : row.diff < 0 ? "#f87171" : "#555" }}>
+                <td style={{ padding: "8px 8px", textAlign: "center", fontWeight: 600, fontSize: "0.68rem",
+                  color: row.diff > 0 ? "#4ade80" : row.diff < 0 ? "#f87171" : "#444" }}>
                   {row.diff > 0 ? "+" : ""}{row.diff}
                 </td>
               </tr>
@@ -186,10 +186,10 @@ export default function StandingsPage({ params }: { params?: Promise<{ league?: 
   return (
     <div style={{ borderRadius: "1rem", border: "1px solid #1c2028", background: "#101318", overflow: "hidden" }}>
       {/* Header */}
-      <div style={{ padding: "20px 24px", borderBottom: "1px solid #1c2028", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+      <div style={{ padding: "16px 20px", borderBottom: "1px solid #1c2028", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
         <div>
-          <h2 style={{ fontSize: "1.5rem", fontWeight: 700, color: "#fff", margin: 0 }}>Standings</h2>
-          <p style={{ color: "#888", fontSize: "0.875rem", margin: "2px 0 0" }}>{leagueDisplay} · {season}</p>
+          <h2 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#fff", margin: 0 }}>Standings</h2>
+          <p style={{ color: "#666", fontSize: "0.75rem", margin: "2px 0 0" }}>{leagueDisplay} · {season}</p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {hasDivisions && (

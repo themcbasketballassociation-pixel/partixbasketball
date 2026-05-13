@@ -66,10 +66,10 @@ export default function BoxScoresPage({ params }: { params?: Promise<{ league?: 
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
       {/* Header */}
-      <div className="px-6 py-5 border-b border-slate-800 flex items-center justify-between flex-wrap gap-3">
+      <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="text-2xl font-bold text-white">Box Scores</h2>
-          <p className="text-slate-500 text-sm mt-0.5">{leagueDisplay}</p>
+          <h2 className="text-lg font-bold text-white">Box Scores</h2>
+          <p className="text-slate-500 text-xs mt-0.5">{leagueDisplay}</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {/* Regular / Playoffs toggle */}
@@ -100,7 +100,7 @@ export default function BoxScoresPage({ params }: { params?: Promise<{ league?: 
           {tab === "playoffs" ? "No playoff box scores yet." : "No completed games yet."}
         </div>
       ) : (
-        <div className="p-4 flex flex-col gap-2">
+        <div className="p-3 flex flex-col gap-1.5">
           {games.map(g => {
             const homeWon = (g.home_score ?? 0) > (g.away_score ?? 0);
             const awayWon = (g.away_score ?? 0) > (g.home_score ?? 0);
@@ -108,43 +108,43 @@ export default function BoxScoresPage({ params }: { params?: Promise<{ league?: 
               <Link
                 key={g.id}
                 href={`/${slug}/boxscores/${g.id}`}
-                className="block rounded-xl border border-slate-700 bg-slate-950 hover:border-slate-500 hover:bg-slate-800/40 transition"
+                className="block rounded-lg border border-slate-800 bg-slate-950 hover:border-slate-600 hover:bg-slate-800/30 transition"
               >
-                <div className="grid items-center px-4 py-3.5 gap-3" style={{ gridTemplateColumns: "1fr auto 1fr" }}>
+                <div className="grid items-center px-3 py-2.5 gap-2" style={{ gridTemplateColumns: "1fr auto 1fr" }}>
                   {/* Home team */}
-                  <div className="flex items-center gap-2.5 justify-end">
+                  <div className="flex items-center gap-2 justify-end">
                     <div className="text-right">
-                      <div className={`font-bold text-sm leading-tight ${homeWon ? "text-white" : "text-slate-500"}`}>{g.home_team?.name}</div>
-                      <div className="text-[10px] text-slate-600 uppercase">{g.home_team?.abbreviation} · HOME</div>
+                      <div className={`font-semibold text-sm leading-tight ${homeWon ? "text-white" : "text-slate-500"}`}>{g.home_team?.name}</div>
+                      <div className="text-[9px] text-slate-700 uppercase tracking-wide">{g.home_team?.abbreviation}</div>
                     </div>
                     {g.home_team?.logo_url
-                      ? <img src={g.home_team.logo_url} className={`w-9 h-9 object-contain flex-shrink-0 ${homeWon ? "" : "opacity-40"}`} alt="" />
-                      : <div className="w-9 h-9 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-600 text-[10px] font-bold flex-shrink-0">{g.home_team?.abbreviation}</div>}
+                      ? <img src={g.home_team.logo_url} className={`w-8 h-8 object-contain flex-shrink-0 ${homeWon ? "" : "opacity-30"}`} alt="" />
+                      : <div className="w-8 h-8 rounded-md bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-600 text-[9px] font-bold flex-shrink-0">{g.home_team?.abbreviation}</div>}
                   </div>
 
                   {/* Score */}
-                  <div className="text-center min-w-[90px]">
-                    <div className="flex items-center justify-center gap-2">
-                      <span className={`text-2xl font-black tabular-nums leading-none ${homeWon ? "text-white" : "text-slate-600"}`}>{g.home_score}</span>
-                      <span className="text-slate-700 text-sm">–</span>
-                      <span className={`text-2xl font-black tabular-nums leading-none ${awayWon ? "text-white" : "text-slate-600"}`}>{g.away_score}</span>
+                  <div className="text-center min-w-[80px]">
+                    <div className="flex items-center justify-center gap-1.5">
+                      <span className={`text-xl font-black tabular-nums leading-none ${homeWon ? "text-white" : "text-slate-600"}`}>{g.home_score}</span>
+                      <span className="text-slate-700 text-xs">–</span>
+                      <span className={`text-xl font-black tabular-nums leading-none ${awayWon ? "text-white" : "text-slate-600"}`}>{g.away_score}</span>
                     </div>
-                    <div className="flex items-center justify-center gap-2 mt-1">
-                      <span className="text-[9px] font-bold text-green-400 bg-green-950 border border-green-800 rounded-full px-2 py-0.5">FINAL</span>
-                      <span className="text-[10px] text-slate-600">
+                    <div className="flex items-center justify-center gap-1.5 mt-0.5">
+                      <span className="text-[8px] font-bold text-green-500 bg-green-950/60 border border-green-900 rounded-full px-1.5 py-px">FINAL</span>
+                      <span className="text-[9px] text-slate-600">
                         {new Date(g.scheduled_at).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "Etc/GMT+5" })}
                       </span>
                     </div>
                   </div>
 
                   {/* Away team */}
-                  <div className="flex items-center gap-2.5 justify-start">
+                  <div className="flex items-center gap-2 justify-start">
                     {g.away_team?.logo_url
-                      ? <img src={g.away_team.logo_url} className={`w-9 h-9 object-contain flex-shrink-0 ${awayWon ? "" : "opacity-40"}`} alt="" />
-                      : <div className="w-9 h-9 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-600 text-[10px] font-bold flex-shrink-0">{g.away_team?.abbreviation}</div>}
+                      ? <img src={g.away_team.logo_url} className={`w-8 h-8 object-contain flex-shrink-0 ${awayWon ? "" : "opacity-30"}`} alt="" />
+                      : <div className="w-8 h-8 rounded-md bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-600 text-[9px] font-bold flex-shrink-0">{g.away_team?.abbreviation}</div>}
                     <div>
-                      <div className={`font-bold text-sm leading-tight ${awayWon ? "text-white" : "text-slate-500"}`}>{g.away_team?.name}</div>
-                      <div className="text-[10px] text-slate-600 uppercase">{g.away_team?.abbreviation} · AWAY</div>
+                      <div className={`font-semibold text-sm leading-tight ${awayWon ? "text-white" : "text-slate-500"}`}>{g.away_team?.name}</div>
+                      <div className="text-[9px] text-slate-700 uppercase tracking-wide">{g.away_team?.abbreviation}</div>
                     </div>
                   </div>
                 </div>

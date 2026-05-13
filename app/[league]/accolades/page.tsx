@@ -48,15 +48,15 @@ function RecordCard({ label, entry, suffix }: { label: string; entry: RecordEntr
     );
   }
   return (
-    <div className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 hover:border-slate-600 transition">
-      <div className="text-xs text-slate-500 mb-2">{label}</div>
-      <div className="flex items-center gap-2.5">
+    <div className="rounded-lg border border-slate-800 bg-slate-950 px-3 py-2.5 hover:border-slate-700 transition">
+      <div className="text-[9px] text-slate-600 uppercase tracking-wide mb-1.5">{label}</div>
+      <div className="flex items-center gap-2">
         <PlayerFace username={entry.mc_username} />
         <div className="min-w-0 flex-1">
-          <div className="font-bold text-white text-sm truncate">{entry.mc_username || entry.mc_uuid}</div>
-          <div className="text-xs text-slate-500 truncate">{entry.season}</div>
+          <div className="font-semibold text-white text-xs truncate">{entry.mc_username || entry.mc_uuid}</div>
+          <div className="text-[9px] text-slate-600 truncate">{entry.season}</div>
         </div>
-        <div className="ml-auto text-xl font-bold text-blue-400 flex-shrink-0">
+        <div className="ml-auto text-sm font-bold text-blue-400 flex-shrink-0 tabular-nums">
           {entry.value.toLocaleString()}{suffix ?? ""}
         </div>
       </div>
@@ -105,11 +105,11 @@ export default function AccoladesPage({ params }: { params?: Promise<{ league?: 
       {/* Records */}
       {records && (
         <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
-          <div className="px-6 py-5 border-b border-slate-800">
-            <h2 className="text-xl font-bold text-white">Records</h2>
-            <p className="text-slate-400 text-sm mt-0.5">{leagueDisplay} — all-time bests computed from box scores</p>
+          <div className="px-5 py-4 border-b border-slate-800">
+            <h2 className="text-lg font-bold text-white">Records</h2>
+            <p className="text-slate-500 text-xs mt-0.5">{leagueDisplay} — all-time bests from box scores</p>
           </div>
-          <div className="p-6 space-y-6">
+          <div className="p-4 space-y-5">
             {/* Game Records — MBA only */}
             {slug === "mba" && (
               <div>
@@ -180,12 +180,12 @@ export default function AccoladesPage({ params }: { params?: Promise<{ league?: 
 
       {/* Accolades */}
       <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
-        <div className="px-6 py-5 border-b border-slate-800 flex items-center justify-between flex-wrap gap-3">
+        <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between flex-wrap gap-3">
           <div>
-            <h2 className="text-2xl font-bold text-white">Accolades</h2>
-            <p className="text-slate-400 text-sm mt-0.5">{leagueDisplay}</p>
+            <h2 className="text-lg font-bold text-white">Accolades</h2>
+            <p className="text-slate-500 text-xs mt-0.5">{leagueDisplay}</p>
           </div>
-          <div className="flex rounded-lg border border-slate-700 overflow-hidden text-sm overflow-x-auto">
+          <div className="flex rounded-md border border-slate-700 overflow-hidden text-xs overflow-x-auto">
             <button
               onClick={() => setSeason("All")}
               className={`px-3 py-1.5 font-medium transition whitespace-nowrap ${
@@ -213,11 +213,11 @@ export default function AccoladesPage({ params }: { params?: Promise<{ league?: 
         ) : filtered.length === 0 ? (
           <div className="p-10 text-center text-slate-500">No accolades for {season === "All" ? "this league" : season} yet.</div>
         ) : (
-          <div className="p-6 space-y-6">
+          <div className="p-4 space-y-5">
             {groupedSeasons.map((s) => (
               <div key={s}>
-                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">{s}</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">{s}</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                   {filtered.filter((a) => a.season === s).sort((a, b) => {
                     const order: Record<string, number> = { MVP: 0, OPY: 1, DPOY: 2 };
                     const aRank = order[a.type] ?? 99;
@@ -225,22 +225,22 @@ export default function AccoladesPage({ params }: { params?: Promise<{ league?: 
                     if (aRank !== bRank) return aRank - bRank;
                     return a.type.localeCompare(b.type);
                   }).map((a) => (
-                    <div key={a.id} className="rounded-xl border border-slate-700 bg-slate-950 px-5 py-4 hover:border-slate-600 transition">
-                      <div className="flex items-center gap-3 mb-3">
+                    <div key={a.id} className="rounded-lg border border-slate-800 bg-slate-950 px-3.5 py-3 hover:border-slate-700 transition">
+                      <div className="flex items-center gap-2.5 mb-2">
                         <img
-                          src={`https://minotar.net/avatar/${a.players?.mc_username ?? "MHF_Steve"}/40`}
+                          src={`https://minotar.net/avatar/${a.players?.mc_username ?? "MHF_Steve"}/32`}
                           alt={a.players?.mc_username}
-                          className="w-10 h-10 rounded-lg ring-1 ring-slate-700 flex-shrink-0"
-                          onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/40"; }}
+                          className="w-8 h-8 rounded-md ring-1 ring-slate-700 flex-shrink-0"
+                          onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/32"; }}
                         />
                         <div>
-                          <div className="font-semibold text-white">{a.players?.mc_username ?? a.mc_uuid}</div>
-                          <div className="text-xs text-slate-500">{a.season}</div>
+                          <div className="font-semibold text-white text-sm leading-tight">{a.players?.mc_username ?? a.mc_uuid}</div>
+                          <div className="text-[10px] text-slate-500">{a.season}</div>
                         </div>
                       </div>
-                      <div className="rounded-lg bg-zinc-800/60 border border-zinc-700 px-3 py-2">
-                        <div className="font-bold text-white text-sm">{a.type}</div>
-                        {a.description && <div className="text-zinc-400 text-xs mt-0.5">{a.description}</div>}
+                      <div className="rounded-md bg-slate-800/50 border border-slate-700/60 px-2.5 py-1.5">
+                        <div className="font-bold text-white text-xs">{a.type}</div>
+                        {a.description && <div className="text-slate-400 text-[10px] mt-0.5">{a.description}</div>}
                       </div>
                     </div>
                   ))}

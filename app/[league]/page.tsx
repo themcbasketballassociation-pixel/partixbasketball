@@ -86,24 +86,24 @@ function LeaderCard({ cat, stats }: { cat: typeof LEADER_CATS[number]; stats: St
         </span>
         <span style={{ color: cat.color, fontSize: 13, fontWeight: 800 }}>{cat.fmt(leader[cat.key] as number)}</span>
       </div>
-      <div style={{ padding: "10px 12px", display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid #171b26" }}>
-        <img src={`https://minotar.net/avatar/${leader.mc_username}/40`} alt={leader.mc_username}
-          style={{ width: 36, height: 36, borderRadius: 8, border: `2px solid ${cat.color}55`, flexShrink: 0 }}
-          onError={e => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/40"; }} />
+      <div style={{ padding: "8px 10px", display: "flex", alignItems: "center", gap: 8, borderBottom: "1px solid #171b26" }}>
+        <img src={`https://minotar.net/avatar/${leader.mc_username}/32`} alt={leader.mc_username}
+          style={{ width: 26, height: 26, borderRadius: 6, border: `1.5px solid ${cat.color}44`, flexShrink: 0 }}
+          onError={e => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/32"; }} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ color: "#fff", fontWeight: 700, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{leader.mc_username}</div>
-          <div style={{ color: "#555", fontSize: 10 }}>League Leader</div>
+          <div style={{ color: "#e0e0e0", fontWeight: 600, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{leader.mc_username}</div>
+          <div style={{ color: "#444", fontSize: 9 }}>League Leader</div>
         </div>
-        <div style={{ color: cat.color, fontWeight: 800, fontSize: 18, flexShrink: 0 }}>{cat.fmt(leader[cat.key] as number)}</div>
+        <div style={{ color: cat.color, fontWeight: 800, fontSize: 14, flexShrink: 0 }}>{cat.fmt(leader[cat.key] as number)}</div>
       </div>
       {top5.slice(1).map((s, i) => (
-        <div key={s.mc_uuid} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", borderBottom: i < top5.length - 2 ? "1px solid #111520" : undefined }}>
-          <span style={{ color: "#333", fontSize: 11, fontWeight: 700, width: 14, textAlign: "right", flexShrink: 0 }}>{i + 2}</span>
-          <img src={`https://minotar.net/avatar/${s.mc_username}/24`} alt={s.mc_username}
-            style={{ width: 22, height: 22, borderRadius: 5, flexShrink: 0 }}
-            onError={e => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/24"; }} />
-          <span style={{ color: "#aaa", fontSize: 12, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.mc_username}</span>
-          <span style={{ color: "#ddd", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>{cat.fmt(s[cat.key] as number)}</span>
+        <div key={s.mc_uuid} style={{ display: "flex", alignItems: "center", gap: 7, padding: "5px 10px", borderBottom: i < top5.length - 2 ? "1px solid #111520" : undefined }}>
+          <span style={{ color: "#333", fontSize: 10, fontWeight: 700, width: 12, textAlign: "right", flexShrink: 0 }}>{i + 2}</span>
+          <img src={`https://minotar.net/avatar/${s.mc_username}/20`} alt={s.mc_username}
+            style={{ width: 18, height: 18, borderRadius: 4, flexShrink: 0 }}
+            onError={e => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/20"; }} />
+          <span style={{ color: "#888", fontSize: 11, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.mc_username}</span>
+          <span style={{ color: "#bbb", fontSize: 11, fontWeight: 600, flexShrink: 0 }}>{cat.fmt(s[cat.key] as number)}</span>
         </div>
       ))}
     </div>
@@ -180,28 +180,28 @@ function ResultCard({ game, slug, mvp, isPlayoffs }: { game: Game; slug: string;
       </div>
 
       {/* Scores */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", padding: "18px 14px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", padding: "14px 12px" }}>
         {/* Home */}
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, paddingRight: 14, borderRight: "1px solid #1a1f28" }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, paddingRight: 12, borderRight: "1px solid #1a1f28" }}>
           <div style={{ position: "relative" }}>
-            <TeamLogo team={game.home_team} size={56} />
+            <TeamLogo team={game.home_team} size={40} />
             {homeWon && (
-              <span style={{ position: "absolute", top: -5, right: -5, background: "#f59e0b", color: "#000", fontSize: 8, fontWeight: 900, width: 17, height: 17, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>W</span>
+              <span style={{ position: "absolute", top: -4, right: -4, background: "#f59e0b", color: "#000", fontSize: 7, fontWeight: 900, width: 14, height: 14, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>W</span>
             )}
           </div>
-          <span style={{ color: "#555", fontSize: 10, fontWeight: 700, textTransform: "uppercase", textAlign: "center", lineHeight: 1.2 }}>{game.home_team.name}</span>
-          <span style={{ color: homeWon ? "#fff" : "#2e2e2e", fontSize: 40, fontWeight: 900, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{homeScore}</span>
+          <span style={{ color: "#555", fontSize: 9, fontWeight: 700, textTransform: "uppercase", textAlign: "center", lineHeight: 1.2 }}>{game.home_team.name}</span>
+          <span style={{ color: homeWon ? "#fff" : "#2a2a2a", fontSize: 28, fontWeight: 900, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{homeScore}</span>
         </div>
         {/* Away */}
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, paddingLeft: 14 }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, paddingLeft: 12 }}>
           <div style={{ position: "relative" }}>
-            <TeamLogo team={game.away_team} size={56} />
+            <TeamLogo team={game.away_team} size={40} />
             {awayWon && (
-              <span style={{ position: "absolute", top: -5, right: -5, background: "#f59e0b", color: "#000", fontSize: 8, fontWeight: 900, width: 17, height: 17, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>W</span>
+              <span style={{ position: "absolute", top: -4, right: -4, background: "#f59e0b", color: "#000", fontSize: 7, fontWeight: 900, width: 14, height: 14, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>W</span>
             )}
           </div>
-          <span style={{ color: "#555", fontSize: 10, fontWeight: 700, textTransform: "uppercase", textAlign: "center", lineHeight: 1.2 }}>{game.away_team.name}</span>
-          <span style={{ color: awayWon ? "#fff" : "#2e2e2e", fontSize: 40, fontWeight: 900, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{awayScore}</span>
+          <span style={{ color: "#555", fontSize: 9, fontWeight: 700, textTransform: "uppercase", textAlign: "center", lineHeight: 1.2 }}>{game.away_team.name}</span>
+          <span style={{ color: awayWon ? "#fff" : "#2a2a2a", fontSize: 28, fontWeight: 900, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{awayScore}</span>
         </div>
       </div>
 
@@ -212,11 +212,11 @@ function ResultCard({ game, slug, mvp, isPlayoffs }: { game: Game; slug: string;
           <img src={`https://minotar.net/avatar/${mvpName}/24`} alt={mvpName}
             style={{ width: 22, height: 22, borderRadius: 4, flexShrink: 0 }}
             onError={e => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/24"; }} />
-          <span style={{ color: "#fff", fontSize: 12, fontWeight: 700, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{mvpName}</span>
+          <span style={{ color: "#ccc", fontSize: 11, fontWeight: 600, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{mvpName}</span>
           {([["PTS", mvpPts], ["REB", mvpReb], ["AST", mvpAst], ["STL", mvpStl], ["BLK", mvpBlk]] as [string, number][]).map(([label, val]) => (
-            <div key={label} style={{ textAlign: "center", flexShrink: 0, minWidth: 38 }}>
-              <div style={{ color: "#fff", fontSize: 20, fontWeight: 900, lineHeight: 1.1, fontVariantNumeric: "tabular-nums" }}>{val}</div>
-              <div style={{ color: "#555", fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginTop: 2 }}>{label}</div>
+            <div key={label} style={{ textAlign: "center", flexShrink: 0, minWidth: 30 }}>
+              <div style={{ color: "#fff", fontSize: 15, fontWeight: 800, lineHeight: 1.1, fontVariantNumeric: "tabular-nums" }}>{val}</div>
+              <div style={{ color: "#555", fontSize: 8, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginTop: 1 }}>{label}</div>
             </div>
           ))}
         </div>
@@ -562,14 +562,14 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
 
       {/* ── HERO ── */}
       <div style={{ position: "relative", overflow: "hidden", background: "#080808", borderBottom: "1px solid #131820" }}>
-        <div style={{ position: "absolute", left: "-5%", top: "50%", transform: "translateY(-50%)", width: 600, height: 600, borderRadius: "50%", background: `radial-gradient(circle, ${color}14 0%, transparent 65%)`, pointerEvents: "none" }} />
-        <div style={{ maxWidth: 1280, margin: "0 auto", padding: "48px 24px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
-            <span style={{ width: 7, height: 7, borderRadius: "50%", background: color, display: "inline-block", flexShrink: 0 }} />
-            <span style={{ color: "#555", fontSize: 11, fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase" }}>{leagueDisplay}</span>
+        <div style={{ position: "absolute", left: "-5%", top: "50%", transform: "translateY(-50%)", width: 500, height: 500, borderRadius: "50%", background: `radial-gradient(circle, ${color}0d 0%, transparent 65%)`, pointerEvents: "none" }} />
+        <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: color, display: "inline-block", flexShrink: 0 }} />
+            <span style={{ color: "#555", fontSize: 10, fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase" }}>{leagueDisplay}</span>
           </div>
-          <h1 style={{ margin: "0 0 24px 0", lineHeight: 1.05 }}>
-            <span style={{ display: "block", color: "#fff", fontSize: "clamp(34px, 4vw, 50px)", fontWeight: 900 }}>Minecraft Basketball</span>
+          <h1 style={{ margin: "0 0 18px 0", lineHeight: 1.05 }}>
+            <span style={{ display: "block", color: "#fff", fontSize: "clamp(24px, 3vw, 36px)", fontWeight: 900 }}>Minecraft Basketball</span>
           </h1>
           <a href="https://discord.gg/baWUsXWhdV"
             style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#5865f2", color: "white", padding: "11px 22px", borderRadius: 999, fontSize: 13, fontWeight: 700, textDecoration: "none" }}
@@ -581,10 +581,10 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
       </div>
 
       {/* ── MAIN CONTENT ── */}
-      <div style={{ maxWidth: 1280, margin: "0 auto", padding: "40px 24px" }}>
+      <div style={{ maxWidth: 1280, margin: "0 auto", padding: "28px 24px" }}>
 
         {/* Upcoming + Latest Results */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32, marginBottom: 48 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 32 }}>
           <div>
             <SectionHeader icon="📅" title="Upcoming Matchups" linkLabel="VIEW SCHEDULE →" linkHref={`/${slug}/schedule`} />
             {upcomingGames.length === 0 ? (
@@ -608,7 +608,7 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
         </div>
 
         {/* News + Stat Leaders */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 32, alignItems: "start", marginBottom: 48 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 290px", gap: 24, alignItems: "start", marginBottom: 32 }}>
           <div>
             <SectionHeader icon="📰" title="News" />
             {loading ? (
@@ -619,16 +619,16 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                 {articles.map(a => (
                   <a key={a.id} href={`/${slug}/articles/${a.id}`}
-                    style={{ background: "#101318", border: "1px solid #1c2028", borderRadius: 14, padding: "20px", textDecoration: "none", display: "block", transition: "border-color 0.15s" }}
+                    style={{ background: "#101318", border: "1px solid #1c2028", borderRadius: 12, padding: "14px 16px", textDecoration: "none", display: "block", transition: "border-color 0.15s" }}
                     onMouseEnter={e => (e.currentTarget.style.borderColor = "#2a3048")} onMouseLeave={e => (e.currentTarget.style.borderColor = "#1c2028")}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
-                      <span style={{ background: leagueColor[a.league] ?? "#333", color: "white", fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", padding: "3px 7px", borderRadius: 6 }}>{leagueLabel[a.league] ?? a.league.toUpperCase()}</span>
-                      <span style={{ color: "#444", fontSize: 11 }}>{new Date(a.created_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</span>
-                      <span style={{ marginLeft: "auto", color: "#333", fontSize: 11 }}>Read more →</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8, flexWrap: "wrap" }}>
+                      <span style={{ background: leagueColor[a.league] ?? "#333", color: "white", fontSize: 8, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", padding: "2px 6px", borderRadius: 5 }}>{leagueLabel[a.league] ?? a.league.toUpperCase()}</span>
+                      <span style={{ color: "#444", fontSize: 10 }}>{new Date(a.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+                      <span style={{ marginLeft: "auto", color: "#333", fontSize: 10 }}>Read more →</span>
                     </div>
-                    {a.image_url && <img src={a.image_url} alt="" style={{ borderRadius: 10, marginBottom: 10, maxHeight: 192, objectFit: "cover", width: "100%" }} />}
-                    <h2 style={{ color: "#fff", fontWeight: 700, fontSize: 18, margin: "0 0 8px 0", lineHeight: 1.3 }}>{a.title}</h2>
-                    <p style={{ color: "#666", fontSize: 13, lineHeight: 1.6, margin: 0, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" } as React.CSSProperties}>{a.body}</p>
+                    {a.image_url && <img src={a.image_url} alt="" style={{ borderRadius: 8, marginBottom: 8, maxHeight: 160, objectFit: "cover", width: "100%" }} />}
+                    <h2 style={{ color: "#e8e8e8", fontWeight: 700, fontSize: 14, margin: "0 0 5px 0", lineHeight: 1.35 }}>{a.title}</h2>
+                    <p style={{ color: "#555", fontSize: 12, lineHeight: 1.55, margin: 0, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" } as React.CSSProperties}>{a.body}</p>
                   </a>
                 ))}
               </div>

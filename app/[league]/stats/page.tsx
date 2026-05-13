@@ -176,10 +176,10 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
 
   const thClass = (col: SortKey | "_rank" | "_player", isPlayer = false) => {
     const isActive = col === sortKey;
-    return `px-4 py-4 text-xs font-bold uppercase tracking-widest select-none transition ${
+    return `px-3 py-2 text-[10px] font-bold uppercase tracking-widest select-none transition ${
       isPlayer
-        ? "text-left text-slate-400"
-        : `text-center cursor-pointer ${isActive ? "text-blue-400 bg-blue-950/40" : "text-slate-500 hover:text-white"}`
+        ? "text-left text-slate-500"
+        : `text-center cursor-pointer ${isActive ? "text-blue-400 bg-blue-950/30" : "text-slate-600 hover:text-slate-300"}`
     }`;
   };
 
@@ -190,25 +190,25 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
       {/* Header */}
-      <div className="px-6 py-5 border-b border-slate-800 flex items-center justify-between flex-wrap gap-3">
+      <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="text-2xl font-bold text-white">Stats</h2>
-          <p className="text-slate-400 text-sm mt-0.5">{leagueDisplay}</p>
+          <h2 className="text-lg font-bold text-white">Stats</h2>
+          <p className="text-slate-500 text-xs mt-0.5">{leagueDisplay}</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {/* Player / Team toggle */}
-          <div className="flex rounded-lg border border-slate-700 overflow-hidden text-xs">
+          <div className="flex rounded-md border border-slate-700 overflow-hidden text-xs">
             {(["player", "team"] as const).map((v) => (
               <button key={v} onClick={() => setViewMode(v)}
-                className={`px-4 py-1.5 font-semibold capitalize transition ${
+                className={`px-3 py-1.5 font-semibold capitalize transition ${
                   viewMode === v ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700"
                 }`}>
-                {v === "player" ? "👤 Players" : "🏀 Teams"}
+                {v === "player" ? "Players" : "Teams"}
               </button>
             ))}
           </div>
           {/* Stat type toggle */}
-          <div className="flex rounded-lg border border-slate-700 overflow-hidden text-xs">
+          <div className="flex rounded-md border border-slate-700 overflow-hidden text-xs">
             {(["regular", "playoffs", "total"] as StatType[]).map((t) => (
               <button
                 key={t}
@@ -217,13 +217,13 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
                   statType === t ? "bg-slate-700 text-white" : "bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700"
                 }`}
               >
-                {t.charAt(0).toUpperCase() + t.slice(1)}
+                {t === "total" ? "Combined" : t.charAt(0).toUpperCase() + t.slice(1)}
               </button>
             ))}
           </div>
           {/* Season dropdown */}
           <select
-            className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-white focus:border-zinc-500 focus:outline-none"
+            className="rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs text-white focus:border-zinc-500 focus:outline-none"
             value={season}
             onChange={(e) => setSeason(e.target.value)}
           >
@@ -242,9 +242,9 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
       ) : (
         <>
           <div className="overflow-x-auto">
-            <table className="min-w-full text-base">
+            <table className="min-w-full text-xs">
               <thead>
-                <tr className="border-b-2 border-slate-800">
+                <tr className="border-b border-slate-800">
                   <th className={thClass("_rank")}>#</th>
                   <th className={thClass("_player", true)}>Player</th>
                   {COLS.filter((c) => c.key !== "_rank" && c.key !== "_player" && (c.key !== "mpg" || showMpg)).map((c) => (
@@ -258,42 +258,42 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60">
+              <tbody className="divide-y divide-slate-800/40">
                 {pageRows.map((s, i) => (
-                  <tr key={s.mc_uuid} className="hover:bg-slate-800/30 transition">
-                    <td className="px-4 py-4 text-center text-slate-500 text-sm font-mono w-10">{page * PAGE_SIZE + i + 1}</td>
-                    <td className="px-4 py-4">
-                      <div className="flex items-center gap-3">
-                        <img src={`https://minotar.net/avatar/${s.mc_username}/36`} alt={s.mc_username} className="w-9 h-9 rounded-lg ring-1 ring-slate-700 flex-shrink-0" onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/36"; }} />
+                  <tr key={s.mc_uuid} className="hover:bg-slate-800/20 transition">
+                    <td className="px-3 py-2.5 text-center text-slate-600 text-xs font-mono w-8">{page * PAGE_SIZE + i + 1}</td>
+                    <td className="px-3 py-2.5">
+                      <div className="flex items-center gap-2.5">
+                        <img src={`https://minotar.net/avatar/${s.mc_username}/28`} alt={s.mc_username} className="w-7 h-7 rounded-md ring-1 ring-slate-700 flex-shrink-0" onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/28"; }} />
                         <div>
-                          <div className="font-bold text-white text-base">{s.mc_username}</div>
+                          <div className="font-semibold text-white text-sm leading-tight">{s.mc_username}</div>
                           {s.team && (
                             <a
-                              href={`/${slug}/teams?team=${s.team.id}&season=${encodeURIComponent(statType === "playoffs" ? season : season)}`}
-                              className="flex items-center gap-1.5 mt-0.5 hover:opacity-80 transition"
+                              href={`/${slug}/teams?team=${s.team.id}&season=${encodeURIComponent(season)}`}
+                              className="flex items-center gap-1 mt-0.5 hover:opacity-80 transition"
                             >
-                              {s.team.logo_url && <img src={s.team.logo_url} alt={s.team.name} className="w-5 h-5 object-contain flex-shrink-0" />}
-                              <span className="text-sm text-slate-300 font-medium">{s.team.name}</span>
+                              {s.team.logo_url && <img src={s.team.logo_url} alt={s.team.name} className="w-3.5 h-3.5 object-contain flex-shrink-0" />}
+                              <span className="text-xs text-slate-500">{s.team.name}</span>
                             </a>
                           )}
                         </div>
                       </div>
                     </td>
-                    <td className={`px-4 py-4 text-center text-slate-400 text-base ${tdHighlight("gp")}`}>{s.gp}</td>
-                    <td className={`px-4 py-4 text-center text-base ${tdHighlight("ppg") || "text-slate-200"}`}>{fmt(s.ppg)}</td>
-                    <td className={`px-4 py-4 text-center text-base ${tdHighlight("rpg") || "text-slate-300"}`}>{fmt(s.rpg)}</td>
-                    <td className={`px-4 py-4 text-center text-base ${tdHighlight("orpg") || "text-slate-300"}`}>{s.orpg != null ? fmt(s.orpg) : <span className="text-slate-600">—</span>}</td>
-                    <td className={`px-4 py-4 text-center text-base ${tdHighlight("drpg") || "text-slate-300"}`}>{s.drpg != null ? fmt(s.drpg) : <span className="text-slate-600">—</span>}</td>
-                    <td className={`px-4 py-4 text-center text-base ${tdHighlight("apg") || "text-slate-300"}`}>{fmt(s.apg)}</td>
-                    <td className={`px-4 py-4 text-center text-base ${tdHighlight("spg") || "text-slate-300"}`}>{fmt(s.spg)}</td>
-                    <td className={`px-4 py-4 text-center text-base ${tdHighlight("bpg") || "text-slate-300"}`}>{fmt(s.bpg)}</td>
-                    <td className={`px-4 py-4 text-center text-base ${tdHighlight("topg") || "text-slate-300"}`}>{fmt(s.topg)}</td>
-                    <td className={`px-4 py-4 text-center text-base ${tdHighlight("tppg") || "text-slate-300"}`}>{s.tppg != null ? fmt(s.tppg) : <span className="text-slate-600">N/A</span>}</td>
-                    <td className={`px-4 py-4 text-center text-base ${tdHighlight("fg_pct") || "text-slate-300"}`}>{s.fg_pct != null ? `${s.fg_pct.toFixed(1)}%` : "—"}</td>
-                    <td className={`px-4 py-4 text-center text-base ${tdHighlight("three_pt_pct") || "text-slate-300"}`}>{s.three_pt_pct != null ? `${s.three_pt_pct.toFixed(1)}%` : "—"}</td>
-                    {showMpg && <td className={`px-4 py-4 text-center text-base ${tdHighlight("mpg") || "text-slate-300"}`}>{fmt(s.mpg)}</td>}
-                    <td className={`px-4 py-4 text-center text-base ${tdHighlight("pass_attempts_pg") || "text-slate-300"}`}>{s.pass_attempts_pg != null ? fmt(s.pass_attempts_pg) : <span className="text-slate-600">N/A</span>}</td>
-                    <td className={`px-4 py-4 text-center text-base ${tdHighlight("possession_time_pg") || "text-slate-300"}`}>{s.possession_time_pg != null ? `${s.possession_time_pg}s` : <span className="text-slate-600">N/A</span>}</td>
+                    <td className={`px-3 py-2.5 text-center text-slate-500 ${tdHighlight("gp")}`}>{s.gp}</td>
+                    <td className={`px-3 py-2.5 text-center ${tdHighlight("ppg") || "text-slate-200"}`}>{fmt(s.ppg)}</td>
+                    <td className={`px-3 py-2.5 text-center ${tdHighlight("rpg") || "text-slate-300"}`}>{fmt(s.rpg)}</td>
+                    <td className={`px-3 py-2.5 text-center ${tdHighlight("orpg") || "text-slate-400"}`}>{s.orpg != null ? fmt(s.orpg) : <span className="text-slate-700">—</span>}</td>
+                    <td className={`px-3 py-2.5 text-center ${tdHighlight("drpg") || "text-slate-400"}`}>{s.drpg != null ? fmt(s.drpg) : <span className="text-slate-700">—</span>}</td>
+                    <td className={`px-3 py-2.5 text-center ${tdHighlight("apg") || "text-slate-300"}`}>{fmt(s.apg)}</td>
+                    <td className={`px-3 py-2.5 text-center ${tdHighlight("spg") || "text-slate-300"}`}>{fmt(s.spg)}</td>
+                    <td className={`px-3 py-2.5 text-center ${tdHighlight("bpg") || "text-slate-300"}`}>{fmt(s.bpg)}</td>
+                    <td className={`px-3 py-2.5 text-center ${tdHighlight("topg") || "text-slate-300"}`}>{fmt(s.topg)}</td>
+                    <td className={`px-3 py-2.5 text-center ${tdHighlight("tppg") || "text-slate-400"}`}>{s.tppg != null ? fmt(s.tppg) : <span className="text-slate-700">—</span>}</td>
+                    <td className={`px-3 py-2.5 text-center ${tdHighlight("fg_pct") || "text-slate-300"}`}>{s.fg_pct != null ? `${s.fg_pct.toFixed(1)}%` : "—"}</td>
+                    <td className={`px-3 py-2.5 text-center ${tdHighlight("three_pt_pct") || "text-slate-300"}`}>{s.three_pt_pct != null ? `${s.three_pt_pct.toFixed(1)}%` : "—"}</td>
+                    {showMpg && <td className={`px-3 py-2.5 text-center ${tdHighlight("mpg") || "text-slate-300"}`}>{fmt(s.mpg)}</td>}
+                    <td className={`px-3 py-2.5 text-center ${tdHighlight("pass_attempts_pg") || "text-slate-400"}`}>{s.pass_attempts_pg != null ? fmt(s.pass_attempts_pg) : <span className="text-slate-700">—</span>}</td>
+                    <td className={`px-3 py-2.5 text-center ${tdHighlight("possession_time_pg") || "text-slate-400"}`}>{s.possession_time_pg != null ? `${s.possession_time_pg}s` : <span className="text-slate-700">—</span>}</td>
                   </tr>
                 ))}
               </tbody>
@@ -358,11 +358,11 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
             <div className="p-8 text-center text-slate-500 text-sm">No team stats yet for {season === "all" ? "all time" : season}.</div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
+              <table className="min-w-full text-xs">
                 <thead>
-                  <tr className="border-b-2 border-slate-800">
-                    <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-widest text-slate-400">Team</th>
-                    <th className="px-4 py-3 text-center text-xs font-bold uppercase tracking-widest text-slate-500 cursor-pointer hover:text-white" onClick={() => handleTeamSort("gp")}>
+                  <tr className="border-b border-slate-800">
+                    <th className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-widest text-slate-500">Team</th>
+                    <th className="px-3 py-2 text-center text-[10px] font-bold uppercase tracking-widest text-slate-600 cursor-pointer hover:text-slate-300" onClick={() => handleTeamSort("gp")}>
                       GP {teamSortKey === "gp" ? (teamSortAsc ? "↑" : "↓") : <span className="text-slate-700">↕</span>}
                     </th>
                     {(teamView === "for"
@@ -388,8 +388,8 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
                         ]
                     ).map(({ key, label }) => (
                       <th key={key}
-                        className={`px-4 py-3 text-center text-xs font-bold uppercase tracking-widest cursor-pointer transition select-none ${
-                          teamSortKey === key ? "text-blue-400 bg-blue-950/40" : "text-slate-500 hover:text-white"
+                        className={`px-3 py-2 text-center text-[10px] font-bold uppercase tracking-widest cursor-pointer transition select-none ${
+                          teamSortKey === key ? "text-blue-400 bg-blue-950/30" : "text-slate-600 hover:text-slate-300"
                         }`}
                         onClick={() => handleTeamSort(key)}>
                         {label} {teamSortKey === key ? (teamSortAsc ? "↑" : "↓") : <span className="text-slate-700">↕</span>}
@@ -397,49 +397,46 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60">
+                <tbody className="divide-y divide-slate-800/40">
                   {sortedTeamStats.map((row) => {
                     const f = (v: number | null) => v != null ? v.toFixed(1) : "—";
                     const fPct = (v: number | null) => v != null ? `${v.toFixed(1)}%` : "—";
                     const diffVal = row.diff ?? 0;
-                    const diffColor = diffVal > 0 ? "text-green-400" : diffVal < 0 ? "text-red-400" : "text-slate-400";
-                    const hl = (key: TeamSortKey) => teamSortKey === key ? "bg-blue-950/20 font-bold text-white" : "text-slate-300";
+                    const diffColor = diffVal > 0 ? "text-green-400" : diffVal < 0 ? "text-red-400" : "text-slate-500";
+                    const hl = (key: TeamSortKey) => teamSortKey === key ? "bg-blue-950/20 font-semibold text-white" : "text-slate-300";
                     return (
-                      <tr key={row.team.id} className="hover:bg-slate-800/30 transition">
-                        <td className="px-4 py-3">
+                      <tr key={row.team.id} className="hover:bg-slate-800/20 transition">
+                        <td className="px-3 py-2.5">
                           <div className="flex items-center gap-2">
                             {row.team.logo_url
-                              ? <img src={row.team.logo_url} alt="" className="w-7 h-7 object-contain flex-shrink-0" />
-                              : <div className="w-7 h-7 rounded bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-500 text-xs font-bold flex-shrink-0">{row.team.abbreviation}</div>
+                              ? <img src={row.team.logo_url} alt="" className="w-6 h-6 object-contain flex-shrink-0" />
+                              : <div className="w-6 h-6 rounded bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-500 text-[10px] font-bold flex-shrink-0">{row.team.abbreviation}</div>
                             }
-                            <div>
-                              <div className="font-bold text-white text-sm">{row.team.name}</div>
-                              <div className="text-xs text-slate-500">{row.gp} GP</div>
-                            </div>
+                            <span className="font-semibold text-white text-sm">{row.team.name}</span>
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-center text-slate-400 text-sm">{row.gp}</td>
+                        <td className="px-3 py-2.5 text-center text-slate-500">{row.gp}</td>
                         {teamView === "for" ? (
                           <>
-                            <td className={`px-4 py-3 text-center text-sm ${hl("ppg")}`}>{f(row.ppg)}</td>
-                            <td className={`px-4 py-3 text-center text-sm ${hl("rpg")}`}>{f(row.rpg)}</td>
-                            <td className={`px-4 py-3 text-center text-sm ${hl("apg")}`}>{f(row.apg)}</td>
-                            <td className={`px-4 py-3 text-center text-sm ${hl("spg")}`}>{f(row.spg)}</td>
-                            <td className={`px-4 py-3 text-center text-sm ${hl("bpg")}`}>{f(row.bpg)}</td>
-                            <td className={`px-4 py-3 text-center text-sm ${hl("topg")}`}>{f(row.topg)}</td>
-                            <td className={`px-4 py-3 text-center text-sm ${hl("fg_pct")}`}>{fPct(row.fg_pct)}</td>
-                            <td className={`px-4 py-3 text-center text-sm font-bold ${diffColor} ${hl("diff")}`}>{row.diff != null ? (row.diff > 0 ? `+${row.diff.toFixed(1)}` : row.diff.toFixed(1)) : "—"}</td>
+                            <td className={`px-3 py-2.5 text-center ${hl("ppg")}`}>{f(row.ppg)}</td>
+                            <td className={`px-3 py-2.5 text-center ${hl("rpg")}`}>{f(row.rpg)}</td>
+                            <td className={`px-3 py-2.5 text-center ${hl("apg")}`}>{f(row.apg)}</td>
+                            <td className={`px-3 py-2.5 text-center ${hl("spg")}`}>{f(row.spg)}</td>
+                            <td className={`px-3 py-2.5 text-center ${hl("bpg")}`}>{f(row.bpg)}</td>
+                            <td className={`px-3 py-2.5 text-center ${hl("topg")}`}>{f(row.topg)}</td>
+                            <td className={`px-3 py-2.5 text-center ${hl("fg_pct")}`}>{fPct(row.fg_pct)}</td>
+                            <td className={`px-3 py-2.5 text-center font-semibold ${diffColor} ${hl("diff")}`}>{row.diff != null ? (row.diff > 0 ? `+${row.diff.toFixed(1)}` : row.diff.toFixed(1)) : "—"}</td>
                           </>
                         ) : (
                           <>
-                            <td className={`px-4 py-3 text-center text-sm ${hl("opp_ppg")}`}>{f(row.opp_ppg)}</td>
-                            <td className={`px-4 py-3 text-center text-sm ${hl("opp_rpg")}`}>{f(row.opp_rpg)}</td>
-                            <td className={`px-4 py-3 text-center text-sm ${hl("opp_apg")}`}>{f(row.opp_apg)}</td>
-                            <td className={`px-4 py-3 text-center text-sm ${hl("opp_spg")}`}>{f(row.opp_spg)}</td>
-                            <td className={`px-4 py-3 text-center text-sm ${hl("opp_bpg")}`}>{f(row.opp_bpg)}</td>
-                            <td className={`px-4 py-3 text-center text-sm ${hl("opp_topg")}`}>{f(row.opp_topg)}</td>
-                            <td className={`px-4 py-3 text-center text-sm ${hl("opp_fg_pct")}`}>{fPct(row.opp_fg_pct)}</td>
-                            <td className={`px-4 py-3 text-center text-sm font-bold ${diffColor} ${hl("diff")}`}>{row.diff != null ? (row.diff > 0 ? `+${row.diff.toFixed(1)}` : row.diff.toFixed(1)) : "—"}</td>
+                            <td className={`px-3 py-2.5 text-center ${hl("opp_ppg")}`}>{f(row.opp_ppg)}</td>
+                            <td className={`px-3 py-2.5 text-center ${hl("opp_rpg")}`}>{f(row.opp_rpg)}</td>
+                            <td className={`px-3 py-2.5 text-center ${hl("opp_apg")}`}>{f(row.opp_apg)}</td>
+                            <td className={`px-3 py-2.5 text-center ${hl("opp_spg")}`}>{f(row.opp_spg)}</td>
+                            <td className={`px-3 py-2.5 text-center ${hl("opp_bpg")}`}>{f(row.opp_bpg)}</td>
+                            <td className={`px-3 py-2.5 text-center ${hl("opp_topg")}`}>{f(row.opp_topg)}</td>
+                            <td className={`px-3 py-2.5 text-center ${hl("opp_fg_pct")}`}>{fPct(row.opp_fg_pct)}</td>
+                            <td className={`px-3 py-2.5 text-center font-semibold ${diffColor} ${hl("diff")}`}>{row.diff != null ? (row.diff > 0 ? `+${row.diff.toFixed(1)}` : row.diff.toFixed(1)) : "—"}</td>
                           </>
                         )}
                       </tr>

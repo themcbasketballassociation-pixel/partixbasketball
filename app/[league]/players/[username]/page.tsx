@@ -315,62 +315,58 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
     <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
 
       {/* Hero */}
-      <div className="relative bg-gradient-to-br from-slate-800 to-slate-950 border-b border-slate-800 px-6 pt-4 pb-6">
+      <div className="relative bg-gradient-to-br from-slate-800/60 to-slate-950 border-b border-slate-800 px-5 pt-3 pb-5">
         {/* Back link */}
-        <Link href={`/${slug}/players`} className="inline-flex items-center gap-1 text-slate-500 text-xs hover:text-slate-300 transition mb-4">
+        <Link href={`/${slug}/players`} className="inline-flex items-center gap-1 text-slate-600 text-xs hover:text-slate-400 transition mb-3">
           ← Players
         </Link>
 
-        <div className="flex items-center gap-6 flex-wrap">
-          {/* Big Minecraft head */}
+        <div className="flex items-center gap-5 flex-wrap">
+          {/* Minecraft head */}
           <div className="flex-shrink-0">
             <img
-              src={`https://minotar.net/helm/${player.mc_username}/160`}
+              src={`https://minotar.net/helm/${player.mc_username}/120`}
               alt={player.mc_username}
-              className="w-28 h-28 rounded-2xl object-contain drop-shadow-2xl"
+              className="w-20 h-20 rounded-xl object-contain drop-shadow-xl"
               style={{ imageRendering: "pixelated" }}
-              onError={e => { (e.target as HTMLImageElement).src = "https://minotar.net/helm/MHF_Steve/160"; }}
+              onError={e => { (e.target as HTMLImageElement).src = "https://minotar.net/helm/MHF_Steve/120"; }}
             />
           </div>
 
           {/* Player info */}
-          <div className="flex-1 min-w-[180px]">
-            <h1 className="text-4xl font-black text-white leading-tight">{player.mc_username}</h1>
+          <div className="flex-1 min-w-[160px]">
+            <h1 className="text-2xl font-black text-white leading-tight">{player.mc_username}</h1>
 
             {rings.length > 0 && (
-              <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+              <div className="flex items-center gap-1 mt-1 flex-wrap">
                 {rings.map(r => (
-                  <span key={r.id} className="inline-flex items-center gap-1 rounded-full bg-yellow-950 border border-yellow-700 px-2.5 py-0.5 text-xs text-yellow-300 font-semibold">
+                  <span key={r.id} className="inline-flex items-center gap-1 rounded-full bg-yellow-950 border border-yellow-800 px-2 py-px text-[10px] text-yellow-400 font-semibold">
                     🏆 {r.season}
                   </span>
                 ))}
               </div>
             )}
 
-            <div className="mt-3 rounded-xl border border-slate-700 bg-slate-900/80 px-4 py-3 flex items-center gap-3 max-w-[260px]">
+            <div className="mt-2.5 rounded-lg border border-slate-700/70 bg-slate-900/60 px-3 py-2 flex items-center gap-2.5 max-w-[220px]">
               {currentTeam?.logo_url
-                ? <img src={currentTeam.logo_url} className="w-8 h-8 object-contain flex-shrink-0" alt="" />
-                : <div className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 flex-shrink-0" />}
+                ? <img src={currentTeam.logo_url} className="w-6 h-6 object-contain flex-shrink-0" alt="" />
+                : <div className="w-6 h-6 rounded bg-slate-800 border border-slate-700 flex-shrink-0" />}
               <div>
-                <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold">Current Team</p>
-                <p className="text-white font-bold text-sm leading-tight mt-0.5">{currentTeam?.name ?? "—"}</p>
+                <p className="text-[8px] text-slate-600 uppercase tracking-widest font-bold">Current Team</p>
+                <p className="text-white font-semibold text-xs leading-tight mt-px">{currentTeam?.name ?? "—"}</p>
               </div>
             </div>
-
-            <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-blue-950 border border-blue-800 px-3 py-1 text-xs text-blue-300 font-semibold">
-              Player
-            </span>
           </div>
 
           {/* Right side: season picker + stat cards */}
           <div className="flex flex-col gap-2 flex-shrink-0 self-start pt-1">
             {/* Season selector */}
             <div className="flex items-center gap-2 justify-end">
-              <span className="text-xs text-slate-500 font-medium">Season</span>
+              <span className="text-[10px] text-slate-500 font-medium">Season</span>
               <select
                 value={selectedSeason}
                 onChange={e => setSelectedSeason(e.target.value)}
-                className="rounded-lg border border-slate-700 bg-slate-800 text-white text-xs px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                className="rounded-md border border-slate-700 bg-slate-800 text-white text-xs px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
               >
                 <option value="all">Career</option>
                 {seasons.map(s => <option key={s} value={s}>{s}</option>)}
@@ -378,16 +374,16 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
             </div>
 
             {/* Stat cards 2×2 */}
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-1.5">
               {[
                 { label: "GP",   value: statsLoading ? "…" : fmt(statsRegular?.gp),  color: "text-white" },
                 { label: "W",    value: String(record.wins),    color: "text-green-400" },
                 { label: "L",    value: String(record.losses),  color: "text-red-400" },
                 { label: "WIN%", value: winPct,                 color: "text-yellow-400" },
               ].map(({ label, value, color }) => (
-                <div key={label} className="rounded-xl border border-slate-700 bg-slate-900/80 px-5 py-3 text-center min-w-[80px]">
-                  <div className={`text-2xl font-black leading-none ${color}`}>{value}</div>
-                  <div className="text-[9px] text-slate-600 uppercase tracking-widest mt-1 font-bold">{label}</div>
+                <div key={label} className="rounded-lg border border-slate-700/70 bg-slate-900/70 px-3.5 py-2 text-center min-w-[64px]">
+                  <div className={`text-lg font-black leading-none tabular-nums ${color}`}>{value}</div>
+                  <div className="text-[8px] text-slate-600 uppercase tracking-widest mt-0.5 font-bold">{label}</div>
                 </div>
               ))}
             </div>
@@ -396,7 +392,7 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-slate-800 px-6 flex">
+      <div className="border-b border-slate-800 px-5 flex">
         {([
           { key: "overview", label: "Overview" },
           { key: "stats",    label: "Statistics" },
@@ -405,7 +401,7 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
           <button
             key={key}
             onClick={() => setActiveTab(key)}
-            className={`px-4 py-3 text-sm font-semibold border-b-2 transition -mb-px ${
+            className={`px-3.5 py-2.5 text-xs font-semibold border-b-2 transition -mb-px ${
               activeTab === key
                 ? "border-blue-500 text-white"
                 : "border-transparent text-slate-500 hover:text-slate-300"
@@ -417,18 +413,18 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
       </div>
 
       {/* Tab content */}
-      <div className="p-6 space-y-4">
+      <div className="p-4 space-y-3">
 
         {/* Overview */}
         {activeTab === "overview" && (
           <>
-            <div className="rounded-xl border border-slate-800 bg-slate-950 p-5">
-              <h3 className="text-sm font-bold text-white mb-2">About</h3>
+            <div className="rounded-lg border border-slate-800 bg-slate-950 p-4">
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">About</h3>
               <p className="text-slate-600 text-sm italic">No description yet.</p>
             </div>
 
-            <div className="rounded-xl border border-slate-800 bg-slate-950 p-5">
-              <h3 className="text-sm font-bold text-white mb-3">Accolades</h3>
+            <div className="rounded-lg border border-slate-800 bg-slate-950 p-4">
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-3">Accolades</h3>
               {accolades.length === 0 ? (
                 <div className="flex flex-col items-center py-8 gap-2 text-center">
                   <svg className="w-10 h-10 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -486,10 +482,10 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
             ) : (
               <>
                 {/* Row 1: VORP + Radar side by side */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-2.5">
                   {/* VORP */}
-                  <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
-                    <div className="flex items-center gap-1.5 mb-3">
+                  <div className="rounded-lg border border-slate-800 bg-slate-950 p-3.5">
+                    <div className="flex items-center gap-1.5 mb-2.5">
                       <span className="text-[10px] font-black text-white uppercase tracking-widest">VORP</span>
                       <span className="text-[9px] text-slate-600">Value Over Replacement</span>
                     </div>
@@ -498,7 +494,7 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
                     ) : (
                       <>
                         <div className="flex items-end gap-2 mb-2">
-                          <span className="text-4xl font-black tabular-nums leading-none" style={{ color: vorpCtx?.color ?? "#fff" }}>
+                          <span className="text-3xl font-black tabular-nums leading-none" style={{ color: vorpCtx?.color ?? "#fff" }}>
                             {vorp >= 0 ? "+" : ""}{vorp.toFixed(1)}
                           </span>
                         </div>
@@ -546,7 +542,7 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
                         <div key={cat.label} className={`px-3 py-3 text-center${i >= 3 ? " border-t border-slate-800" : ""}`}>
                           <div className="text-[9px] text-slate-500 uppercase tracking-wider font-bold">{cat.label}</div>
                           <div className="text-[9px] text-slate-700 mb-1">{cat.desc}</div>
-                          <div className="text-2xl font-black leading-none mb-0.5" style={{ color: g.color }}>{g.letter}</div>
+                          <div className="text-xl font-black leading-none mb-0.5" style={{ color: g.color }}>{g.letter}</div>
                           <div className="text-[9px] font-bold" style={{ color: g.color }}>{g.label}</div>
                           {topPct != null && <div className="text-[8px] text-slate-600 mt-0.5">Top {topPct}%</div>}
                         </div>
@@ -578,7 +574,7 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
                       const avgPct = avg   != null ? Math.min((avg   / max) * 100, 100) : 0;
                       const above  = value != null && avg != null && value > avg;
                       return (
-                        <div key={label} className="flex items-center gap-3 px-4 py-2.5">
+                        <div key={label} className="flex items-center gap-3 px-3 py-2">
                           <span className="text-[10px] font-black text-white uppercase w-8 flex-shrink-0">{label}</span>
                           <div className="flex-1 min-w-0">
                             <div className="h-2 rounded-full bg-slate-800 overflow-hidden mb-1">
@@ -590,7 +586,7 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
                           </div>
                           <div className="flex items-center gap-1.5 flex-shrink-0">
                             {avg != null && <span className="text-[9px] text-slate-600 tabular-nums hidden sm:inline">avg {fmtFn(avg)}</span>}
-                            <span className="text-sm font-black tabular-nums w-12 text-right" style={{ color: value != null ? color : "#333" }}>
+                            <span className="text-xs font-black tabular-nums w-12 text-right" style={{ color: value != null ? color : "#333" }}>
                               {value != null ? fmtFn(value) : "—"}
                             </span>
                             {value != null && avg != null && (
@@ -639,7 +635,7 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
                   <thead>
                     <tr className="border-b border-slate-800 bg-slate-900">
                       {["Date", "Matchup", "PTS", "REB", "AST", "STL", "BLK", "FG", "3PM"].map(h => (
-                        <th key={h} className={`px-3 py-3 text-slate-500 font-bold uppercase tracking-wide ${h === "Date" || h === "Matchup" ? "text-left" : "text-right"}`}>{h}</th>
+                        <th key={h} className={`px-2.5 py-2 text-slate-500 font-bold uppercase tracking-wide ${h === "Date" || h === "Matchup" ? "text-left" : "text-right"}`}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -663,10 +659,10 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
                           className="border-b border-slate-800/50 hover:bg-slate-700/30 transition cursor-pointer"
                           onClick={() => router.push(`/${slug}/boxscores/${game.id}`)}
                         >
-                          <td className="px-3 py-3 text-slate-500 whitespace-nowrap">
+                          <td className="px-2.5 py-2 text-slate-500 whitespace-nowrap">
                             {new Date(game.scheduled_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                           </td>
-                          <td className="px-3 py-3">
+                          <td className="px-2.5 py-2">
                             <div className="flex items-center gap-2">
                               {/* Player's team logo */}
                               {myTeam?.logo_url
@@ -694,13 +690,13 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
                               )}
                             </div>
                           </td>
-                          <td className="px-3 py-3 text-right font-black text-white tabular-nums">{stat.points ?? "—"}</td>
-                          <td className="px-3 py-3 text-right tabular-nums text-slate-300">{reb || "—"}</td>
-                          <td className="px-3 py-3 text-right tabular-nums text-slate-300">{stat.assists ?? "—"}</td>
-                          <td className="px-3 py-3 text-right tabular-nums text-slate-300">{stat.steals ?? "—"}</td>
-                          <td className="px-3 py-3 text-right tabular-nums text-slate-300">{stat.blocks ?? "—"}</td>
-                          <td className="px-3 py-3 text-right tabular-nums text-slate-400">{stat.fg_made ?? "—"}/{stat.fg_attempted ?? "—"}</td>
-                          <td className="px-3 py-3 text-right tabular-nums text-slate-400">{stat.three_pt_made ?? "—"}</td>
+                          <td className="px-2.5 py-2 text-right font-black text-white tabular-nums">{stat.points ?? "—"}</td>
+                          <td className="px-2.5 py-2 text-right tabular-nums text-slate-300">{reb || "—"}</td>
+                          <td className="px-2.5 py-2 text-right tabular-nums text-slate-300">{stat.assists ?? "—"}</td>
+                          <td className="px-2.5 py-2 text-right tabular-nums text-slate-300">{stat.steals ?? "—"}</td>
+                          <td className="px-2.5 py-2 text-right tabular-nums text-slate-300">{stat.blocks ?? "—"}</td>
+                          <td className="px-2.5 py-2 text-right tabular-nums text-slate-400">{stat.fg_made ?? "—"}/{stat.fg_attempted ?? "—"}</td>
+                          <td className="px-2.5 py-2 text-right tabular-nums text-slate-400">{stat.three_pt_made ?? "—"}</td>
                         </tr>
                       );
                     })}
