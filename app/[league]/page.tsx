@@ -625,7 +625,7 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
           )}
         </div>
 
-        {/* Row 3: News — 2-col grid */}
+        {/* Row 3: News — 2-col grid, card style */}
         <div style={{ marginBottom: 24 }}>
           <SectionHeader icon="📰" title="News" />
           {loading ? (
@@ -633,22 +633,19 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
           ) : articles.length === 0 ? (
             <div style={{ background: "#101318", border: "1px solid #1c2028", borderRadius: 10, padding: "20px 16px", textAlign: "center", color: "#2a2a2a", fontSize: 12 }}>No articles yet for the {label}.</div>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
               {articles.map(a => (
                 <a key={a.id} href={`/${slug}/articles/${a.id}`}
-                  style={{ background: "#101318", border: "1px solid #1c2028", borderRadius: 10, padding: "9px 13px", textDecoration: "none", display: "flex", alignItems: "center", gap: 10, transition: "border-color 0.15s" }}
+                  style={{ background: "#101318", border: "1px solid #1c2028", borderRadius: 10, padding: "11px 13px", textDecoration: "none", display: "block", transition: "border-color 0.15s" }}
                   onMouseEnter={e => (e.currentTarget.style.borderColor = "#2a3048")} onMouseLeave={e => (e.currentTarget.style.borderColor = "#1c2028")}>
-                  {a.image_url && (
-                    <img src={a.image_url} alt="" style={{ width: 40, height: 40, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} />
-                  )}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
-                      <span style={{ background: leagueColor[a.league] ?? "#333", color: "white", fontSize: 8, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", padding: "1px 5px", borderRadius: 4 }}>{leagueLabel[a.league] ?? a.league.toUpperCase()}</span>
-                      <span style={{ color: "#3a3a3a", fontSize: 10 }}>{new Date(a.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
-                    </div>
-                    <div style={{ color: "#d0d0d0", fontWeight: 600, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.title}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
+                    <span style={{ background: leagueColor[a.league] ?? "#333", color: "white", fontSize: 8, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", padding: "2px 6px", borderRadius: 4 }}>{leagueLabel[a.league] ?? a.league.toUpperCase()}</span>
+                    <span style={{ color: "#444", fontSize: 10 }}>{new Date(a.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+                    <span style={{ marginLeft: "auto", color: "#333", fontSize: 10 }}>Read more →</span>
                   </div>
-                  <span style={{ color: "#2a2a2a", fontSize: 10, flexShrink: 0 }}>→</span>
+                  {a.image_url && <img src={a.image_url} alt="" style={{ borderRadius: 6, marginBottom: 7, maxHeight: 100, objectFit: "cover", width: "100%" }} />}
+                  <div style={{ color: "#e8e8e8", fontWeight: 700, fontSize: 12, margin: "0 0 4px 0", lineHeight: 1.35 }}>{a.title}</div>
+                  <p style={{ color: "#555", fontSize: 11, lineHeight: 1.5, margin: 0, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" } as React.CSSProperties}>{a.body}</p>
                 </a>
               ))}
             </div>
