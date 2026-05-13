@@ -709,9 +709,13 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
 
   const syncRostersFromContracts = async () => {
     setSyncing(true); setSyncMsg("");
-    const r = await fetch("/api/admin/sync-rosters", { method: "POST" });
+    const r = await fetch("/api/admin/sync-rosters", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ league }),
+    });
     const d = await r.json().catch(() => ({})) as { synced?: number; error?: string };
-    setSyncMsg(r.ok ? `✓ Synced ${d.synced ?? 0} players` : `Error: ${d.error ?? "failed"}`);
+    setSyncMsg(r.ok ? `✓ Synced ${d.synced ?? 0} roster entries from contracts` : `Error: ${d.error ?? "failed"}`);
     setSyncing(false);
     if (r.ok) refresh();
   };
@@ -1174,7 +1178,7 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
                       }, 0);
                       return (
                         <div className="mt-3 pt-3 border-t border-slate-800">
-                          <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center justify-between mb-1">
                             <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Roster ({roster.length})</span>
                             <div className="flex items-center gap-2">
                               <button
@@ -1182,7 +1186,7 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
                                 disabled={syncing}
                                 className="text-xs px-2 py-0.5 rounded bg-slate-700 hover:bg-blue-700 text-slate-300 hover:text-white border border-slate-600 hover:border-blue-500 transition disabled:opacity-50"
                                 title="Sync roster from active contracts"
-                              >{syncing ? "…" : "🔄 Update"}</button>
+                              >{syncing ? "Syncing…" : "🔄 Update"}</button>
                               {capUsed > 0 && (
                                 <span className={`text-xs font-bold ${capUsed > TOTAL_CAP ? "text-red-400" : "text-green-400"}`}>
                                   ${capUsed.toLocaleString()} / ${TOTAL_CAP.toLocaleString()} cap
@@ -1190,6 +1194,7 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
                               )}
                             </div>
                           </div>
+                          {syncMsg && <p className="text-xs text-blue-400 mb-2">{syncMsg}</p>}
                           {roster.length > 0 && (
                             <div className="flex flex-wrap gap-1.5 mb-3">
                               {roster.map((pt) => {
