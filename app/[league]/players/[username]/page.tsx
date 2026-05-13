@@ -296,6 +296,54 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
               <p className="text-slate-600 text-sm italic">No description yet.</p>
             </div>
 
+            {/* Player Analysis */}
+            <div className="rounded-xl border border-slate-800 bg-slate-950 p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold text-white">Player Analysis</h3>
+                <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-widest">
+                  {selectedSeason === "all" ? "Career" : selectedSeason} · Regular Season
+                </span>
+              </div>
+              {statsLoading ? (
+                <p className="text-slate-600 text-sm text-center py-4">Loading…</p>
+              ) : !statsRegular ? (
+                <p className="text-slate-600 text-sm text-center py-4">No stats recorded.</p>
+              ) : (
+                <div className="space-y-3">
+                  {[
+                    { label: "PTS", sublabel: "Points", value: statsRegular.ppg, max: 30, color: "#C8102E", format: (v: number) => v.toFixed(1) },
+                    { label: "REB", sublabel: "Rebounds", value: statsRegular.rpg, max: 15, color: "#3b82f6", format: (v: number) => v.toFixed(1) },
+                    { label: "AST", sublabel: "Assists", value: statsRegular.apg, max: 10, color: "#22c55e", format: (v: number) => v.toFixed(1) },
+                    { label: "STL", sublabel: "Steals", value: statsRegular.spg, max: 5, color: "#a855f7", format: (v: number) => v.toFixed(1) },
+                    { label: "BLK", sublabel: "Blocks", value: statsRegular.bpg, max: 5, color: "#f59e0b", format: (v: number) => v.toFixed(1) },
+                    { label: "FG%", sublabel: "Field Goal %", value: statsRegular.fg_pct, max: 100, color: "#06b6d4", format: (v: number) => `${v.toFixed(1)}%` },
+                    { label: "3FG%", sublabel: "Three-Point %", value: statsRegular.three_pt_pct, max: 100, color: "#f97316", format: (v: number) => `${v.toFixed(1)}%` },
+                  ].map(({ label, sublabel, value, max, color, format }) => {
+                    const pct = value != null ? Math.min((value / max) * 100, 100) : 0;
+                    return (
+                      <div key={label}>
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black text-white uppercase tracking-widest w-8">{label}</span>
+                            <span className="text-[10px] text-slate-600">{sublabel}</span>
+                          </div>
+                          <span className="text-xs font-bold tabular-nums" style={{ color: value != null ? color : undefined }}>
+                            {value != null ? format(value) : "—"}
+                          </span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-slate-800 overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{ width: `${pct}%`, background: color, opacity: value != null ? 1 : 0 }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             <div className="rounded-xl border border-slate-800 bg-slate-950 p-5">
               <h3 className="text-sm font-bold text-white mb-3">Accolades</h3>
               {accolades.length === 0 ? (

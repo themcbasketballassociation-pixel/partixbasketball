@@ -89,11 +89,14 @@ function BracketSlot({ team, score, winnerId, teamId, conf }: {
   );
 }
 
-function BracketGroup({ m, conf }: { m: BracketMatchup; conf: "W"|"E"|"F" }) {
+function BracketGroup({ m, conf, bestOf }: { m: BracketMatchup; conf: "W"|"E"|"F"; bestOf: number }) {
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:INNER_GAP, flexShrink:0, width:220 }}>
       <BracketSlot team={m.team1} score={m.team1_score} winnerId={m.winner_id} teamId={m.team1_id} conf={conf} />
       <BracketSlot team={m.team2} score={m.team2_score} winnerId={m.winner_id} teamId={m.team2_id} conf={conf} />
+      <div style={{ textAlign:"center", fontSize:"0.6rem", fontWeight:700, color:"#444", letterSpacing:"0.12em", textTransform:"uppercase", paddingTop:2 }}>
+        BEST OF {bestOf}
+      </div>
     </div>
   );
 }
@@ -159,11 +162,12 @@ function BracketView({ league, season }: { league: string; season: string }) {
           <div style={{ display:"flex", gap:48, alignItems:"flex-start" }}>
             {westRounds.map((col,ri) => {
               const vis = ri===0 ? col.matchups.filter(m=>m.team1_id&&m.team2_id) : col.matchups;
+              const bestOf = ri===0 ? 3 : 5;
               return (
                 <div key={col.name} style={{ flexShrink:0 }}>
                   <div style={{ fontSize:"0.6rem", fontWeight:700, color:"#ef4444", textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:10, textAlign:"center" }}>{col.name}</div>
                   <div style={{ display:"flex", flexDirection:"column", paddingTop:topOffsetForRound(ri), gap:gapForRound(ri) }}>
-                    {vis.map(m=><BracketGroup key={m.id} m={m} conf="W" />)}
+                    {vis.map(m=><BracketGroup key={m.id} m={m} conf="W" bestOf={bestOf} />)}
                   </div>
                 </div>
               );
@@ -172,17 +176,18 @@ function BracketView({ league, season }: { league: string; season: string }) {
               <div style={{ flexShrink:0 }}>
                 <div style={{ height:finalsTopPad }} />
                 <div style={{ fontSize:"0.63rem", fontWeight:700, color:"#facc15", textTransform:"uppercase", letterSpacing:"0.12em", marginBottom:10, textAlign:"center" }}>🏆 Championship</div>
-                <BracketGroup m={finalsMatch} conf="F" />
+                <BracketGroup m={finalsMatch} conf="F" bestOf={7} />
               </div>
             )}
             {[...eastRounds].reverse().map((col,reverseIdx) => {
               const riFromRight = eastRounds.length - 1 - reverseIdx;
               const vis = riFromRight===0 ? col.matchups.filter(m=>m.team1_id&&m.team2_id) : col.matchups;
+              const bestOf = riFromRight===0 ? 3 : 5;
               return (
                 <div key={col.name} style={{ flexShrink:0 }}>
                   <div style={{ fontSize:"0.6rem", fontWeight:700, color:"#3b82f6", textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:10, textAlign:"center" }}>{col.name}</div>
                   <div style={{ display:"flex", flexDirection:"column", paddingTop:topOffsetForRound(riFromRight), gap:gapForRound(riFromRight) }}>
-                    {vis.map(m=><BracketGroup key={m.id} m={m} conf="E" />)}
+                    {vis.map(m=><BracketGroup key={m.id} m={m} conf="E" bestOf={bestOf} />)}
                   </div>
                 </div>
               );
@@ -192,11 +197,12 @@ function BracketView({ league, season }: { league: string; season: string }) {
           <div style={{ display:"flex", gap:48, alignItems:"flex-start" }}>
             {flatRounds.map((col,ri) => {
               const vis = ri===0 ? col.matchups.filter(m=>m.team1_id&&m.team2_id) : col.matchups;
+              const bestOf = ri===0 ? 3 : 5;
               return (
                 <div key={col.name} style={{ flexShrink:0 }}>
                   <div style={{ fontSize:"0.65rem", fontWeight:700, color:"#888", textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:10, textAlign:"center" }}>{col.name}</div>
                   <div style={{ display:"flex", flexDirection:"column", paddingTop:topOffsetForRound(ri), gap:gapForRound(ri) }}>
-                    {vis.map(m=><BracketGroup key={m.id} m={m} conf="W" />)}
+                    {vis.map(m=><BracketGroup key={m.id} m={m} conf="W" bestOf={bestOf} />)}
                   </div>
                 </div>
               );
@@ -205,7 +211,7 @@ function BracketView({ league, season }: { league: string; season: string }) {
               <div style={{ flexShrink:0 }}>
                 <div style={{ height:finalsTopPad }} />
                 <div style={{ fontSize:"0.63rem", fontWeight:700, color:"#facc15", textTransform:"uppercase", letterSpacing:"0.12em", marginBottom:10, textAlign:"center" }}>🏆 Finals</div>
-                <BracketGroup m={finalsMatch} conf="F" />
+                <BracketGroup m={finalsMatch} conf="F" bestOf={7} />
               </div>
             )}
           </div>
