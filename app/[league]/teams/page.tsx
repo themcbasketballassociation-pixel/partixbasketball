@@ -583,7 +583,7 @@ export default function TeamsPage({ params }: { params?: Promise<{ league?: stri
       setTeams(loadedTeams);
       const contractsData: ContractFull[] = Array.isArray(c) ? c : [];
       setContracts(contractsData);
-      // Use player_teams as roster source — always authoritative regardless of contract state
+      // Union player_teams + contracts: anyone in either source appears on the roster
       const ptData: PlayerTeam[] = Array.isArray(pt) ? pt : [];
       const seenPerTeam = new Map<string, Set<string>>();
       const deduped: PlayerTeam[] = [];
@@ -592,6 +592,14 @@ export default function TeamsPage({ params }: { params?: Promise<{ league?: stri
         if (!seenPerTeam.get(row.team_id)!.has(row.mc_uuid)) {
           seenPerTeam.get(row.team_id)!.add(row.mc_uuid);
           deduped.push(row);
+        }
+      }
+      // Also include anyone with an active contract not already in player_teams
+      for (const ct of contractsData) {
+        if (!seenPerTeam.has(ct.team_id)) seenPerTeam.set(ct.team_id, new Set());
+        if (!seenPerTeam.get(ct.team_id)!.has(ct.mc_uuid)) {
+          seenPerTeam.get(ct.team_id)!.add(ct.mc_uuid);
+          deduped.push({ mc_uuid: ct.mc_uuid, team_id: ct.team_id, season: ct.season ?? season, players: ct.players });
         }
       }
       setPlayerTeams(deduped);
