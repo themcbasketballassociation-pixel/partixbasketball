@@ -1991,6 +1991,8 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
   const [stattedIds, setStattedIds] = useState<Set<string>>(new Set());
   const [cleaning, setCleaning] = useState(false);
   const [cleanMsg, setCleanMsg] = useState("");
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState("");
 
   useEffect(() => {
     if (!season) return;
@@ -2115,15 +2117,29 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
               {showStatted ? "Hide Statted Games" : "Show All Games"}
             </button>
             <button
+              className={btnSecondary}
+              disabled={syncing}
+              onClick={async () => {
+                setSyncing(true); setSyncMsg(""); setCleanMsg("");
+                const r = await fetch("/api/admin/sync-rosters", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ league }) });
+                const d = await r.json();
+                setSyncing(false);
+                if (r.ok) setSyncMsg(`Synced ${d.synced} roster entr${d.synced !== 1 ? "ies" : "y"} from contracts`);
+                else setSyncMsg(`Sync error: ${d.error}`);
+              }}
+            >
+              {syncing ? "Syncing..." : "🔄 Sync Rosters"}
+            </button>
+            <button
               className={btnDanger}
               disabled={cleaning}
               onClick={async () => {
-                if (!confirm(`Remove all game stats for players not on their team's ${season} roster?`)) return;
-                setCleaning(true); setCleanMsg("");
+                if (!confirm(`This removes stats for players not on their team's ${season} roster (per contracts). Run Sync Rosters first if unsure. Continue?`)) return;
+                setCleaning(true); setCleanMsg(""); setSyncMsg("");
                 const r = await fetch(`/api/admin/cleanup-game-stats?league=${league}&season=${encodeURIComponent(season)}`, { method: "POST" });
                 const d = await r.json();
                 setCleaning(false);
-                if (r.ok) setCleanMsg(`Removed ${d.removed} invalid stat row${d.removed !== 1 ? "s" : ""}`);
+                if (r.ok) setCleanMsg(`Removed ${d.removed} invalid stat row${d.removed !== 1 ? "s" : ""}${d.synced > 0 ? ` · synced ${d.synced} missing roster entr${d.synced !== 1 ? "ies" : "y"}` : ""}`);
                 else setCleanMsg(`Error: ${d.error}`);
               }}
             >
@@ -2131,6 +2147,7 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
             </button>
           </div>
         </div>
+        {syncMsg && <p className="mb-2 text-sm font-semibold text-blue-400">{syncMsg}</p>}
         {cleanMsg && <p className="mb-3 text-sm font-semibold text-green-400">{cleanMsg}</p>}
         <select className={input} value={selectedGameId} onChange={(e) => { setSelectedGameId(e.target.value); setShowPaste(false); setPastePreview(null); setStatsSaved(false); setPostMsg(""); }}>
           <option value="">Choose a game...</option>
