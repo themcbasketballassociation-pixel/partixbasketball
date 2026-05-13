@@ -44,6 +44,7 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
   const [statsRegular, setStatsRegular] = useState<StatRow | null>(null);
   const [statsPlayoffs, setStatsPlayoffs] = useState<StatRow | null>(null);
   const [statsCombined, setStatsCombined] = useState<StatRow | null>(null);
+  const [leagueAvgRegular, setLeagueAvgRegular] = useState<Partial<StatRow> | null>(null);
   const [accolades, setAccolades] = useState<Accolade[]>([]);
   const [record, setRecord] = useState({ wins: 0, losses: 0 });
   const [gameLogs, setGameLogs] = useState<{ game: Game; stat: GameStat }[]>([]);
@@ -127,6 +128,16 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
     setStatsRegular(Array.isArray(sReg) ? sReg.find((s: StatRow) => s.mc_uuid === p.mc_uuid) ?? null : null);
     setStatsPlayoffs(Array.isArray(sPly) ? sPly.find((s: StatRow) => s.mc_uuid === p.mc_uuid) ?? null : null);
     setStatsCombined(Array.isArray(sCom) ? sCom.find((s: StatRow) => s.mc_uuid === p.mc_uuid) ?? null : null);
+    if (Array.isArray(sReg) && sReg.length > 0) {
+      const qualified = sReg.filter((s: StatRow) => (s.gp ?? 0) >= 1);
+      const mean = (key: keyof StatRow) => {
+        const vals = qualified.map((s: StatRow) => s[key] as number | null).filter((v): v is number => v != null);
+        return vals.length > 0 ? vals.reduce((a: number, b: number) => a + b, 0) / vals.length : null;
+      };
+      setLeagueAvgRegular({ ppg: mean("ppg"), rpg: mean("rpg"), apg: mean("apg"), spg: mean("spg"), bpg: mean("bpg"), fg_pct: mean("fg_pct"), three_pt_pct: mean("three_pt_pct") });
+    } else {
+      setLeagueAvgRegular(null);
+    }
     setStatsLoading(false);
   }, []);
 
@@ -297,45 +308,71 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
             </div>
 
             {/* Player Analysis */}
-            <div className="rounded-xl border border-slate-800 bg-slate-950 p-5">
-              <div className="flex items-center justify-between mb-4">
+            <div className="rounded-xl border border-slate-800 bg-slate-950 overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
                 <h3 className="text-sm font-bold text-white">Player Analysis</h3>
-                <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-widest">
-                  {selectedSeason === "all" ? "Career" : selectedSeason} · Regular Season
-                </span>
+                <div className="flex items-center gap-4 text-[10px] font-semibold uppercase tracking-widest">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-1.5 rounded-full bg-blue-500" />
+                    <span className="text-slate-500">Player</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-1 rounded-full bg-slate-600" />
+                    <span className="text-slate-600">League Avg</span>
+                  </div>
+                  <span className="text-slate-600">{selectedSeason === "all" ? "Career" : selectedSeason}</span>
+                </div>
               </div>
               {statsLoading ? (
-                <p className="text-slate-600 text-sm text-center py-4">Loading…</p>
+                <p className="text-slate-600 text-sm text-center py-8">Loading…</p>
               ) : !statsRegular ? (
-                <p className="text-slate-600 text-sm text-center py-4">No stats recorded.</p>
+                <p className="text-slate-600 text-sm text-center py-8">No stats recorded.</p>
               ) : (
-                <div className="space-y-3">
+                <div>
                   {[
-                    { label: "PTS", sublabel: "Points", value: statsRegular.ppg, max: 30, color: "#C8102E", format: (v: number) => v.toFixed(1) },
-                    { label: "REB", sublabel: "Rebounds", value: statsRegular.rpg, max: 15, color: "#3b82f6", format: (v: number) => v.toFixed(1) },
-                    { label: "AST", sublabel: "Assists", value: statsRegular.apg, max: 10, color: "#22c55e", format: (v: number) => v.toFixed(1) },
-                    { label: "STL", sublabel: "Steals", value: statsRegular.spg, max: 5, color: "#a855f7", format: (v: number) => v.toFixed(1) },
-                    { label: "BLK", sublabel: "Blocks", value: statsRegular.bpg, max: 5, color: "#f59e0b", format: (v: number) => v.toFixed(1) },
-                    { label: "FG%", sublabel: "Field Goal %", value: statsRegular.fg_pct, max: 100, color: "#06b6d4", format: (v: number) => `${v.toFixed(1)}%` },
-                    { label: "3FG%", sublabel: "Three-Point %", value: statsRegular.three_pt_pct, max: 100, color: "#f97316", format: (v: number) => `${v.toFixed(1)}%` },
-                  ].map(({ label, sublabel, value, max, color, format }) => {
+                    { label: "PTS", sublabel: "Points per Game", value: statsRegular.ppg, avg: leagueAvgRegular?.ppg, max: 35, color: "#ef4444", fmt: (v: number) => v.toFixed(1) },
+                    { label: "REB", sublabel: "Rebounds per Game", value: statsRegular.rpg, avg: leagueAvgRegular?.rpg, max: 18, color: "#3b82f6", fmt: (v: number) => v.toFixed(1) },
+                    { label: "AST", sublabel: "Assists per Game", value: statsRegular.apg, avg: leagueAvgRegular?.apg, max: 12, color: "#22c55e", fmt: (v: number) => v.toFixed(1) },
+                    { label: "STL", sublabel: "Steals per Game", value: statsRegular.spg, avg: leagueAvgRegular?.spg, max: 6, color: "#a855f7", fmt: (v: number) => v.toFixed(1) },
+                    { label: "BLK", sublabel: "Blocks per Game", value: statsRegular.bpg, avg: leagueAvgRegular?.bpg, max: 6, color: "#f59e0b", fmt: (v: number) => v.toFixed(1) },
+                    { label: "FG%", sublabel: "Field Goal %", value: statsRegular.fg_pct, avg: leagueAvgRegular?.fg_pct, max: 100, color: "#06b6d4", fmt: (v: number) => `${v.toFixed(1)}%` },
+                    { label: "3FG%", sublabel: "Three-Point %", value: statsRegular.three_pt_pct, avg: leagueAvgRegular?.three_pt_pct, max: 100, color: "#f97316", fmt: (v: number) => `${v.toFixed(1)}%` },
+                  ].map(({ label, sublabel, value, avg, max, color, fmt }, idx, arr) => {
                     const pct = value != null ? Math.min((value / max) * 100, 100) : 0;
+                    const avgPct = avg != null ? Math.min((avg / max) * 100, 100) : 0;
+                    const aboveAvg = value != null && avg != null && value > avg;
                     return (
-                      <div key={label}>
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-black text-white uppercase tracking-widest w-8">{label}</span>
+                      <div key={label} className={`px-5 py-4${idx < arr.length - 1 ? " border-b border-slate-800/60" : ""}`}>
+                        <div className="flex items-end justify-between mb-3">
+                          <div>
+                            <span className="text-xs font-black text-white uppercase tracking-widest mr-2">{label}</span>
                             <span className="text-[10px] text-slate-600">{sublabel}</span>
                           </div>
-                          <span className="text-xs font-bold tabular-nums" style={{ color: value != null ? color : undefined }}>
-                            {value != null ? format(value) : "—"}
-                          </span>
+                          <div className="flex items-baseline gap-3">
+                            {avg != null && (
+                              <span className="text-[10px] text-slate-600 tabular-nums">
+                                avg <span className="text-slate-500">{fmt(avg)}</span>
+                              </span>
+                            )}
+                            <span className="text-2xl font-black tabular-nums leading-none" style={{ color: value != null ? color : "#333" }}>
+                              {value != null ? fmt(value) : "—"}
+                            </span>
+                            {value != null && avg != null && (
+                              <span className={`text-[9px] font-bold px-1 py-0.5 rounded ${aboveAvg ? "bg-green-950 text-green-400" : "bg-red-950 text-red-400"}`}>
+                                {aboveAvg ? "▲" : "▼"}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <div className="h-1.5 rounded-full bg-slate-800 overflow-hidden">
-                          <div
-                            className="h-full rounded-full transition-all duration-500"
-                            style={{ width: `${pct}%`, background: color, opacity: value != null ? 1 : 0 }}
-                          />
+                        {/* Player bar */}
+                        <div className="h-2.5 rounded-full bg-slate-800/80 overflow-hidden mb-1.5">
+                          <div className="h-full rounded-full transition-all duration-700"
+                            style={{ width: `${pct}%`, background: value != null ? color : "transparent" }} />
+                        </div>
+                        {/* League avg bar */}
+                        <div className="h-1.5 rounded-full bg-slate-800/50 overflow-hidden">
+                          <div className="h-full rounded-full transition-all duration-700"
+                            style={{ width: `${avgPct}%`, background: avg != null ? "#475569" : "transparent" }} />
                         </div>
                       </div>
                     );

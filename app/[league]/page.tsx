@@ -214,9 +214,9 @@ function ResultCard({ game, slug, mvp, isPlayoffs }: { game: Game; slug: string;
             onError={e => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/24"; }} />
           <span style={{ color: "#fff", fontSize: 12, fontWeight: 700, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{mvpName}</span>
           {([["PTS", mvpPts], ["REB", mvpReb], ["AST", mvpAst], ["STL", mvpStl], ["BLK", mvpBlk]] as [string, number][]).map(([label, val]) => (
-            <div key={label} style={{ textAlign: "center", flexShrink: 0 }}>
-              <div style={{ color: "#ddd", fontSize: 12, fontWeight: 700, lineHeight: 1.2 }}>{val}</div>
-              <div style={{ color: "#444", fontSize: 8, fontWeight: 700, letterSpacing: "0.08em" }}>{label}</div>
+            <div key={label} style={{ textAlign: "center", flexShrink: 0, minWidth: 38 }}>
+              <div style={{ color: "#fff", fontSize: 20, fontWeight: 900, lineHeight: 1.1, fontVariantNumeric: "tabular-nums" }}>{val}</div>
+              <div style={{ color: "#555", fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginTop: 2 }}>{label}</div>
             </div>
           ))}
         </div>
@@ -424,6 +424,7 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
   const [isPlayoffs, setIsPlayoffs]   = React.useState(false);
   const [gameMvps, setGameMvps]       = React.useState<Record<string, GameStat>>({});
   const [teamStandings, setTeamStandings] = React.useState<TeamRecord[]>([]);
+  const [teamDivisions, setTeamDivisions] = React.useState<Record<string, string | null>>({});
   const [loading, setLoading]         = React.useState(true);
 
   // Fetch articles
@@ -469,6 +470,20 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
         }
         const sorted = Object.values(teamMap).sort((a, b) => b.wins - a.wins || a.losses - b.losses);
         setTeamStandings(sorted);
+      })
+      .catch(() => {});
+  }, [slug]);
+
+  // Fetch team divisions
+  React.useEffect(() => {
+    if (!slug) return;
+    fetch(`/api/teams?league=${slug}`)
+      .then(r => r.json())
+      .then((teams: { id: string; division?: string | null }[]) => {
+        if (!Array.isArray(teams)) return;
+        const map: Record<string, string | null> = {};
+        for (const t of teams) map[t.id] = t.division ?? null;
+        setTeamDivisions(map);
       })
       .catch(() => {});
   }, [slug]);
@@ -523,7 +538,19 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
     })();
   }, [slug]);
 
-  const playoffTeams = teamStandings.slice(0, 4);
+  const westSeeds = teamStandings.filter(tr => teamDivisions[tr.team.id] === "West");
+  const eastSeeds = teamStandings.filter(tr => teamDivisions[tr.team.id] === "East");
+  const hasConf = westSeeds.length > 0 || eastSeeds.length > 0;
+  const seedOrder = (seeds: TeamRecord[]) =>
+    ([0, 3, 1, 2] as const).map(i => seeds[i]).filter((x): x is TeamRecord => x != null);
+  const SEED_NUMS = [1, 4, 2, 3] as const;
+  type PlayoffSlot = TeamRecord & { conf: string; seed: number };
+  const playoffSlots: PlayoffSlot[] = hasConf
+    ? [
+        ...seedOrder(westSeeds).map((tr, i) => ({ ...tr, conf: "West", seed: SEED_NUMS[i] })),
+        ...seedOrder(eastSeeds).map((tr, i) => ({ ...tr, conf: "East", seed: SEED_NUMS[i] })),
+      ]
+    : seedOrder(teamStandings.slice(0, 4)).map((tr, i) => ({ ...tr, conf: "", seed: SEED_NUMS[i] }));
 
   return (
     <main style={{ background: "#080808", minHeight: "100vh" }}>
@@ -531,35 +558,20 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
       {/* ── HERO ── */}
       <div style={{ position: "relative", overflow: "hidden", background: "#080808", borderBottom: "1px solid #131820" }}>
         <div style={{ position: "absolute", left: "-5%", top: "50%", transform: "translateY(-50%)", width: 600, height: 600, borderRadius: "50%", background: `radial-gradient(circle, ${color}14 0%, transparent 65%)`, pointerEvents: "none" }} />
-        <div style={{ maxWidth: 1280, margin: "0 auto", padding: "60px 24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 48, alignItems: "center" }}>
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: color, display: "inline-block", flexShrink: 0 }} />
-              <span style={{ color: "#555", fontSize: 11, fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase" }}>{leagueDisplay}</span>
-            </div>
-            <h1 style={{ margin: "0 0 16px 0", lineHeight: 1.05 }}>
-              <span style={{ display: "block", color: "#fff", fontSize: "clamp(34px, 4vw, 50px)", fontWeight: 900 }}>Minecraft Basketball</span>
-            </h1>
-            <p style={{ color: "#4a4a4a", fontSize: 14, lineHeight: 1.65, margin: "0 0 28px 0", maxWidth: 400 }}>
-              The premier Minecraft basketball experience — real teams, real stats, real competition.
-            </p>
-            <a href="https://discord.gg/baWUsXWhdV"
-              style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#5865f2", color: "white", padding: "11px 22px", borderRadius: 999, fontSize: 13, fontWeight: 700, textDecoration: "none" }}
-              onMouseEnter={e => (e.currentTarget.style.background = "#4752c4")} onMouseLeave={e => (e.currentTarget.style.background = "#5865f2")}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.053 19.9 19.9 0 0 0 5.993 3.03.077.077 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z" /></svg>
-              Join Discord
-            </a>
+        <div style={{ maxWidth: 1280, margin: "0 auto", padding: "48px 24px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: color, display: "inline-block", flexShrink: 0 }} />
+            <span style={{ color: "#555", fontSize: 11, fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase" }}>{leagueDisplay}</span>
           </div>
-          {/* Hero right: latest result */}
-          {recentGames.length > 0 && (
-            <div>
-              <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 12 }}>
-                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#ef4444", display: "inline-block", flexShrink: 0 }} />
-                <span style={{ color: "#333", fontSize: 10, fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase" }}>Latest Result</span>
-              </div>
-              <ResultCard game={recentGames[0]} slug={slug} mvp={gameMvps[recentGames[0].id]} isPlayoffs={isPlayoffs} />
-            </div>
-          )}
+          <h1 style={{ margin: "0 0 24px 0", lineHeight: 1.05 }}>
+            <span style={{ display: "block", color: "#fff", fontSize: "clamp(34px, 4vw, 50px)", fontWeight: 900 }}>Minecraft Basketball</span>
+          </h1>
+          <a href="https://discord.gg/baWUsXWhdV"
+            style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#5865f2", color: "white", padding: "11px 22px", borderRadius: 999, fontSize: 13, fontWeight: 700, textDecoration: "none" }}
+            onMouseEnter={e => (e.currentTarget.style.background = "#4752c4")} onMouseLeave={e => (e.currentTarget.style.background = "#5865f2")}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.053 19.9 19.9 0 0 0 5.993 3.03.077.077 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z" /></svg>
+            Join Discord
+          </a>
         </div>
       </div>
 
@@ -650,41 +662,61 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
             </a>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 240px", gap: 0 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 270px", gap: 0 }}>
             {/* Bracket */}
             <div style={{ borderRight: "1px solid #1e1800", padding: "4px 0" }}>
               <HomeBracket slug={slug} season={bracketSeason} />
             </div>
 
-            {/* Playoff Picture — top 4 */}
-            <div style={{ padding: "20px 16px" }}>
+            {/* Playoff Picture */}
+            <div style={{ padding: "18px 14px" }}>
               <div style={{ fontSize: "0.6rem", fontWeight: 800, color: "#a07a20", letterSpacing: "0.14em", textTransform: "uppercase", marginBottom: 12 }}>Playoff Picture</div>
-              {playoffTeams.length === 0 ? (
+              {playoffSlots.length === 0 ? (
                 <div style={{ color: "#333", fontSize: 11, padding: "12px 0" }}>No standings yet.</div>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {playoffTeams.map((tr, i) => (
-                    <div key={tr.team.id} style={{ display: "flex", alignItems: "center", gap: 8, background: "#0d0b00", border: "1px solid #1e1800", borderRadius: 8, padding: "8px 10px" }}>
-                      <span style={{ color: "#f59e0b", fontSize: 11, fontWeight: 900, width: 14, textAlign: "center", flexShrink: 0 }}>{i + 1}</span>
-                      <TeamLogo team={tr.team} size={28} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ color: "#ccc", fontSize: 11, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tr.team.name}</div>
-                        <div style={{ color: "#555", fontSize: 9, fontWeight: 600 }}>{tr.team.abbreviation}</div>
+              ) : (() => {
+                const confGroups: { conf: string; color: string; slots: PlayoffSlot[] }[] = hasConf
+                  ? [
+                      { conf: "West", color: "#ef4444", slots: playoffSlots.filter(s => s.conf === "West") },
+                      { conf: "East", color: "#3b82f6", slots: playoffSlots.filter(s => s.conf === "East") },
+                    ].filter(g => g.slots.length > 0)
+                  : [{ conf: "", color: "#888", slots: playoffSlots }];
+                return (
+                  <div>
+                    {confGroups.map((group, gi) => (
+                      <div key={group.conf || "all"} style={{ marginBottom: gi < confGroups.length - 1 ? 12 : 0 }}>
+                        {group.conf && (
+                          <div style={{ fontSize: "0.55rem", fontWeight: 800, color: group.color, letterSpacing: "0.14em", textTransform: "uppercase", marginBottom: 6 }}>
+                            {group.conf} Conference
+                          </div>
+                        )}
+                        {group.slots.map((slot, i) => (
+                          <React.Fragment key={slot.team.id}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 7, background: "#0d0b00", borderLeft: `2px solid ${i < 2 ? "#4ade8055" : "#60a5fa55"}`, padding: "7px 8px", marginBottom: 1, borderRadius: "0 4px 4px 0" }}>
+                              <span style={{ color: "#f59e0b", fontSize: 10, fontWeight: 900, width: 12, textAlign: "center", flexShrink: 0 }}>{slot.seed}</span>
+                              <TeamLogo team={slot.team} size={24} />
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ color: "#ccc", fontSize: 10, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{slot.team.name}</div>
+                                <div style={{ color: "#444", fontSize: 8, fontWeight: 600 }}>{slot.team.abbreviation}</div>
+                              </div>
+                              <div style={{ textAlign: "right", flexShrink: 0 }}>
+                                <span style={{ color: "#4ade80", fontSize: 10, fontWeight: 700 }}>{slot.wins}</span>
+                                <span style={{ color: "#444", fontSize: 10 }}>-</span>
+                                <span style={{ color: "#ef4444", fontSize: 10, fontWeight: 700 }}>{slot.losses}</span>
+                              </div>
+                            </div>
+                            {i === 1 && <div style={{ height: 6 }} />}
+                          </React.Fragment>
+                        ))}
                       </div>
-                      <div style={{ textAlign: "right", flexShrink: 0 }}>
-                        <span style={{ color: "#4ade80", fontSize: 11, fontWeight: 700 }}>{tr.wins}</span>
-                        <span style={{ color: "#444", fontSize: 11 }}>-</span>
-                        <span style={{ color: "#ef4444", fontSize: 11, fontWeight: 700 }}>{tr.losses}</span>
-                      </div>
-                    </div>
-                  ))}
-                  <a href={`/${slug}/standings`}
-                    style={{ display: "block", textAlign: "center", color: "#5a4a20", fontSize: 10, fontWeight: 700, textDecoration: "none", marginTop: 4, letterSpacing: "0.08em" }}
-                    onMouseEnter={e => (e.currentTarget.style.color = "#a07a20")} onMouseLeave={e => (e.currentTarget.style.color = "#5a4a20")}>
-                    FULL STANDINGS →
-                  </a>
-                </div>
-              )}
+                    ))}
+                    <a href={`/${slug}/standings`}
+                      style={{ display: "block", textAlign: "center", color: "#5a4a20", fontSize: 10, fontWeight: 700, textDecoration: "none", marginTop: 10, letterSpacing: "0.08em" }}
+                      onMouseEnter={e => (e.currentTarget.style.color = "#a07a20")} onMouseLeave={e => (e.currentTarget.style.color = "#5a4a20")}>
+                      FULL STANDINGS →
+                    </a>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>
