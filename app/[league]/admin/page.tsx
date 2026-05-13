@@ -795,12 +795,13 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
   const addToTeam = async (teamId: string) => {
     const uuid = addingToTeam[teamId];
     if (!uuid) return;
-    const existingContract = contracts.find((c) => c.mc_uuid === uuid);
+    const isCurrentSeason = season === SEASONS[SEASONS.length - 1];
+    const existingContract = isCurrentSeason ? contracts.find((c) => c.mc_uuid === uuid) : null;
     const amount = existingContract?.amount ?? undefined;
     const r = await fetch("/api/teams/players", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mc_uuid: uuid, team_id: teamId, league, season, ...(amount != null ? { amount } : {}) }),
+      body: JSON.stringify({ mc_uuid: uuid, team_id: teamId, league, season, skipContract: !isCurrentSeason, ...(amount != null ? { amount } : {}) }),
     });
     if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Failed to add player to team"); return; }
     setAddingToTeam((prev) => { const n = { ...prev }; delete n[teamId]; return n; });

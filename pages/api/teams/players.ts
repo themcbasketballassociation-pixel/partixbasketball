@@ -21,7 +21,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "POST") {
     const admin = await requireAdmin(req, res);
     if (!admin) return;
-    const { mc_uuid, team_id, league: leagueRaw, season: seasonRaw, amount, is_two_season } = req.body;
+    const { mc_uuid, team_id, league: leagueRaw, season: seasonRaw, amount, is_two_season, skipContract } = req.body;
     const season = normalizeSeason(seasonRaw);
     const league = resolveLeague(leagueRaw);
     if (!mc_uuid || !team_id || !league) return res.status(400).json({ error: "mc_uuid, team_id, league required" });
@@ -35,80 +35,83 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .insert([{ mc_uuid, team_id, league, season: season ?? null }]);
     if (error) return res.status(500).json({ error: error.message });
 
-    // Determine the contract amount: use provided amount, or auto-fetch from the player's auction price
-    let contractAmount: number | null = (amount != null && Number(amount) > 0) ? Number(amount) : null;
+    // Skip all contract logic for previous seasons
+    if (!skipContract) {
+      // Determine the contract amount: use provided amount, or auto-fetch from the player's auction price
+      let contractAmount: number | null = (amount != null && Number(amount) > 0) ? Number(amount) : null;
 
-    if (contractAmount == null) {
-      // 1. Try auction_player_prices for this season (set in the Prices tab — most reliable)
-      if (season) {
-        const { data: priceRow } = await supabase
-          .from("auction_player_prices")
-          .select("price")
-          .eq("mc_uuid", mc_uuid)
-          .eq("league", league)
-          .eq("season", season)
-          .maybeSingle();
-        if (priceRow?.price != null) contractAmount = Number(priceRow.price);
-      }
-      // 2. Fall back to the season-matching auction row (compare season as string)
-      if (contractAmount == null && season) {
-        const { data: auctionRow } = await supabase
-          .from("auctions")
-          .select("min_price")
-          .eq("mc_uuid", mc_uuid)
-          .eq("league", league)
-          .eq("season", season)
-          .maybeSingle();
-        if (auctionRow?.min_price != null) contractAmount = Number(auctionRow.min_price);
-      }
-      // 3. Fall back to any active/pending auction for this player
       if (contractAmount == null) {
-        const { data: auctionRow } = await supabase
-          .from("auctions")
-          .select("min_price")
-          .eq("mc_uuid", mc_uuid)
-          .eq("league", league)
-          .in("status", ["active", "pending"])
-          .order("nominated_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (auctionRow?.min_price != null) contractAmount = Number(auctionRow.min_price);
+        // 1. Try auction_player_prices for this season (set in the Prices tab — most reliable)
+        if (season) {
+          const { data: priceRow } = await supabase
+            .from("auction_player_prices")
+            .select("price")
+            .eq("mc_uuid", mc_uuid)
+            .eq("league", league)
+            .eq("season", season)
+            .maybeSingle();
+          if (priceRow?.price != null) contractAmount = Number(priceRow.price);
+        }
+        // 2. Fall back to the season-matching auction row (compare season as string)
+        if (contractAmount == null && season) {
+          const { data: auctionRow } = await supabase
+            .from("auctions")
+            .select("min_price")
+            .eq("mc_uuid", mc_uuid)
+            .eq("league", league)
+            .eq("season", season)
+            .maybeSingle();
+          if (auctionRow?.min_price != null) contractAmount = Number(auctionRow.min_price);
+        }
+        // 3. Fall back to any active/pending auction for this player
+        if (contractAmount == null) {
+          const { data: auctionRow } = await supabase
+            .from("auctions")
+            .select("min_price")
+            .eq("mc_uuid", mc_uuid)
+            .eq("league", league)
+            .in("status", ["active", "pending"])
+            .order("nominated_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (auctionRow?.min_price != null) contractAmount = Number(auctionRow.min_price);
+        }
       }
-    }
 
-    // Expire existing active contracts for this player in this league+season only
-    let expireQuery = supabase
-      .from("contracts")
-      .update({ status: "expired" })
-      .eq("mc_uuid", mc_uuid)
-      .eq("league", league)
-      .in("status", ["active", "pending_approval"]);
-    if (season) expireQuery = (expireQuery as typeof expireQuery).eq("season", season);
-    await expireQuery;
-
-    if (contractAmount != null && contractAmount > 0) {
-      // Cancel any active or pending auction for this player
-      await supabase
-        .from("auctions")
-        .update({ status: "cancelled" })
+      // Expire existing active contracts for this player in this league+season only
+      let expireQuery = supabase
+        .from("contracts")
+        .update({ status: "expired" })
         .eq("mc_uuid", mc_uuid)
         .eq("league", league)
-        .in("status", ["active", "pending"]);
+        .in("status", ["active", "pending_approval"]);
+      if (season) expireQuery = (expireQuery as typeof expireQuery).eq("season", season);
+      await expireQuery;
 
-      // Create the new contract
-      const { error: contractErr } = await supabase
-        .from("contracts")
-        .insert([{
-          league,
-          mc_uuid,
-          team_id,
-          amount: contractAmount,
-          is_two_season: is_two_season ?? false,
-          season: season ?? null,
-          phase: 1,
-          status: "active",
-        }]);
-      if (contractErr) return res.status(500).json({ error: contractErr.message });
+      if (contractAmount != null && contractAmount > 0) {
+        // Cancel any active or pending auction for this player
+        await supabase
+          .from("auctions")
+          .update({ status: "cancelled" })
+          .eq("mc_uuid", mc_uuid)
+          .eq("league", league)
+          .in("status", ["active", "pending"]);
+
+        // Create the new contract
+        const { error: contractErr } = await supabase
+          .from("contracts")
+          .insert([{
+            league,
+            mc_uuid,
+            team_id,
+            amount: contractAmount,
+            is_two_season: is_two_season ?? false,
+            season: season ?? null,
+            phase: 1,
+            status: "active",
+          }]);
+        if (contractErr) return res.status(500).json({ error: contractErr.message });
+      }
     }
 
     return res.status(200).json({ success: true });
