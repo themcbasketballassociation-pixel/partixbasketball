@@ -581,85 +581,78 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
       </div>
 
       {/* ── MAIN CONTENT ── */}
-      <div style={{ maxWidth: 1280, margin: "0 auto", padding: "28px 24px" }}>
+      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "28px 24px" }}>
 
-        {/* Two-column layout: left = Upcoming + News, right = Results + Stat Leaders */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 32, alignItems: "start" }}>
-          {/* Left column */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-            <div>
-              <SectionHeader icon="📅" title="Upcoming Matchups" linkLabel="VIEW SCHEDULE →" linkHref={`/${slug}/schedule`} />
-              {upcomingGames.length === 0 ? (
-                <div style={{ background: "#101318", border: "1px solid #1c2028", borderRadius: 12, padding: "32px 16px", textAlign: "center", color: "#2a2a2a", fontSize: 12 }}>No upcoming games scheduled.</div>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {upcomingGames.map(g => <UpcomingCard key={g.id} game={g} slug={slug} />)}
-                </div>
-              )}
-            </div>
-
-            {/* News — compact list */}
-            <div>
-              <SectionHeader icon="📰" title="News" />
-              {loading ? (
-                <div style={{ padding: "24px 0", textAlign: "center", color: "#333", fontSize: 12 }}>Loading...</div>
-              ) : articles.length === 0 ? (
-                <div style={{ background: "#101318", border: "1px solid #1c2028", borderRadius: 10, padding: "24px 16px", textAlign: "center", color: "#2a2a2a", fontSize: 12 }}>No articles yet for the {label}.</div>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {articles.map(a => (
-                    <a key={a.id} href={`/${slug}/articles/${a.id}`}
-                      style={{ background: "#101318", border: "1px solid #1c2028", borderRadius: 10, padding: "9px 13px", textDecoration: "none", display: "flex", alignItems: "center", gap: 10, transition: "border-color 0.15s" }}
-                      onMouseEnter={e => (e.currentTarget.style.borderColor = "#2a3048")} onMouseLeave={e => (e.currentTarget.style.borderColor = "#1c2028")}>
-                      {a.image_url && (
-                        <img src={a.image_url} alt="" style={{ width: 44, height: 44, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} />
-                      )}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
-                          <span style={{ background: leagueColor[a.league] ?? "#333", color: "white", fontSize: 8, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", padding: "1px 5px", borderRadius: 4 }}>{leagueLabel[a.league] ?? a.league.toUpperCase()}</span>
-                          <span style={{ color: "#3a3a3a", fontSize: 10 }}>{new Date(a.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
-                        </div>
-                        <div style={{ color: "#d0d0d0", fontWeight: 600, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.title}</div>
-                      </div>
-                      <span style={{ color: "#2a2a2a", fontSize: 10, flexShrink: 0 }}>→</span>
-                    </a>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Right column */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-            <div>
-              <SectionHeader icon="🏆" title="Latest Results" linkLabel="VIEW ALL →" linkHref={`/${slug}/boxscores`} />
-              {recentGames.length === 0 ? (
-                <div style={{ background: "#101318", border: "1px solid #1c2028", borderRadius: 12, padding: "32px 16px", textAlign: "center", color: "#2a2a2a", fontSize: 12 }}>No results yet.</div>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {recentGames.map(g => <ResultCard key={g.id} game={g} slug={slug} mvp={gameMvps[g.id]} isPlayoffs={isPlayoffs} />)}
-                </div>
-              )}
-            </div>
-
-            {/* Stat Leaders */}
-            <div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 15 }}>📊</span>
-                  <span style={{ color: "#e0e0e0", fontSize: 12, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" }}>Stat Leaders</span>
-                </div>
-                {leaderSeason && <span style={{ color: "#333", fontSize: 11, fontWeight: 600 }}>{leaderSeason}</span>}
+        {/* Row 1: Upcoming + Latest Results side by side */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 24, alignItems: "start" }}>
+          <div>
+            <SectionHeader icon="📅" title="Upcoming Matchups" linkLabel="VIEW SCHEDULE →" linkHref={`/${slug}/schedule`} />
+            {upcomingGames.length === 0 ? (
+              <div style={{ background: "#101318", border: "1px solid #1c2028", borderRadius: 12, padding: "28px 16px", textAlign: "center", color: "#2a2a2a", fontSize: 12 }}>No upcoming games scheduled.</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {upcomingGames.map(g => <UpcomingCard key={g.id} game={g} slug={slug} />)}
               </div>
-              {leaders.length === 0 ? (
-                <div style={{ color: "#2a2a2a", fontSize: 12, textAlign: "center", padding: "24px 0" }}>No stats yet.</div>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {LEADER_CATS.map(cat => <LeaderCard key={cat.key as string} cat={cat} stats={leaders} />)}
-                </div>
-              )}
-            </div>
+            )}
           </div>
+          <div>
+            <SectionHeader icon="🏆" title="Latest Results" linkLabel="VIEW ALL →" linkHref={`/${slug}/boxscores`} />
+            {recentGames.length === 0 ? (
+              <div style={{ background: "#101318", border: "1px solid #1c2028", borderRadius: 12, padding: "28px 16px", textAlign: "center", color: "#2a2a2a", fontSize: 12 }}>No results yet.</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {recentGames.map(g => <ResultCard key={g.id} game={g} slug={slug} mvp={gameMvps[g.id]} isPlayoffs={isPlayoffs} />)}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Row 2: Stat Leaders — 3-col grid spread wide */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 14 }}>📊</span>
+              <span style={{ color: "#e0e0e0", fontSize: 12, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" }}>Stat Leaders</span>
+            </div>
+            {leaderSeason && <span style={{ color: "#333", fontSize: 11, fontWeight: 600 }}>{leaderSeason}</span>}
+          </div>
+          {leaders.length === 0 ? (
+            <div style={{ color: "#2a2a2a", fontSize: 12, textAlign: "center", padding: "20px 0" }}>No stats yet.</div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+              {LEADER_CATS.map(cat => <LeaderCard key={cat.key as string} cat={cat} stats={leaders} />)}
+            </div>
+          )}
+        </div>
+
+        {/* Row 3: News — 2-col grid */}
+        <div style={{ marginBottom: 24 }}>
+          <SectionHeader icon="📰" title="News" />
+          {loading ? (
+            <div style={{ padding: "20px 0", textAlign: "center", color: "#333", fontSize: 12 }}>Loading...</div>
+          ) : articles.length === 0 ? (
+            <div style={{ background: "#101318", border: "1px solid #1c2028", borderRadius: 10, padding: "20px 16px", textAlign: "center", color: "#2a2a2a", fontSize: 12 }}>No articles yet for the {label}.</div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
+              {articles.map(a => (
+                <a key={a.id} href={`/${slug}/articles/${a.id}`}
+                  style={{ background: "#101318", border: "1px solid #1c2028", borderRadius: 10, padding: "9px 13px", textDecoration: "none", display: "flex", alignItems: "center", gap: 10, transition: "border-color 0.15s" }}
+                  onMouseEnter={e => (e.currentTarget.style.borderColor = "#2a3048")} onMouseLeave={e => (e.currentTarget.style.borderColor = "#1c2028")}>
+                  {a.image_url && (
+                    <img src={a.image_url} alt="" style={{ width: 40, height: 40, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} />
+                  )}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+                      <span style={{ background: leagueColor[a.league] ?? "#333", color: "white", fontSize: 8, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", padding: "1px 5px", borderRadius: 4 }}>{leagueLabel[a.league] ?? a.league.toUpperCase()}</span>
+                      <span style={{ color: "#3a3a3a", fontSize: 10 }}>{new Date(a.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+                    </div>
+                    <div style={{ color: "#d0d0d0", fontWeight: 600, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.title}</div>
+                  </div>
+                  <span style={{ color: "#2a2a2a", fontSize: 10, flexShrink: 0 }}>→</span>
+                </a>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* ── PLAYOFFS SECTION ── */}
