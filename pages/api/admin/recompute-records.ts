@@ -45,7 +45,7 @@ export async function recomputeRecords(league: string): Promise<{ updated: numbe
     .in("game_id", gameIds);
   if (!stats || stats.length === 0) return { updated: 0 };
 
-  const rows = stats as GameStatRow[];
+  const rows = stats as unknown as GameStatRow[];
 
   const getVal = (r: GameStatRow, field: typeof RECORD_TYPES[number]["field"]): number =>
     field === null
