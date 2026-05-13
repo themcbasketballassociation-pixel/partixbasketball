@@ -4,7 +4,25 @@ import { requireAdmin } from "../../../lib/adminAuth";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === "GET") {
-    const { game_id, mc_uuid } = req.query;
+    const { game_id, mc_uuid, league, season } = req.query;
+
+    // Return distinct game_ids that have stats for a given league+season
+    if (league && season && !game_id && !mc_uuid) {
+      const { data: games } = await supabase
+        .from("games")
+        .select("id")
+        .eq("league", (league as string).toLowerCase())
+        .eq("season", season as string);
+      const ids = (games ?? []).map(g => g.id);
+      if (ids.length === 0) return res.status(200).json([]);
+      const { data, error } = await supabase
+        .from("game_stats")
+        .select("game_id")
+        .in("game_id", ids);
+      if (error) return res.status(500).json({ error: error.message });
+      const unique = [...new Set((data ?? []).map(r => r.game_id))];
+      return res.status(200).json(unique);
+    }
 
     if (mc_uuid && !game_id) {
       const { data, error } = await supabase

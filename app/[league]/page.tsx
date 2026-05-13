@@ -583,72 +583,82 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
       {/* ── MAIN CONTENT ── */}
       <div style={{ maxWidth: 1280, margin: "0 auto", padding: "28px 24px" }}>
 
-        {/* Upcoming + Latest Results */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 32 }}>
-          <div>
-            <SectionHeader icon="📅" title="Upcoming Matchups" linkLabel="VIEW SCHEDULE →" linkHref={`/${slug}/schedule`} />
-            {upcomingGames.length === 0 ? (
-              <div style={{ background: "#101318", border: "1px solid #1c2028", borderRadius: 12, padding: "32px 16px", textAlign: "center", color: "#2a2a2a", fontSize: 12 }}>No upcoming games scheduled.</div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {upcomingGames.map(g => <UpcomingCard key={g.id} game={g} slug={slug} />)}
-              </div>
-            )}
-          </div>
-          <div>
-            <SectionHeader icon="🏆" title="Latest Results" linkLabel="VIEW ALL →" linkHref={`/${slug}/boxscores`} />
-            {recentGames.length === 0 ? (
-              <div style={{ background: "#101318", border: "1px solid #1c2028", borderRadius: 12, padding: "32px 16px", textAlign: "center", color: "#2a2a2a", fontSize: 12 }}>No results yet.</div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {recentGames.map(g => <ResultCard key={g.id} game={g} slug={slug} mvp={gameMvps[g.id]} isPlayoffs={isPlayoffs} />)}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* News + Stat Leaders */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 290px", gap: 24, alignItems: "start", marginBottom: 32 }}>
-          <div>
-            <SectionHeader icon="📰" title="News" />
-            {loading ? (
-              <div style={{ padding: "48px 0", textAlign: "center", color: "#333" }}>Loading...</div>
-            ) : articles.length === 0 ? (
-              <div style={{ background: "#101318", border: "1px solid #1c2028", borderRadius: 12, padding: "48px 24px", textAlign: "center", color: "#2a2a2a", fontSize: 13 }}>No articles yet for the {label}.</div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                {articles.map(a => (
-                  <a key={a.id} href={`/${slug}/articles/${a.id}`}
-                    style={{ background: "#101318", border: "1px solid #1c2028", borderRadius: 12, padding: "14px 16px", textDecoration: "none", display: "block", transition: "border-color 0.15s" }}
-                    onMouseEnter={e => (e.currentTarget.style.borderColor = "#2a3048")} onMouseLeave={e => (e.currentTarget.style.borderColor = "#1c2028")}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8, flexWrap: "wrap" }}>
-                      <span style={{ background: leagueColor[a.league] ?? "#333", color: "white", fontSize: 8, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", padding: "2px 6px", borderRadius: 5 }}>{leagueLabel[a.league] ?? a.league.toUpperCase()}</span>
-                      <span style={{ color: "#444", fontSize: 10 }}>{new Date(a.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
-                      <span style={{ marginLeft: "auto", color: "#333", fontSize: 10 }}>Read more →</span>
-                    </div>
-                    {a.image_url && <img src={a.image_url} alt="" style={{ borderRadius: 8, marginBottom: 8, maxHeight: 160, objectFit: "cover", width: "100%" }} />}
-                    <h2 style={{ color: "#e8e8e8", fontWeight: 700, fontSize: 14, margin: "0 0 5px 0", lineHeight: 1.35 }}>{a.title}</h2>
-                    <p style={{ color: "#555", fontSize: 12, lineHeight: 1.55, margin: 0, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" } as React.CSSProperties}>{a.body}</p>
-                  </a>
-                ))}
-              </div>
-            )}
-          </div>
-          <div style={{ position: "sticky", top: 80 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 15 }}>📊</span>
-                <span style={{ color: "#e0e0e0", fontSize: 12, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" }}>Stat Leaders</span>
-              </div>
-              {leaderSeason && <span style={{ color: "#333", fontSize: 11, fontWeight: 600 }}>{leaderSeason}</span>}
+        {/* Two-column layout: left = Upcoming + News, right = Results + Stat Leaders */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 32, alignItems: "start" }}>
+          {/* Left column */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+            <div>
+              <SectionHeader icon="📅" title="Upcoming Matchups" linkLabel="VIEW SCHEDULE →" linkHref={`/${slug}/schedule`} />
+              {upcomingGames.length === 0 ? (
+                <div style={{ background: "#101318", border: "1px solid #1c2028", borderRadius: 12, padding: "32px 16px", textAlign: "center", color: "#2a2a2a", fontSize: 12 }}>No upcoming games scheduled.</div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {upcomingGames.map(g => <UpcomingCard key={g.id} game={g} slug={slug} />)}
+                </div>
+              )}
             </div>
-            {leaders.length === 0 ? (
-              <div style={{ color: "#2a2a2a", fontSize: 12, textAlign: "center", padding: "24px 0" }}>No stats yet.</div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {LEADER_CATS.map(cat => <LeaderCard key={cat.key as string} cat={cat} stats={leaders} />)}
+
+            {/* News — compact list */}
+            <div>
+              <SectionHeader icon="📰" title="News" />
+              {loading ? (
+                <div style={{ padding: "24px 0", textAlign: "center", color: "#333", fontSize: 12 }}>Loading...</div>
+              ) : articles.length === 0 ? (
+                <div style={{ background: "#101318", border: "1px solid #1c2028", borderRadius: 10, padding: "24px 16px", textAlign: "center", color: "#2a2a2a", fontSize: 12 }}>No articles yet for the {label}.</div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {articles.map(a => (
+                    <a key={a.id} href={`/${slug}/articles/${a.id}`}
+                      style={{ background: "#101318", border: "1px solid #1c2028", borderRadius: 10, padding: "9px 13px", textDecoration: "none", display: "flex", alignItems: "center", gap: 10, transition: "border-color 0.15s" }}
+                      onMouseEnter={e => (e.currentTarget.style.borderColor = "#2a3048")} onMouseLeave={e => (e.currentTarget.style.borderColor = "#1c2028")}>
+                      {a.image_url && (
+                        <img src={a.image_url} alt="" style={{ width: 44, height: 44, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} />
+                      )}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                          <span style={{ background: leagueColor[a.league] ?? "#333", color: "white", fontSize: 8, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", padding: "1px 5px", borderRadius: 4 }}>{leagueLabel[a.league] ?? a.league.toUpperCase()}</span>
+                          <span style={{ color: "#3a3a3a", fontSize: 10 }}>{new Date(a.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+                        </div>
+                        <div style={{ color: "#d0d0d0", fontWeight: 600, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.title}</div>
+                      </div>
+                      <span style={{ color: "#2a2a2a", fontSize: 10, flexShrink: 0 }}>→</span>
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right column */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+            <div>
+              <SectionHeader icon="🏆" title="Latest Results" linkLabel="VIEW ALL →" linkHref={`/${slug}/boxscores`} />
+              {recentGames.length === 0 ? (
+                <div style={{ background: "#101318", border: "1px solid #1c2028", borderRadius: 12, padding: "32px 16px", textAlign: "center", color: "#2a2a2a", fontSize: 12 }}>No results yet.</div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {recentGames.map(g => <ResultCard key={g.id} game={g} slug={slug} mvp={gameMvps[g.id]} isPlayoffs={isPlayoffs} />)}
+                </div>
+              )}
+            </div>
+
+            {/* Stat Leaders */}
+            <div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 15 }}>📊</span>
+                  <span style={{ color: "#e0e0e0", fontSize: 12, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" }}>Stat Leaders</span>
+                </div>
+                {leaderSeason && <span style={{ color: "#333", fontSize: 11, fontWeight: 600 }}>{leaderSeason}</span>}
               </div>
-            )}
+              {leaders.length === 0 ? (
+                <div style={{ color: "#2a2a2a", fontSize: 12, textAlign: "center", padding: "24px 0" }}>No stats yet.</div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {LEADER_CATS.map(cat => <LeaderCard key={cat.key as string} cat={cat} stats={leaders} />)}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

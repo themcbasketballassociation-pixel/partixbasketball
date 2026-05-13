@@ -1987,16 +1987,23 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
   const [showPaste, setShowPaste] = useState(false);
   const [pasteText, setPasteText] = useState("");
   const [pastePreview, setPastePreview] = useState<ParsedStat[] | null>(null);
+  const [showStatted, setShowStatted] = useState(false);
+  const [stattedIds, setStattedIds] = useState<Set<string>>(new Set());
+  const [cleaning, setCleaning] = useState(false);
+  const [cleanMsg, setCleanMsg] = useState("");
 
   useEffect(() => {
+    if (!season) return;
     Promise.all([
-      fetch(`/api/games?league=${league}`).then((r) => r.json()),
+      fetch(`/api/games?league=${league}&season=${encodeURIComponent(season)}`).then((r) => r.json()),
       fetch("/api/players").then((r) => r.json()),
-    ]).then(([g, p]) => {
+      fetch(`/api/game-stats?league=${league}&season=${encodeURIComponent(season)}`).then(r => r.json()),
+    ]).then(([g, p, statted]) => {
       setGames(Array.isArray(g) ? g.filter((x: Game) => x.status === "completed") : []);
       setPlayers(Array.isArray(p) ? p : []);
+      setStattedIds(new Set(Array.isArray(statted) ? statted : []));
     });
-  }, [league]);
+  }, [league, season]);
 
   useEffect(() => {
     if (!selectedGameId) return;
@@ -2098,14 +2105,48 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
     <div className="space-y-5">
       <ErrMsg msg={err} />
       <div className={card}>
-        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Select Completed Game</h3>
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Select Completed Game</h3>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              className={showStatted ? btnPrimary : btnSecondary}
+              onClick={() => setShowStatted(v => !v)}
+            >
+              {showStatted ? "Showing All Games" : "Show Already Statted"}
+            </button>
+            <button
+              className={btnDanger}
+              disabled={cleaning}
+              onClick={async () => {
+                if (!confirm(`Remove all game stats for players not on their team's ${season} roster?`)) return;
+                setCleaning(true); setCleanMsg("");
+                const r = await fetch(`/api/admin/cleanup-game-stats?league=${league}&season=${encodeURIComponent(season)}`, { method: "POST" });
+                const d = await r.json();
+                setCleaning(false);
+                if (r.ok) setCleanMsg(`Removed ${d.removed} invalid stat row${d.removed !== 1 ? "s" : ""}`);
+                else setCleanMsg(`Error: ${d.error}`);
+              }}
+            >
+              {cleaning ? "Cleaning..." : "🧹 Clean Invalid Stats"}
+            </button>
+          </div>
+        </div>
+        {cleanMsg && <p className="mb-3 text-sm font-semibold text-green-400">{cleanMsg}</p>}
         <select className={input} value={selectedGameId} onChange={(e) => { setSelectedGameId(e.target.value); setShowPaste(false); setPastePreview(null); setStatsSaved(false); setPostMsg(""); }}>
           <option value="">Choose a game...</option>
-          {games.map((g) => (
-            <option key={g.id} value={g.id}>{g.home_team?.abbreviation} {g.home_score}–{g.away_score} {g.away_team?.abbreviation} · {new Date(g.scheduled_at).toLocaleDateString()}</option>
-          ))}
+          {games
+            .filter(g => showStatted || !stattedIds.has(g.id))
+            .map((g) => (
+              <option key={g.id} value={g.id}>
+                {stattedIds.has(g.id) ? "✓ " : ""}{g.home_team?.abbreviation} {g.home_score}–{g.away_score} {g.away_team?.abbreviation} · {new Date(g.scheduled_at).toLocaleDateString()}
+              </option>
+            ))}
         </select>
-        {games.length === 0 && <p className="mt-2 text-slate-600 text-sm">No completed games yet. Mark games as completed in the Schedule tab.</p>}
+        {games.filter(g => showStatted || !stattedIds.has(g.id)).length === 0 && (
+          <p className="mt-2 text-slate-600 text-sm">
+            {games.length === 0 ? "No completed games yet. Mark games as completed in the Schedule tab." : "All games for this season already have stats. Click \"Show Already Statted\" to edit them."}
+          </p>
+        )}
       </div>
 
       {selectedGameId && (
