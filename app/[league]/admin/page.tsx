@@ -1152,8 +1152,10 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
                       const roster = playerTeams
                         .filter((pt) => pt.team_id === t.id)
                         .filter((pt) => { if (seenUuids.has(pt.mc_uuid)) return false; seenUuids.add(pt.mc_uuid); return true; });
-                      const assigned = new Set(playerTeams.map((pt) => pt.mc_uuid));
-                      const unassigned = allPlayers.filter((p) => !assigned.has(p.mc_uuid));
+                      // Show all players — POST handles reassignment (delete+insert), so
+                      // already-assigned players can be moved between teams freely.
+                      const thisTeamUuids = new Set(roster.map((pt) => pt.mc_uuid));
+                      const addablePlayers = allPlayers.filter((p) => !thisTeamUuids.has(p.mc_uuid));
                       const TOTAL_CAP = 25000;
                       // Salary from contracts (only present for current season)
                       const capUsed = roster.reduce((s, pt) => {
@@ -1210,7 +1212,7 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
                           {/* Add player row */}
                           <div className="flex items-center gap-2 flex-wrap">
                             <PlayerSearchSelect
-                              players={unassigned}
+                              players={addablePlayers}
                               value={addingToTeam[t.id] ?? ""}
                               onChange={(uuid) => { setAddingToTeam((prev) => ({ ...prev, [t.id]: uuid })); setErr(""); }}
                               placeholder="Add player..."
