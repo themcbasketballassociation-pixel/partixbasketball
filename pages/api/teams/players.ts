@@ -76,13 +76,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
-    // Always expire any existing active contracts to prevent duplicates
-    await supabase
+    // Expire existing active contracts for this player in this league+season only
+    let expireQuery = supabase
       .from("contracts")
       .update({ status: "expired" })
       .eq("mc_uuid", mc_uuid)
       .eq("league", league)
       .in("status", ["active", "pending_approval"]);
+    if (season) expireQuery = (expireQuery as typeof expireQuery).eq("season", season);
+    await expireQuery;
 
     if (contractAmount != null && contractAmount > 0) {
       // Cancel any active or pending auction for this player

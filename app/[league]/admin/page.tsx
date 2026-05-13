@@ -695,7 +695,7 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
   const [records, setRecords] = useState<Record<string, { wins: number; losses: number }>>({});
   const [recordInputs, setRecordInputs] = useState<Record<string, { wins: string; losses: string }>>({});
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
-  const [playerTeams, setPlayerTeams] = useState<{ mc_uuid: string; team_id: string; players: Player }[]>([]);
+  const [playerTeams, setPlayerTeams] = useState<PlayerTeam[]>([]);
   const [addingToTeam, setAddingToTeam] = useState<Record<string, string>>({});
   const [contracts, setContracts] = useState<{ id: string; mc_uuid: string; team_id: string; amount: number; status: string; players?: { mc_uuid: string; mc_username: string } }[]>([]);
   const [connectFrom, setConnectFrom] = useState(SEASONS[SEASONS.length - 1]);
@@ -1146,14 +1146,19 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
                     </div>
                     {/* Roster */}
                     {(() => {
-                      // Source roster from contracts (matches team portal), dedup by mc_uuid
-                      const teamContracts = contracts.filter((c) => c.team_id === t.id);
+                      // Use playerTeams (season-filtered) as source of truth for rosters
                       const seenUuids = new Set<string>();
-                      const roster = teamContracts.filter((c) => { if (seenUuids.has(c.mc_uuid)) return false; seenUuids.add(c.mc_uuid); return true; });
-                      const assigned = new Set(contracts.map((c) => c.mc_uuid));
+                      const roster = playerTeams
+                        .filter((pt) => pt.team_id === t.id)
+                        .filter((pt) => { if (seenUuids.has(pt.mc_uuid)) return false; seenUuids.add(pt.mc_uuid); return true; });
+                      const assigned = new Set(playerTeams.map((pt) => pt.mc_uuid));
                       const unassigned = allPlayers.filter((p) => !assigned.has(p.mc_uuid));
                       const TOTAL_CAP = 25000;
-                      const capUsed = roster.reduce((s, c) => s + c.amount, 0);
+                      // Salary from contracts (only present for current season)
+                      const capUsed = roster.reduce((s, pt) => {
+                        const c = contracts.find((c) => c.mc_uuid === pt.mc_uuid && c.team_id === pt.team_id);
+                        return s + (c?.amount ?? 0);
+                      }, 0);
                       return (
                         <div className="mt-3 pt-3 border-t border-slate-800">
                           <div className="flex items-center justify-between mb-2">
@@ -1174,10 +1179,11 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
                           </div>
                           {roster.length > 0 && (
                             <div className="flex flex-wrap gap-1.5 mb-3">
-                              {roster.map((c) => {
-                                const username = c.players?.mc_username ?? c.mc_uuid;
+                              {roster.map((pt) => {
+                                const username = pt.players?.mc_username ?? pt.mc_uuid;
+                                const contract = contracts.find((c) => c.mc_uuid === pt.mc_uuid && c.team_id === pt.team_id);
                                 return (
-                                  <div key={c.mc_uuid} className="flex items-center gap-1.5 rounded-lg bg-slate-800 border border-slate-700 pl-1 pr-2 py-1">
+                                  <div key={pt.mc_uuid} className="flex items-center gap-1.5 rounded-lg bg-slate-800 border border-slate-700 pl-1 pr-2 py-1">
                                     <img
                                       src={`https://minotar.net/avatar/${username}/20`}
                                       alt={username}
@@ -1185,14 +1191,14 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
                                       onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/20"; }}
                                     />
                                     <span className="text-xs text-white font-semibold">{username}</span>
-                                    {c.amount > 0 && (
+                                    {contract && contract.amount > 0 && (
                                       <span className="text-[10px] font-bold text-green-400 bg-green-950/60 border border-green-800/50 rounded px-1">
-                                        ${c.amount.toLocaleString()}
+                                        ${contract.amount.toLocaleString()}
                                       </span>
                                     )}
                                     <button
                                       className="text-slate-500 hover:text-red-400 transition text-xs leading-none ml-0.5"
-                                      onClick={() => removeFromTeam(c.mc_uuid)}
+                                      onClick={() => removeFromTeam(pt.mc_uuid)}
                                       title="Remove from team"
                                     >✕</button>
                                   </div>
