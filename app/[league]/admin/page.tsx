@@ -726,12 +726,15 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
   }, [initialSeason]);
 
   const refresh = useCallback(async () => {
-    const [teamsData, recData, playersData, ptData, contractsData] = await Promise.all([
+    const [teamsData, recData, playersData, ptData, contractsData, allLeaguePt] = await Promise.all([
       fetch(`/api/teams?league=${league}&season=${encodeURIComponent(season)}`).then((r) => r.json()).catch(() => []),
       fetch(`/api/teams/records?league=${league}&season=${encodeURIComponent(season)}`).then((r) => r.json()).catch(() => []),
       fetch(`/api/players`).then((r) => r.json()).catch(() => []),
       fetch(`/api/teams/players?league=${league}&season=${encodeURIComponent(season)}`).then((r) => r.json()).catch(() => []),
       fetch(`/api/contracts?league=${league}&status=active`).then((r) => r.json()).catch(() => []),
+      // Fetch all historical league players (no season filter) so old-season players
+      // who may not be in the global players table still appear in the add dropdown
+      fetch(`/api/teams/players?league=${league}`).then((r) => r.json()).catch(() => []),
     ]);
     setTeams(Array.isArray(teamsData) ? teamsData : []);
     if (Array.isArray(recData)) {
@@ -739,7 +742,14 @@ function TeamsTab({ league, season: initialSeason }: { league: string; season: s
       for (const rec of recData) map[rec.team_id] = { wins: rec.wins, losses: rec.losses };
       setRecords(map);
     }
-    setAllPlayers(Array.isArray(playersData) ? playersData : []);
+    // Merge global players table + any historical league players not already in it
+    const playersMap = new Map<string, Player>();
+    for (const p of (Array.isArray(playersData) ? playersData : [])) playersMap.set(p.mc_uuid, p);
+    for (const pt of (Array.isArray(allLeaguePt) ? allLeaguePt : [])) {
+      const p = (pt as { players?: Player }).players;
+      if (p?.mc_uuid && !playersMap.has(p.mc_uuid)) playersMap.set(p.mc_uuid, p);
+    }
+    setAllPlayers([...playersMap.values()].sort((a, b) => a.mc_username.localeCompare(b.mc_username)));
     setPlayerTeams(Array.isArray(ptData) ? ptData : []);
     setContracts(Array.isArray(contractsData) ? contractsData : []);
   }, [league, season]);
