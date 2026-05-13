@@ -163,8 +163,8 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
       setPlayerTeamIds(new Set(mine.map(pt => pt.team_id)));
       if (mine.length > 0) {
         const sorted = [...mine].sort((a, b) => {
-          const na = a.season ? parseInt(a.season.replace(/\D/g, "") || "0") : -1;
-          const nb = b.season ? parseInt(b.season.replace(/\D/g, "") || "0") : -1;
+          const na = a.season ? parseInt(a.season.replace(/\D/g, "") || "0") : Infinity;
+          const nb = b.season ? parseInt(b.season.replace(/\D/g, "") || "0") : Infinity;
           return nb - na;
         });
         setCurrentTeam(teamsArr.find(t => t.id === sorted[0].team_id) ?? null);
