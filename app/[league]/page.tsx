@@ -415,7 +415,7 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
   const label   = leagueLabel[slug] ?? slug.toUpperCase();
   const color   = leagueColor[slug] ?? "#888";
 
-  const [articles, setArticles]       = React.useState<Article[]>([]);
+  const [articles, setArticles]       = React.useState<Article[]>([]); // kept for type compat, not rendered
   const [recentGames, setRecentGames] = React.useState<Game[]>([]);
   const [upcomingGames, setUpcomingGames] = React.useState<Game[]>([]);
   const [leaders, setLeaders]         = React.useState<StatRow[]>([]);
@@ -427,20 +427,8 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
   const [teamDivisions, setTeamDivisions] = React.useState<Record<string, string | null>>({});
   const [loading, setLoading]         = React.useState(true);
 
-  // Fetch articles
-  React.useEffect(() => {
-    if (!slug) { setLoading(false); return; }
-    fetch("/api/articles")
-      .then(r => r.json())
-      .then(data => {
-        if (Array.isArray(data)) {
-          const dbSlug = slug === "mba" ? "pba" : slug === "mcaa" ? "pcaa" : slug === "mbgl" ? "pbgl" : slug;
-          setArticles(data.filter((a: Article) => a.league === slug || a.league === dbSlug));
-        }
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, [slug]);
+  // Articles no longer shown on homepage — moved to /articles page
+  React.useEffect(() => { setLoading(false); }, [slug]);
 
   // Fetch games + compute standings
   React.useEffect(() => {
@@ -626,33 +614,6 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
               </div>
             )}
           </div>
-        </div>
-
-        {/* Row 3: News — 2-col grid, card style */}
-        <div style={{ marginBottom: 24 }}>
-          <SectionHeader icon="📰" title="News" />
-          {loading ? (
-            <div style={{ padding: "20px 0", textAlign: "center", color: "#333", fontSize: 12 }}>Loading...</div>
-          ) : articles.length === 0 ? (
-            <div style={{ background: "#101318", border: "1px solid #1c2028", borderRadius: 10, padding: "20px 16px", textAlign: "center", color: "#2a2a2a", fontSize: 12 }}>No articles yet for the {label}.</div>
-          ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
-              {articles.map(a => (
-                <a key={a.id} href={`/${slug}/articles/${a.id}`}
-                  style={{ background: "#101318", border: "1px solid #1c2028", borderRadius: 10, padding: "11px 13px", textDecoration: "none", display: "block", transition: "border-color 0.15s" }}
-                  onMouseEnter={e => (e.currentTarget.style.borderColor = "#2a3048")} onMouseLeave={e => (e.currentTarget.style.borderColor = "#1c2028")}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
-                    <span style={{ background: leagueColor[a.league] ?? "#333", color: "white", fontSize: 8, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", padding: "2px 6px", borderRadius: 4 }}>{leagueLabel[a.league] ?? a.league.toUpperCase()}</span>
-                    <span style={{ color: "#444", fontSize: 10 }}>{new Date(a.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
-                    <span style={{ marginLeft: "auto", color: "#333", fontSize: 10 }}>Read more →</span>
-                  </div>
-                  {a.image_url && <img src={a.image_url} alt="" style={{ borderRadius: 6, marginBottom: 7, maxHeight: 100, objectFit: "cover", width: "100%" }} />}
-                  <div style={{ color: "#e8e8e8", fontWeight: 700, fontSize: 12, margin: "0 0 4px 0", lineHeight: 1.35 }}>{a.title}</div>
-                  <p style={{ color: "#555", fontSize: 11, lineHeight: 1.5, margin: 0, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" } as React.CSSProperties}>{a.body}</p>
-                </a>
-              ))}
-            </div>
-          )}
         </div>
 
         {/* ── PLAYOFFS SECTION ── */}

@@ -20,6 +20,7 @@ const tabs = [
   { label: "Stats",       path: "/stats",     global: false, only: null },
   { label: "Players",     path: "/players",   global: false, only: null },
   { label: "Accolades",   path: "/accolades", global: false, only: null },
+  { label: "News",        path: "/articles",  global: false, only: null },
   { label: "Auction",     path: "/auction",   global: false, only: ["mba"] },
   { label: "Portal",      path: "/portal",    global: false, only: ["mcaa"] },
   { label: "Mini Games",  path: "/games",     global: false, only: null },
