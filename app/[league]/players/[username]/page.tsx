@@ -477,8 +477,8 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
               <>
                 {/* Row 1: VORP + Radar side by side */}
                 <div className="grid grid-cols-2 gap-3">
-                  {/* VORP — only shown for a specific season, not career */}
-                  <div className="rounded-xl border border-slate-800 bg-slate-950 p-4" style={{ display: selectedSeason === "all" ? "none" : undefined }}>
+                  {/* VORP */}
+                  <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
                     <div className="flex items-center gap-1.5 mb-3">
                       <span className="text-[10px] font-black text-white uppercase tracking-widest">VORP</span>
                       <span className="text-[9px] text-slate-600">Value Over Replacement</span>
@@ -491,7 +491,6 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
                           <span className="text-4xl font-black tabular-nums leading-none" style={{ color: vorpCtx?.color ?? "#fff" }}>
                             {vorp >= 0 ? "+" : ""}{vorp.toFixed(1)}
                           </span>
-                          <span className="text-xs font-bold pb-0.5" style={{ color: vorpCtx?.color }}>{vorpCtx?.label}</span>
                         </div>
                         <div className="h-2 rounded-full bg-slate-800 overflow-hidden mb-2">
                           <div className="h-full rounded-full" style={{ width: `${Math.max(3, Math.min(100, (Math.max(0, vorp) / Math.max(leagueMaxVorp, 1)) * 100))}%`, background: vorpCtx?.color ?? "#64748b" }} />
