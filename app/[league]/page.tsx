@@ -583,8 +583,9 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
       {/* ── MAIN CONTENT ── */}
       <div style={{ maxWidth: 1400, margin: "0 auto", padding: "28px 24px" }}>
 
-        {/* Row 1: Upcoming + Latest Results side by side */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 24, alignItems: "start" }}>
+        {/* Row 1: Upcoming | Latest Results | Stat Leaders */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 270px", gap: 20, marginBottom: 24, alignItems: "start" }}>
+          {/* Upcoming */}
           <div>
             <SectionHeader icon="📅" title="Upcoming Matchups" linkLabel="VIEW SCHEDULE →" linkHref={`/${slug}/schedule`} />
             {upcomingGames.length === 0 ? (
@@ -595,6 +596,8 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
               </div>
             )}
           </div>
+
+          {/* Latest Results */}
           <div>
             <SectionHeader icon="🏆" title="Latest Results" linkLabel="VIEW ALL →" linkHref={`/${slug}/boxscores`} />
             {recentGames.length === 0 ? (
@@ -605,24 +608,24 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
               </div>
             )}
           </div>
-        </div>
 
-        {/* Row 2: Stat Leaders — 3-col grid spread wide */}
-        <div style={{ marginBottom: 24 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: 14 }}>📊</span>
-              <span style={{ color: "#e0e0e0", fontSize: 12, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" }}>Stat Leaders</span>
+          {/* Stat Leaders sidebar */}
+          <div style={{ position: "sticky", top: 80 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 14 }}>📊</span>
+                <span style={{ color: "#e0e0e0", fontSize: 12, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" }}>Stat Leaders</span>
+              </div>
+              {leaderSeason && <span style={{ color: "#333", fontSize: 10, fontWeight: 600 }}>{leaderSeason}</span>}
             </div>
-            {leaderSeason && <span style={{ color: "#333", fontSize: 11, fontWeight: 600 }}>{leaderSeason}</span>}
+            {leaders.length === 0 ? (
+              <div style={{ color: "#2a2a2a", fontSize: 12, textAlign: "center", padding: "20px 0" }}>No stats yet.</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {LEADER_CATS.map(cat => <LeaderCard key={cat.key as string} cat={cat} stats={leaders} />)}
+              </div>
+            )}
           </div>
-          {leaders.length === 0 ? (
-            <div style={{ color: "#2a2a2a", fontSize: 12, textAlign: "center", padding: "20px 0" }}>No stats yet.</div>
-          ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-              {LEADER_CATS.map(cat => <LeaderCard key={cat.key as string} cat={cat} stats={leaders} />)}
-            </div>
-          )}
         </div>
 
         {/* Row 3: News — 2-col grid, card style */}
