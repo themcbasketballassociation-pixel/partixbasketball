@@ -76,11 +76,35 @@ export async function recomputeRecords(league: string): Promise<{ updated: numbe
 
   if (records.length === 0) return { updated: 0 };
 
-  // Replace existing records for this league
-  await supabase.from("accolades").delete().eq("league", league).in("type", records.map(r => r.type));
-  await supabase.from("accolades").insert(records.map(r => ({ league, ...r })));
+  // Fetch existing records to compare — only overwrite if computed value is strictly higher
+  const types = records.map(r => r.type);
+  const { data: existing } = await supabase
+    .from("accolades")
+    .select("type, description")
+    .eq("league", league)
+    .in("type", types);
 
-  return { updated: records.length };
+  const existingValMap: Record<string, number> = {};
+  for (const e of existing ?? []) {
+    // Description format: "17 AST — ..." — extract leading number
+    const match = (e.description ?? "").match(/^(\d+(\.\d+)?)/);
+    if (match) existingValMap[e.type] = parseFloat(match[1]);
+  }
+
+  // Only replace records where game_stats produced a higher value
+  const toReplace = records.filter(r => {
+    const existingVal = existingValMap[r.type] ?? 0;
+    const match = r.description.match(/^(\d+(\.\d+)?)/);
+    const newVal = match ? parseFloat(match[1]) : 0;
+    return newVal > existingVal;
+  });
+
+  if (toReplace.length === 0) return { updated: 0 };
+
+  await supabase.from("accolades").delete().eq("league", league).in("type", toReplace.map(r => r.type));
+  await supabase.from("accolades").insert(toReplace.map(r => ({ league, ...r })));
+
+  return { updated: toReplace.length };
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
