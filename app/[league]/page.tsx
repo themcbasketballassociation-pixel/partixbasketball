@@ -17,7 +17,7 @@ type Article  = { id: string; league: string; title: string; body: string; creat
 type Team     = { id: string; name: string; abbreviation: string; logo_url: string | null };
 type Game     = { id: string; scheduled_at: string; status: string; home_score: number | null; away_score: number | null; home_team: Team; away_team: Team; season?: string };
 type StatRow  = { mc_uuid: string; mc_username: string; rank: number; gp: number; ppg: number | null; rpg: number | null; apg: number | null; spg: number | null; fg_pct: number | null; three_pt_pct: number | null };
-type GameStat = { mc_uuid: string; points: number | null; rebounds_off: number | null; rebounds_def: number | null; assists: number | null; steals: number | null; blocks: number | null; players: { mc_uuid: string; mc_username: string } | null };
+type GameStat = { mc_uuid: string; points: number | null; rebounds_off: number | null; rebounds_def: number | null; assists: number | null; steals: number | null; blocks: number | null; turnovers: number | null; players: { mc_uuid: string; mc_username: string } | null };
 type TeamRecord = { team: Team; wins: number; losses: number };
 
 type BracketMatchup = {
