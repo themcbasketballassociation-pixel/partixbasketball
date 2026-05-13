@@ -477,8 +477,8 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
               <>
                 {/* Row 1: VORP + Radar side by side */}
                 <div className="grid grid-cols-2 gap-3">
-                  {/* VORP */}
-                  <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
+                  {/* VORP — only shown for a specific season, not career */}
+                  <div className="rounded-xl border border-slate-800 bg-slate-950 p-4" style={{ display: selectedSeason === "all" ? "none" : undefined }}>
                     <div className="flex items-center gap-1.5 mb-3">
                       <span className="text-[10px] font-black text-white uppercase tracking-widest">VORP</span>
                       <span className="text-[9px] text-slate-600">Value Over Replacement</span>
