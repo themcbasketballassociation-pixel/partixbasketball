@@ -21,10 +21,11 @@ type GameStatRow = {
   players: { mc_uuid: string; mc_username: string } | null;
 };
 
+type TeamRef = { name: string; abbreviation: string };
 type GameRow = {
   id: string; season: string | null; scheduled_at: string;
-  home_team: { name: string; abbreviation: string } | null;
-  away_team: { name: string; abbreviation: string } | null;
+  home_team: TeamRef | TeamRef[] | null;
+  away_team: TeamRef | TeamRef[] | null;
 };
 
 // Exported so game-stats API can call it after a save
@@ -35,8 +36,8 @@ export async function recomputeRecords(league: string): Promise<{ updated: numbe
     .eq("league", league);
   if (!games || games.length === 0) return { updated: 0 };
 
-  const gameIds = (games as GameRow[]).map(g => g.id);
-  const gameMap = new Map((games as GameRow[]).map(g => [g.id, g]));
+  const gameIds = (games as unknown as GameRow[]).map(g => g.id);
+  const gameMap = new Map((games as unknown as GameRow[]).map(g => [g.id, g]));
 
   const { data: stats } = await supabase
     .from("game_stats")
@@ -65,8 +66,10 @@ export async function recomputeRecords(league: string): Promise<{ updated: numbe
     const game = gameMap.get(best.game_id);
     if (!game) continue;
     const dateStr = new Date(game.scheduled_at).toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" });
-    const homeAbbr = (game.home_team as { abbreviation?: string } | null)?.abbreviation ?? "?";
-    const awayAbbr = (game.away_team as { abbreviation?: string } | null)?.abbreviation ?? "?";
+    const resolveAbbr = (t: TeamRef | TeamRef[] | null) =>
+      Array.isArray(t) ? (t[0]?.abbreviation ?? "?") : (t?.abbreviation ?? "?");
+    const homeAbbr = resolveAbbr(game.home_team);
+    const awayAbbr = resolveAbbr(game.away_team);
     const desc = `${bestVal} ${rt.label} — ${homeAbbr} vs ${awayAbbr} (${dateStr})`;
     records.push({ type: rt.type, mc_uuid: best.mc_uuid, season: game.season ?? "Season 1", description: desc });
   }
