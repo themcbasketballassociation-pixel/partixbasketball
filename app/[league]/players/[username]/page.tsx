@@ -34,6 +34,16 @@ type Tab = "overview" | "stats" | "gamelog";
 const fmt = (v: number | null | undefined, dec = 0) =>
   v == null ? "—" : dec > 0 ? v.toFixed(dec) : String(Math.round(v));
 
+const grade = (pct: number | null): { letter: string; color: string; label: string } => {
+  if (pct == null) return { letter: "—", color: "#334155", label: "No data" };
+  if (pct >= 92) return { letter: "S",  color: "#f59e0b", label: "Elite" };
+  if (pct >= 78) return { letter: "A",  color: "#14b8a6", label: "Great" };
+  if (pct >= 60) return { letter: "B",  color: "#22c55e", label: "Good" };
+  if (pct >= 42) return { letter: "C",  color: "#60a5fa", label: "Average" };
+  if (pct >= 25) return { letter: "D",  color: "#f97316", label: "Below Avg" };
+  return           { letter: "F",  color: "#ef4444", label: "Poor" };
+};
+
 const computeVORP = (player: StatRow | null, all: StatRow[]): number | null => {
   if (!player || (player.gp ?? 0) === 0) return null;
   const qualified = all.filter(s => (s.gp ?? 0) >= 1);
@@ -446,11 +456,9 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
         {/* Statistics */}
         {activeTab === "stats" && (
           <>
-            {/* Type + Season controls */}
+            {/* Controls row */}
             <div className="flex items-center justify-between gap-3 flex-wrap">
-              <h3 className="text-sm font-bold text-white">
-                {selectedSeason === "all" ? "Career" : selectedSeason} Statistics
-              </h3>
+              <h3 className="text-sm font-bold text-white">{selectedSeason === "all" ? "Career" : selectedSeason} Statistics</h3>
               <div className="flex rounded-lg overflow-hidden border border-slate-700 text-xs">
                 {(["regular", "playoffs", "combined"] as StatType[]).map(t => (
                   <button key={t} onClick={() => setStatType(t)}
@@ -461,165 +469,133 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
               </div>
             </div>
 
-            {/* VORP Card */}
-            <div className="rounded-xl border border-slate-800 bg-slate-950 overflow-hidden">
-              <div className="flex items-center gap-2.5 px-5 py-4 border-b border-slate-800">
-                <span className="text-xs font-black text-white uppercase tracking-widest">VORP</span>
-                <span className="text-[10px] text-slate-600">Value Over Replacement Player</span>
-              </div>
-              {statsLoading ? (
-                <p className="text-slate-600 text-sm text-center py-6">Loading…</p>
-              ) : !activeStats || vorp == null ? (
-                <p className="text-slate-600 text-sm text-center py-6">No stats for this period.</p>
-              ) : (
-                <div className="px-5 py-5">
-                  <div className="flex items-end gap-4 mb-4">
-                    <span className="text-5xl font-black tabular-nums leading-none" style={{ color: vorpCtx?.color ?? "#fff" }}>
-                      {vorp >= 0 ? "+" : ""}{vorp.toFixed(1)}
-                    </span>
-                    <div className="pb-1">
-                      <div className="text-sm font-bold" style={{ color: vorpCtx?.color ?? "#fff" }}>{vorpCtx?.label}</div>
-                      <div className="text-[10px] text-slate-600 mt-0.5">vs replacement baseline (−2.0 BPM)</div>
+            {statsLoading ? (
+              <div className="rounded-xl border border-slate-800 bg-slate-950 p-8 text-center text-slate-600 text-sm">Loading…</div>
+            ) : !activeStats ? (
+              <div className="rounded-xl border border-slate-800 bg-slate-950 p-8 text-center text-slate-600 text-sm">No stats for this period.</div>
+            ) : (
+              <>
+                {/* Row 1: VORP + Radar side by side */}
+                <div className="grid grid-cols-2 gap-3">
+                  {/* VORP */}
+                  <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
+                    <div className="flex items-center gap-1.5 mb-3">
+                      <span className="text-[10px] font-black text-white uppercase tracking-widest">VORP</span>
+                      <span className="text-[9px] text-slate-600">Value Over Replacement</span>
                     </div>
-                  </div>
-                  {/* VORP bar */}
-                  <div className="relative mb-2">
-                    <div className="h-3 rounded-full bg-slate-800 overflow-hidden">
-                      <div className="h-full rounded-full transition-all duration-700"
-                        style={{ width: `${Math.max(2, Math.min(100, (Math.max(0, vorp) / Math.max(leagueMaxVorp, 1)) * 100))}%`, background: vorpCtx?.color ?? "#64748b" }} />
-                    </div>
-                  </div>
-                  {/* Scale labels */}
-                  <div className="flex justify-between text-[9px] text-slate-600 font-bold mb-4 px-0.5">
-                    <span>0.0<br/>Replacement</span>
-                    <span className="text-center">2.0<br/>Starter</span>
-                    <span className="text-center">5.0<br/>All-Star</span>
-                    <span className="text-right">8.0+<br/>MVP</span>
-                  </div>
-                  {/* VORP breakdown */}
-                  <div className="grid grid-cols-3 gap-2 border-t border-slate-800 pt-4">
-                    {[
-                      { label: "Scoring",    color: "#ef4444", val: (activeStats.ppg ?? 0) },
-                      { label: "Rebounding", color: "#3b82f6", val: 1.2 * (activeStats.rpg ?? 0) },
-                      { label: "Playmaking", color: "#22c55e", val: 1.5 * (activeStats.apg ?? 0) },
-                      { label: "Defense",    color: "#a855f7", val: 2 * ((activeStats.spg ?? 0) + (activeStats.bpg ?? 0)) },
-                      { label: "GP Weight",  color: "#f59e0b", val: (activeStats.gp ?? 0) },
-                      { label: "BPM",        color: vorpCtx?.color ?? "#94a3b8", val: null },
-                    ].map(({ label, color, val }, i) => (
-                      <div key={label} className="rounded-lg bg-slate-900 border border-slate-800 px-2 py-2 text-center">
-                        <div className="text-[9px] text-slate-500 uppercase tracking-wide mb-0.5">{label}</div>
-                        {i === 4 ? (
-                          <div className="text-sm font-black tabular-nums" style={{ color }}>{activeStats.gp ?? "—"} GP</div>
-                        ) : i === 5 ? (
-                          <div className="text-sm font-black tabular-nums" style={{ color }}>{vorp >= 0 ? "+" : ""}{vorp.toFixed(1)}</div>
-                        ) : (
-                          <div className="text-sm font-black tabular-nums" style={{ color }}>+{val.toFixed(1)}</div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Performance Profile (radar) */}
-            <div className="rounded-xl border border-slate-800 bg-slate-950 overflow-hidden">
-              <div className="flex items-center gap-2.5 px-5 py-4 border-b border-slate-800">
-                <div className="w-3.5 h-3.5 rounded-full border-2 border-teal-500 flex items-center justify-center flex-shrink-0">
-                  <div className="w-1 h-1 rounded-full bg-teal-500" />
-                </div>
-                <span className="text-xs font-black text-white uppercase tracking-widest">Performance Profile</span>
-                <span className="text-[10px] text-slate-600 ml-auto">{statType === "regular" ? "Regular Season" : statType === "playoffs" ? "Playoffs" : "Combined"}</span>
-              </div>
-              {statsLoading ? (
-                <p className="text-slate-600 text-sm text-center py-10">Loading…</p>
-              ) : !activeStats ? (
-                <p className="text-slate-600 text-sm text-center py-10">No stats for this period.</p>
-              ) : (
-                <div className="px-5 py-5">
-                  <RadarChart values={radarValues} labels={RADAR_CAT_DEFS.map(c => c.label)} size={270} />
-                  <div className="grid grid-cols-3 gap-2 mt-5">
-                    {radarCats.map(cat => (
-                      <div key={cat.label} className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-2.5 text-center">
-                        <div className="text-[9px] text-slate-500 uppercase tracking-wider font-bold mb-0.5">{cat.label}</div>
-                        <div className="text-[10px] text-slate-600 mb-1">{cat.desc}</div>
-                        <div className="text-xl font-black tabular-nums" style={{ color: cat.percentile != null ? "#14b8a6" : "#333" }}>
-                          {cat.percentile != null ? ordinal(cat.percentile) : "—"}
+                    {vorp == null ? (
+                      <p className="text-slate-600 text-xs py-2">No data</p>
+                    ) : (
+                      <>
+                        <div className="flex items-end gap-2 mb-2">
+                          <span className="text-4xl font-black tabular-nums leading-none" style={{ color: vorpCtx?.color ?? "#fff" }}>
+                            {vorp >= 0 ? "+" : ""}{vorp.toFixed(1)}
+                          </span>
+                          <span className="text-xs font-bold pb-0.5" style={{ color: vorpCtx?.color }}>{vorpCtx?.label}</span>
                         </div>
-                      </div>
-                    ))}
+                        <div className="h-2 rounded-full bg-slate-800 overflow-hidden mb-2">
+                          <div className="h-full rounded-full" style={{ width: `${Math.max(3, Math.min(100, (Math.max(0, vorp) / Math.max(leagueMaxVorp, 1)) * 100))}%`, background: vorpCtx?.color ?? "#64748b" }} />
+                        </div>
+                        <div className="flex justify-between text-[8px] text-slate-600 font-bold">
+                          <span>0 Replacement</span><span>2 Starter</span><span>5 All-Star</span><span>8+ MVP</span>
+                        </div>
+                        <div className="mt-3 pt-3 border-t border-slate-800 grid grid-cols-2 gap-1.5">
+                          {[
+                            { label: "Scoring",    val: `${(activeStats.ppg ?? 0).toFixed(1)} PPG`,    color: "#ef4444" },
+                            { label: "Rebounding", val: `${(activeStats.rpg ?? 0).toFixed(1)} RPG`,    color: "#3b82f6" },
+                            { label: "Playmaking", val: `${(activeStats.apg ?? 0).toFixed(1)} APG`,    color: "#22c55e" },
+                            { label: "Defense",    val: `${((activeStats.spg ?? 0) + (activeStats.bpg ?? 0)).toFixed(1)} S+B`, color: "#a855f7" },
+                          ].map(({ label, val, color }) => (
+                            <div key={label} className="bg-slate-900 rounded-lg px-2 py-1.5">
+                              <div className="text-[8px] text-slate-600 uppercase font-bold">{label}</div>
+                              <div className="text-xs font-black tabular-nums" style={{ color }}>{val}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Radar */}
+                  <div className="rounded-xl border border-slate-800 bg-slate-950 p-3">
+                    <div className="text-[10px] font-black text-white uppercase tracking-widest mb-1 px-1">Profile</div>
+                    <RadarChart values={radarValues} labels={RADAR_CAT_DEFS.map(c => c.label)} size={220} />
                   </div>
                 </div>
-              )}
-            </div>
 
-            {/* Stat bars + league avg */}
-            <div className="rounded-xl border border-slate-800 bg-slate-950 overflow-hidden">
-              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
-                <h3 className="text-sm font-bold text-white">Stat Breakdown</h3>
-                <div className="flex items-center gap-4 text-[10px] font-semibold uppercase tracking-widest">
-                  <div className="flex items-center gap-1.5"><div className="w-3 h-1.5 rounded-full bg-teal-500" /><span className="text-slate-500">Player</span></div>
-                  <div className="flex items-center gap-1.5"><div className="w-3 h-1 rounded-full bg-slate-600" /><span className="text-slate-600">League Avg</span></div>
+                {/* Row 2: Grade cards — replaces confusing ordinal numbers */}
+                <div className="rounded-xl border border-slate-800 bg-slate-950 overflow-hidden">
+                  <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+                    <span className="text-[10px] font-black text-white uppercase tracking-widest">Category Grades</span>
+                    <span className="text-[9px] text-slate-600">vs all players this season · S=Elite A=Great B=Good C=Avg D=Below F=Poor</span>
+                  </div>
+                  <div className="grid grid-cols-3 divide-x divide-slate-800">
+                    {radarCats.map((cat, i) => {
+                      const g = grade(cat.percentile);
+                      const topPct = cat.percentile != null ? Math.max(1, 100 - cat.percentile) : null;
+                      return (
+                        <div key={cat.label} className={`px-3 py-3 text-center${i >= 3 ? " border-t border-slate-800" : ""}`}>
+                          <div className="text-[9px] text-slate-500 uppercase tracking-wider font-bold">{cat.label}</div>
+                          <div className="text-[9px] text-slate-700 mb-1">{cat.desc}</div>
+                          <div className="text-2xl font-black leading-none mb-0.5" style={{ color: g.color }}>{g.letter}</div>
+                          <div className="text-[9px] font-bold" style={{ color: g.color }}>{g.label}</div>
+                          {topPct != null && <div className="text-[8px] text-slate-600 mt-0.5">Top {topPct}%</div>}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-              {statsLoading ? (
-                <p className="text-slate-600 text-sm text-center py-8">Loading…</p>
-              ) : !activeStats ? (
-                <p className="text-slate-600 text-sm text-center py-8">No stats recorded.</p>
-              ) : (
-                <div>
-                  {[
-                    { label: "PTS", sublabel: "Points per Game",   value: activeStats.ppg,           avg: leagueAvg?.ppg,           max: 35,  color: "#ef4444", fmtFn: (v: number) => v.toFixed(1) },
-                    { label: "REB", sublabel: "Rebounds per Game", value: activeStats.rpg,           avg: leagueAvg?.rpg,           max: 18,  color: "#3b82f6", fmtFn: (v: number) => v.toFixed(1) },
-                    { label: "AST", sublabel: "Assists per Game",  value: activeStats.apg,           avg: leagueAvg?.apg,           max: 12,  color: "#22c55e", fmtFn: (v: number) => v.toFixed(1) },
-                    { label: "STL", sublabel: "Steals per Game",   value: activeStats.spg,           avg: leagueAvg?.spg,           max: 6,   color: "#a855f7", fmtFn: (v: number) => v.toFixed(1) },
-                    { label: "BLK", sublabel: "Blocks per Game",   value: activeStats.bpg,           avg: leagueAvg?.bpg,           max: 6,   color: "#f59e0b", fmtFn: (v: number) => v.toFixed(1) },
-                    { label: "FG%", sublabel: "Field Goal %",      value: activeStats.fg_pct,        avg: leagueAvg?.fg_pct,        max: 100, color: "#06b6d4", fmtFn: (v: number) => `${v.toFixed(1)}%` },
-                    { label: "3FG%",sublabel: "Three-Point %",     value: activeStats.three_pt_pct,  avg: leagueAvg?.three_pt_pct,  max: 100, color: "#f97316", fmtFn: (v: number) => `${v.toFixed(1)}%` },
-                  ].map(({ label, sublabel, value, avg, max, color, fmtFn }, idx, arr) => {
-                    const pct    = value != null ? Math.min((value / max) * 100, 100) : 0;
-                    const avgPct = avg   != null ? Math.min((avg   / max) * 100, 100) : 0;
-                    const aboveAvg = value != null && avg != null && value > avg;
-                    return (
-                      <div key={label} className={`px-5 py-4${idx < arr.length - 1 ? " border-b border-slate-800/60" : ""}`}>
-                        <div className="flex items-end justify-between mb-3">
-                          <div>
-                            <span className="text-xs font-black text-white uppercase tracking-widest mr-2">{label}</span>
-                            <span className="text-[10px] text-slate-600">{sublabel}</span>
+
+                {/* Row 3: Compact stat bars */}
+                <div className="rounded-xl border border-slate-800 bg-slate-950 overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
+                    <span className="text-[10px] font-black text-white uppercase tracking-widest">Stat Breakdown</span>
+                    <div className="flex items-center gap-3 text-[9px] text-slate-600 font-semibold uppercase">
+                      <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-1.5 rounded-full bg-teal-500" />You</span>
+                      <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-1 rounded-full bg-slate-600" />League Avg</span>
+                    </div>
+                  </div>
+                  <div className="divide-y divide-slate-800/60">
+                    {[
+                      { label: "PTS", value: activeStats.ppg,          avg: leagueAvg?.ppg,          max: 35,  color: "#ef4444", fmtFn: (v: number) => v.toFixed(1) },
+                      { label: "REB", value: activeStats.rpg,          avg: leagueAvg?.rpg,          max: 18,  color: "#3b82f6", fmtFn: (v: number) => v.toFixed(1) },
+                      { label: "AST", value: activeStats.apg,          avg: leagueAvg?.apg,          max: 12,  color: "#22c55e", fmtFn: (v: number) => v.toFixed(1) },
+                      { label: "STL", value: activeStats.spg,          avg: leagueAvg?.spg,          max: 6,   color: "#a855f7", fmtFn: (v: number) => v.toFixed(1) },
+                      { label: "BLK", value: activeStats.bpg,          avg: leagueAvg?.bpg,          max: 6,   color: "#f59e0b", fmtFn: (v: number) => v.toFixed(1) },
+                      { label: "FG%", value: activeStats.fg_pct,       avg: leagueAvg?.fg_pct,       max: 100, color: "#06b6d4", fmtFn: (v: number) => `${v.toFixed(1)}%` },
+                      { label: "3FG%",value: activeStats.three_pt_pct, avg: leagueAvg?.three_pt_pct, max: 100, color: "#f97316", fmtFn: (v: number) => `${v.toFixed(1)}%` },
+                    ].map(({ label, value, avg, max, color, fmtFn }) => {
+                      const pct    = value != null ? Math.min((value / max) * 100, 100) : 0;
+                      const avgPct = avg   != null ? Math.min((avg   / max) * 100, 100) : 0;
+                      const above  = value != null && avg != null && value > avg;
+                      return (
+                        <div key={label} className="flex items-center gap-3 px-4 py-2.5">
+                          <span className="text-[10px] font-black text-white uppercase w-8 flex-shrink-0">{label}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="h-2 rounded-full bg-slate-800 overflow-hidden mb-1">
+                              <div className="h-full rounded-full" style={{ width: `${pct}%`, background: value != null ? color : "transparent" }} />
+                            </div>
+                            <div className="h-1 rounded-full bg-slate-800/60 overflow-hidden">
+                              <div className="h-full rounded-full" style={{ width: `${avgPct}%`, background: avg != null ? "#475569" : "transparent" }} />
+                            </div>
                           </div>
-                          <div className="flex items-baseline gap-2">
-                            {avg != null && <span className="text-[10px] text-slate-600 tabular-nums">avg <span className="text-slate-500">{fmtFn(avg)}</span></span>}
-                            <span className="text-2xl font-black tabular-nums leading-none" style={{ color: value != null ? color : "#333" }}>
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            {avg != null && <span className="text-[9px] text-slate-600 tabular-nums hidden sm:inline">avg {fmtFn(avg)}</span>}
+                            <span className="text-sm font-black tabular-nums w-12 text-right" style={{ color: value != null ? color : "#333" }}>
                               {value != null ? fmtFn(value) : "—"}
                             </span>
                             {value != null && avg != null && (
-                              <span className={`text-[9px] font-bold px-1 py-0.5 rounded ${aboveAvg ? "bg-green-950 text-green-400" : "bg-red-950 text-red-400"}`}>
-                                {aboveAvg ? "▲" : "▼"}
-                              </span>
+                              <span className={`text-[8px] font-bold w-3 ${above ? "text-green-400" : "text-red-400"}`}>{above ? "▲" : "▼"}</span>
                             )}
                           </div>
                         </div>
-                        <div className="h-2.5 rounded-full bg-slate-800/80 overflow-hidden mb-1.5">
-                          <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: value != null ? color : "transparent" }} />
-                        </div>
-                        <div className="h-1.5 rounded-full bg-slate-800/50 overflow-hidden">
-                          <div className="h-full rounded-full transition-all duration-700" style={{ width: `${avgPct}%`, background: avg != null ? "#475569" : "transparent" }} />
-                        </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              )}
-            </div>
 
-            {/* Raw stat grid */}
-            <div className="rounded-xl border border-slate-800 bg-slate-950 p-5">
-              {statsLoading ? (
-                <p className="text-slate-600 text-sm text-center py-6">Loading stats…</p>
-              ) : !activeStats ? (
-                <p className="text-slate-600 text-sm text-center py-6">No stats recorded.</p>
-              ) : (
-                <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
+                {/* Row 4: Raw stat grid */}
+                <div className="grid grid-cols-5 gap-2">
                   {[
                     { label: "GP",   value: fmt(activeStats.gp) },
                     { label: "PPG",  value: fmt(activeStats.ppg, 1) },
@@ -632,14 +608,14 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
                     { label: "3PPG", value: fmt(activeStats.tppg, 1) },
                     { label: "3FG%", value: activeStats.three_pt_pct == null ? "—" : `${activeStats.three_pt_pct}%` },
                   ].map(({ label, value }) => (
-                    <div key={label} className="rounded-lg bg-slate-900 border border-slate-800 px-3 py-3 text-center">
-                      <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">{label}</div>
-                      <div className="text-base font-bold text-white tabular-nums">{value}</div>
+                    <div key={label} className="rounded-lg bg-slate-950 border border-slate-800 px-2 py-2 text-center">
+                      <div className="text-[9px] text-slate-600 uppercase tracking-wide mb-0.5">{label}</div>
+                      <div className="text-sm font-bold text-white tabular-nums">{value}</div>
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
+              </>
+            )}
           </>
         )}
 
