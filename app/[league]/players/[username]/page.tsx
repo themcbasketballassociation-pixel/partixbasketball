@@ -148,7 +148,8 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
       fetch(`/api/teams/players?league=${slug}`).then(r => r.json()),
       fetch(`/api/teams?league=${slug}`).then(r => r.json()),
       fetch(`/api/stats/seasons?league=${slug}`).then(r => r.json()).catch(() => []),
-    ]).then(([players, accs, records, playerTeams, teams, seasonsData]) => {
+      fetch(`/api/contracts?league=${slug}&status=active`).then(r => r.json()).catch(() => []),
+    ]).then(([players, accs, records, playerTeams, teams, seasonsData, contracts]) => {
       const playersArr: Player[] = Array.isArray(players) ? players : [];
       const found = playersArr.find(p => p.mc_username.toLowerCase() === username.toLowerCase());
       if (!found) { setNotFound(true); setLoading(false); return; }
@@ -160,16 +161,22 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
       const recArr: TeamRecord[] = Array.isArray(records) ? records : [];
       const teamsArr: Team[] = Array.isArray(teams) ? teams : [];
 
-      // Determine the current (most recent non-playoff) season
-      const seasonsList: string[] = Array.isArray(seasonsData)
-        ? [...new Set((seasonsData as { season: string }[]).map(d => d.season).filter(s => s && !s.toLowerCase().includes("playoff")))].sort((a, b) => b.localeCompare(a))
-        : [];
-      const currentSeason = seasonsList[0] ?? null;
-
       const mine = ptArr.filter(pt => pt.mc_uuid === found.mc_uuid);
       setPlayerTeamIds(new Set(mine.map(pt => pt.team_id)));
-      if (mine.length > 0) {
-        // Prefer the entry matching the current season, fall back to highest season number
+
+      // Active contract is authoritative (matches what the team portal shows)
+      const activeContract = Array.isArray(contracts)
+        ? (contracts as { mc_uuid: string; team_id: string }[]).find(c => c.mc_uuid === found.mc_uuid)
+        : null;
+
+      if (activeContract) {
+        setCurrentTeam(teamsArr.find(t => t.id === activeContract.team_id) ?? null);
+      } else if (mine.length > 0) {
+        // Fallback: most recent player_teams entry by season number
+        const seasonsList: string[] = Array.isArray(seasonsData)
+          ? [...new Set((seasonsData as { season: string }[]).map(d => d.season).filter(s => s && !s.toLowerCase().includes("playoff")))].sort((a, b) => b.localeCompare(a))
+          : [];
+        const currentSeason = seasonsList[0] ?? null;
         const match =
           (currentSeason ? mine.find(pt => pt.season === currentSeason) : null) ??
           [...mine].sort((a, b) => {
