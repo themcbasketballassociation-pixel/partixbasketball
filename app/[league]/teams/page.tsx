@@ -574,22 +574,24 @@ export default function TeamsPage({ params }: { params?: Promise<{ league?: stri
     Promise.all([
       fetch(`/api/teams?league=${slug}&season=${encodeURIComponent(season)}`).then(r => r.json()),
       fetch(`/api/contracts?league=${slug}&status=active&season=${encodeURIComponent(season)}`).then(r => r.json()),
-    ]).then(([t, c]) => {
+      fetch(`/api/teams/players?league=${slug}&season=${encodeURIComponent(season)}`).then(r => r.json()),
+    ]).then(([t, c, pt]) => {
       const loadedTeams: Team[] = Array.isArray(t) ? t : [];
       setTeams(loadedTeams);
       const contractsData: ContractFull[] = Array.isArray(c) ? c : [];
       setContracts(contractsData);
-      // Build deduped PlayerTeam list from contracts so roster matches admin tab
+      // Use player_teams as roster source — always authoritative regardless of contract state
+      const ptData: PlayerTeam[] = Array.isArray(pt) ? pt : [];
       const seenPerTeam = new Map<string, Set<string>>();
-      const ptFromContracts: PlayerTeam[] = [];
-      for (const ct of contractsData) {
-        if (!seenPerTeam.has(ct.team_id)) seenPerTeam.set(ct.team_id, new Set());
-        if (!seenPerTeam.get(ct.team_id)!.has(ct.mc_uuid)) {
-          seenPerTeam.get(ct.team_id)!.add(ct.mc_uuid);
-          ptFromContracts.push({ mc_uuid: ct.mc_uuid, team_id: ct.team_id, season: ct.season, players: ct.players });
+      const deduped: PlayerTeam[] = [];
+      for (const row of ptData) {
+        if (!seenPerTeam.has(row.team_id)) seenPerTeam.set(row.team_id, new Set());
+        if (!seenPerTeam.get(row.team_id)!.has(row.mc_uuid)) {
+          seenPerTeam.get(row.team_id)!.add(row.mc_uuid);
+          deduped.push(row);
         }
       }
-      setPlayerTeams(ptFromContracts);
+      setPlayerTeams(deduped);
       setLoading(false);
       // Auto-open team from URL param
       if (urlTeamId && !selectedTeam) {
