@@ -6,9 +6,11 @@ const ALL_REGULAR_SEASONS = [
   "Season 1","Season 2","Season 3","Season 4","Season 5","Season 6","Season 7",
 ];
 
-// VORP constants — 24 min/game league
+// VORP constants — NBA-style formula: VORP = (BPM + 2) × (MPG / 24) × (GP / 82)
+// BPM = player box score per game − league average box score per game
+// 24 = game length in this league, 82 = NBA normalization factor, +2 = replacement level offset
 const GAME_MIN = 24;
-const REPLACEMENT_PER_24 = 15.0; // box-score units a replacement player contributes per 24 min
+const SEASON_GP_NORM = 82; // NBA normalization factor (keeps VORP values comparable to NBA scale)
 const VORP_ELIGIBLE_SEASONS = new Set(["Season 6", "Season 7", "all"]);
 const VORP_MIN_MINUTES = 30; // minimum total minutes before VORP is shown
 
@@ -202,15 +204,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const r1 = (n: number) => Math.round(n * 10) / 10;
     const r2 = (n: number) => Math.round(n * 100) / 100;
     const isVorpEligible = VORP_ELIGIBLE_SEASONS.has(seasonStr);
+
+    // ── VORP two-pass ─────────────────────────────────────────────────────
+    // Pass 1: compute each player's box score per game, then derive league avg
+    let leagueAvgBoxPg = 0;
+    const playerBoxPg: Record<string, number> = {};
+    if (isVorpEligible) {
+      for (const [uuid, c] of Object.entries(computedByUuid)) {
+        const cv = c as Record<string, number>;
+        if (cv.gp === 0) continue;
+        const boxTotal = cv.pts + 0.7 * cv.reb + 0.7 * cv.ast + 1.5 * cv.stl + 1.5 * cv.blk - 0.7 * cv.tov;
+        playerBoxPg[uuid] = boxTotal / cv.gp;
+      }
+      const vals = Object.values(playerBoxPg);
+      if (vals.length > 0) leagueAvgBoxPg = vals.reduce((a, b) => a + b, 0) / vals.length;
+    }
+
+    // Pass 2: compute each player's VORP = (BPM + 2) × (MPG / 24) × (GP / 82)
     const computedRows = Object.entries(computedByUuid).map(([uuid, c]) => {
       const cv = c as Record<string, number>;
       const gp = cv.gp;
-      // VORP: box_total - (replacement_per_24 / 24) * total_minutes
-      // Only for Season 6, Season 7, or "all" (career). Requires ≥30 total minutes.
       const totalMin = cv.min / 60;
-      const boxTotal = cv.pts + 0.7 * cv.reb + 0.7 * cv.ast + 1.5 * cv.stl + 1.5 * cv.blk - 0.7 * cv.tov;
-      const vorp = (isVorpEligible && totalMin >= VORP_MIN_MINUTES)
-        ? r2(boxTotal - (REPLACEMENT_PER_24 / GAME_MIN) * totalMin)
+      const mpg = gp > 0 ? totalMin / gp : 0;
+      const bpm = (playerBoxPg[uuid] ?? 0) - leagueAvgBoxPg;
+      const vorp = (isVorpEligible && totalMin >= VORP_MIN_MINUTES && gp > 0)
+        ? r2((bpm + 2) * (mpg / GAME_MIN) * (gp / SEASON_GP_NORM))
         : null;
       return {
         mc_uuid: uuid,
@@ -225,7 +243,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         spg:  gp > 0 ? r1(cv.stl / gp) : null,
         bpg:  gp > 0 ? r1(cv.blk / gp) : null,
         topg: gp > 0 ? r1(cv.tov / gp) : null,
-        mpg:  gp > 0 ? r1((cv.min / 60) / gp) : null,
+        mpg:  gp > 0 ? r1(mpg) : null,
         fg_pct: cv.fga > 0 ? r1((cv.fgm / cv.fga) * 100) : null,
         three_pt_made: cv.tpm,
         three_pt_pct: cv.tpa > 0 ? r1((cv.tpm / cv.tpa) * 100) : null,
