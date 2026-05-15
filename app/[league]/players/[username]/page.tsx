@@ -22,7 +22,7 @@ type GameStat = {
   three_pt_made: number | null;
 };
 type Game = {
-  id: string; scheduled_at: string; status: string;
+  id: string; scheduled_at: string; status: string; season: string | null;
   home_score: number | null; away_score: number | null;
   home_team_id: string; away_team_id: string;
   home_team: Team; away_team: Team;
@@ -267,6 +267,14 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
   const rings = accolades.filter(a => a.type === "Finals Champion");
   const otherAccolades = accolades.filter(a => a.type !== "Finals Champion");
   const activeStats = statType === "regular" ? statsRegular : statType === "playoffs" ? statsPlayoffs : statsCombined;
+
+  const filteredGameLogs = selectedSeason === "all"
+    ? gameLogs
+    : gameLogs.filter(({ game }) => {
+        const s = game.season ?? "";
+        // Match regular season or playoffs for that season
+        return s === selectedSeason || s === `${selectedSeason} Playoffs`;
+      });
   const activeLeagueAll = statType === "regular" ? leagueAll.regular : statType === "playoffs" ? leagueAll.playoffs : leagueAll.combined;
 
   const pctile = (val: number | null | undefined, key: string): number | null => {
@@ -637,8 +645,8 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
         {/* Game Log */}
         {activeTab === "gamelog" && (
           <div className="rounded-xl border border-slate-800 bg-slate-950 overflow-hidden">
-            {gameLogs.length === 0 ? (
-              <div className="p-12 text-center text-slate-600">No completed games found.</div>
+            {filteredGameLogs.length === 0 ? (
+              <div className="p-12 text-center text-slate-600">No completed games found{selectedSeason !== "all" ? ` for ${selectedSeason}` : ""}.</div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
@@ -650,7 +658,7 @@ export default function PlayerProfilePage({ params }: { params?: Promise<{ leagu
                     </tr>
                   </thead>
                   <tbody>
-                    {gameLogs.map(({ game, stat }) => {
+                    {filteredGameLogs.map(({ game, stat }) => {
                       const reb = (stat.rebounds_off ?? 0) + (stat.rebounds_def ?? 0);
                       // Use all historical team IDs (not just current team) to correctly determine home/away
                       const playerIsHome = playerTeamIds.has(game.home_team_id);
