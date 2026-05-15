@@ -365,6 +365,52 @@ function PlayersTab({ league }: { league: string }) {
     if (r.ok) refresh();
   };
 
+  // Edit MC account state
+  const [editingMC, setEditingMC] = useState<string | null>(null);
+  const [mcNewName, setMcNewName] = useState("");
+  const [mcNewUuid, setMcNewUuid] = useState("");
+  const [mcLookupState, setMcLookupState] = useState<"idle"|"loading"|"found"|"notfound">("idle");
+  const [mcSaving, setMcSaving] = useState(false);
+  const [mcMsg, setMcMsg] = useState("");
+  const mcLookupTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleMCNameChange = (val: string) => {
+    setMcNewName(val); setMcNewUuid(""); setMcLookupState("idle"); setMcMsg("");
+    if (mcLookupTimer.current) clearTimeout(mcLookupTimer.current);
+    if (!val.trim()) return;
+    setMcLookupState("loading");
+    mcLookupTimer.current = setTimeout(async () => {
+      try {
+        const r = await fetch(`/api/mojang/${encodeURIComponent(val.trim())}`);
+        const d = await r.json();
+        if (d.found) { setMcNewUuid(d.uuid); setMcLookupState("found"); }
+        else { setMcLookupState("notfound"); }
+      } catch { setMcLookupState("notfound"); }
+    }, 600);
+  };
+
+  const saveMCAccount = async (p: Player) => {
+    if (!mcNewName.trim()) return;
+    setMcSaving(true); setMcMsg("");
+    // Generate a deterministic UUID if Mojang lookup failed
+    let uuid = mcNewUuid;
+    if (!uuid) {
+      const enc = new TextEncoder();
+      const bytes = enc.encode(mcNewName.trim());
+      uuid = "00000000-0000-3000-8000-" + Array.from(bytes).map(b => b.toString(16).padStart(2,"0")).join("").slice(0,12).padEnd(12,"0");
+    }
+    const r = await fetch(`/api/players/${p.mc_uuid}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ new_uuid: uuid, new_username: mcNewName.trim() }),
+    });
+    const d = await r.json();
+    setMcSaving(false);
+    if (!r.ok) { setMcMsg(d.error ?? "Failed"); return; }
+    setEditingMC(null); setMcNewName(""); setMcNewUuid(""); setMcLookupState("idle");
+    refresh();
+  };
+
   const [refreshingNames, setRefreshingNames] = useState(false);
   const [refreshResult, setRefreshResult] = useState<{ updated: number; failed: number; total: number } | null>(null);
 
@@ -543,12 +589,56 @@ function PlayersTab({ league }: { league: string }) {
                   <div className="flex items-center justify-between gap-4">
                     <Avatar uuid={p.mc_uuid} username={p.mc_username} />
                     <div className="flex items-center gap-2 flex-shrink-0">
+                      <button className={btnSecondary} style={{ fontSize: 12, padding: "2px 10px" }} onClick={() => { setEditingMC(p.mc_uuid); setMcNewName(p.mc_username); setMcNewUuid(p.mc_uuid); setMcLookupState("idle"); setMcMsg(""); }}>
+                        Edit MC
+                      </button>
                       <button className={btnSecondary} style={{ fontSize: 12, padding: "2px 10px" }} onClick={() => startEditDiscord(p)}>
                         {p.discord_id ? "Edit Discord" : "Add Discord"}
                       </button>
                       <button className={btnDanger} onClick={() => deletePlayer(p.mc_uuid)}>Delete</button>
                     </div>
                   </div>
+                  {/* Edit MC Account */}
+                  {editingMC === p.mc_uuid && (
+                    <div className="mt-2 space-y-1.5">
+                      <p className="text-xs text-slate-500">Type the new Minecraft username. UUID will be auto-looked up. All stats, contracts, and game data will transfer.</p>
+                      <div className="flex gap-2 items-center">
+                        <div className="w-8 h-8 rounded ring-1 ring-slate-700 bg-slate-800 flex items-center justify-center overflow-hidden flex-shrink-0">
+                          {mcLookupState === "found" ? (
+                            <img src={`https://minotar.net/avatar/${mcNewName.trim()}/32`} alt="" className="w-8 h-8" onError={(e) => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/32"; }} />
+                          ) : (
+                            <img src="https://minotar.net/avatar/MHF_Steve/32" alt="" className="w-8 h-8 opacity-40" />
+                          )}
+                        </div>
+                        <div className="relative flex-1">
+                          <input
+                            className={`${input} w-full text-sm`}
+                            placeholder="New MC username…"
+                            value={mcNewName}
+                            onChange={(e) => handleMCNameChange(e.target.value)}
+                            autoFocus
+                          />
+                          {mcLookupState === "loading" && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 text-xs animate-pulse">looking up…</span>}
+                          {mcLookupState === "found" && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-green-400 text-xs">✓ found</span>}
+                          {mcLookupState === "notfound" && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 text-xs">Steve skin</span>}
+                        </div>
+                      </div>
+                      {mcNewUuid && mcNewUuid !== p.mc_uuid && (
+                        <p className="text-xs text-amber-400">⚠ UUID will change — all data will be migrated to new account</p>
+                      )}
+                      {mcNewUuid && mcNewUuid === p.mc_uuid && (
+                        <p className="text-xs text-slate-500">Same UUID — username only update</p>
+                      )}
+                      {mcMsg && <p className="text-xs text-red-400">{mcMsg}</p>}
+                      <div className="flex gap-2">
+                        <button className={btnPrimary} style={{ fontSize: 12, padding: "3px 14px" }} onClick={() => saveMCAccount(p)} disabled={mcSaving || !mcNewName.trim() || mcLookupState === "loading"}>
+                          {mcSaving ? "Saving…" : "Save"}
+                        </button>
+                        <button className={btnSecondary} style={{ fontSize: 12, padding: "3px 10px" }} onClick={() => { setEditingMC(null); setMcNewName(""); setMcNewUuid(""); setMcLookupState("idle"); setMcMsg(""); }}>Cancel</button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Discord link display / inline search */}
                   {editingDiscord === p.mc_uuid ? (
                     <div className="mt-2 space-y-1.5">
