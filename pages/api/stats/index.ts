@@ -10,7 +10,7 @@ const ALL_REGULAR_SEASONS = [
 // BPM = player box score per game − league average box score per game
 // 24 = game length in this league, 82 = NBA normalization factor, +2 = replacement level offset
 const GAME_MIN = 24;
-const SEASON_GP_NORM = 82; // NBA normalization factor (keeps VORP values comparable to NBA scale)
+const SEASON_GP_NORM = 13; // season length in this league
 const VORP_ELIGIBLE_SEASONS = new Set(["Season 6", "Season 7", "all"]);
 const VORP_MIN_MINUTES = 30; // minimum total minutes before VORP is shown
 
