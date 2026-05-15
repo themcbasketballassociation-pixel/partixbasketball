@@ -205,17 +205,50 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const r2 = (n: number) => Math.round(n * 100) / 100;
     const isVorpEligible = VORP_ELIGIBLE_SEASONS.has(seasonStr);
 
-    // ── VORP two-pass ─────────────────────────────────────────────────────
-    // Pass 1: compute each player's box score per game, then derive league avg
+    // ── VORP multi-pass ───────────────────────────────────────────────────
+    // Pass 1: collect league averages for TOV/pg, 3FG%, and possession time/pg
     let leagueAvgBoxPg = 0;
     const playerBoxPg: Record<string, number> = {};
     if (isVorpEligible) {
+      let topgSum = 0, topgN = 0;
+      let tpctSum = 0, tpctN = 0;
+      let possSum = 0, possN = 0;
+      for (const [, c] of Object.entries(computedByUuid)) {
+        const cv = c as Record<string, number>;
+        if (cv.gp === 0) continue;
+        topgSum += cv.tov / cv.gp; topgN++;
+        if (cv.tpa > 0) { tpctSum += cv.tpm / cv.tpa; tpctN++; }
+        if (cv.possGames > 0) { possSum += cv.poss / cv.possGames; possN++; }
+      }
+      const leagueAvgTopg   = topgN > 0 ? topgSum / topgN : 0;
+      const leagueAvgTpct   = tpctN > 0 ? tpctSum / tpctN : 0;
+      const leagueAvgPossPg = possN > 0 ? possSum / possN : 0;
+
+      // Pass 2: compute adjusted box score per game for each player
+      //   • Extra TOV penalty  — above-average turnovers drag down playmaking value
+      //   • 3FG% possession bonus — efficient 3pt shooting matters more when you
+      //     spend less time with the ball (catch-and-shoot reward)
       for (const [uuid, c] of Object.entries(computedByUuid)) {
         const cv = c as Record<string, number>;
         if (cv.gp === 0) continue;
-        const boxTotal = cv.pts + 0.7 * cv.reb + 0.7 * cv.ast + 1.5 * cv.stl + 1.5 * cv.blk - 0.7 * cv.tov;
-        playerBoxPg[uuid] = boxTotal / cv.gp;
+        const gp    = cv.gp;
+        const boxPg = (cv.pts + 0.7 * cv.reb + 0.7 * cv.ast + 1.5 * cv.stl + 1.5 * cv.blk - 0.7 * cv.tov) / gp;
+
+        // Extra penalty for above-average turnovers (per game over the avg)
+        const extraTovPen = Math.max(0, cv.tov / gp - leagueAvgTopg) * 0.5;
+
+        // 3FG% bonus — only when possession data and 3pt attempts both exist
+        let threePctBonus = 0;
+        if (cv.tpa > 0 && cv.possGames > 0 && leagueAvgTpct > 0 && leagueAvgPossPg > 0) {
+          const pctAdv    = Math.max(0, cv.tpm / cv.tpa - leagueAvgTpct);
+          // possRatio > 1 means player uses less possession time than average → bigger boost
+          const possRatio = Math.min(leagueAvgPossPg / Math.max(cv.poss / cv.possGames, 1), 3);
+          threePctBonus   = pctAdv * possRatio * (cv.tpm / gp) * 0.5;
+        }
+
+        playerBoxPg[uuid] = boxPg - extraTovPen + threePctBonus;
       }
+
       const vals = Object.values(playerBoxPg);
       if (vals.length > 0) leagueAvgBoxPg = vals.reduce((a, b) => a + b, 0) / vals.length;
     }
