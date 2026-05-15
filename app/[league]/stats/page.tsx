@@ -16,10 +16,11 @@ type StatRow = {
   tppg: number | null;
   pass_attempts_pg: number | null;
   possession_time_pg: number | null;
+  vorp: number | null;
   team?: { id: string; name: string; abbreviation: string; logo_url?: string | null } | null;
 };
 
-type SortKey = "gp" | "ppg" | "rpg" | "orpg" | "drpg" | "apg" | "spg" | "bpg" | "fg_pct" | "three_pt_pct" | "mpg" | "topg" | "tppg" | "pass_attempts_pg" | "possession_time_pg";
+type SortKey = "gp" | "ppg" | "rpg" | "orpg" | "drpg" | "apg" | "spg" | "bpg" | "fg_pct" | "three_pt_pct" | "mpg" | "topg" | "tppg" | "pass_attempts_pg" | "possession_time_pg" | "vorp";
 type StatType = "regular" | "playoffs" | "total";
 
 type TeamStatRow = {
@@ -53,6 +54,7 @@ const COLS: { key: SortKey | "_rank" | "_player"; label: string; always?: boolea
   { key: "mpg",               label: "MPG",     always: false },
   { key: "pass_attempts_pg",  label: "PAPG",    always: true },
   { key: "possession_time_pg",label: "POSS",    always: true },
+  { key: "vorp",              label: "VORP",    always: false },
 ];
 
 export default function StatsPage({ params }: { params?: Promise<{ league?: string }> }) {
@@ -77,6 +79,7 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
 
   const seasonNum = parseInt(season.replace(/\D/g, "")) || 0;
   const showMpg = seasonNum >= 6;
+  const showVorp = season === "all" || seasonNum >= 6;
 
   // Load unique regular seasons only
   React.useEffect(() => {
@@ -247,7 +250,7 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
                 <tr className="border-b border-slate-800">
                   <th className={thClass("_rank")}>#</th>
                   <th className={thClass("_player", true)}>Player</th>
-                  {COLS.filter((c) => c.key !== "_rank" && c.key !== "_player" && (c.key !== "mpg" || showMpg)).map((c) => (
+                  {COLS.filter((c) => c.key !== "_rank" && c.key !== "_player" && (c.key !== "mpg" || showMpg) && (c.key !== "vorp" || showVorp)).map((c) => (
                     <th
                       key={c.key}
                       className={thClass(c.key as SortKey)}
@@ -294,6 +297,7 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
                     {showMpg && <td className={`px-3 py-2.5 text-center ${tdHighlight("mpg") || "text-slate-300"}`}>{fmt(s.mpg)}</td>}
                     <td className={`px-3 py-2.5 text-center ${tdHighlight("pass_attempts_pg") || "text-slate-400"}`}>{s.pass_attempts_pg != null ? fmt(s.pass_attempts_pg) : <span className="text-slate-700">—</span>}</td>
                     <td className={`px-3 py-2.5 text-center ${tdHighlight("possession_time_pg") || "text-slate-400"}`}>{s.possession_time_pg != null ? `${s.possession_time_pg}s` : <span className="text-slate-700">—</span>}</td>
+                    {showVorp && <td className={`px-3 py-2.5 text-center font-mono ${tdHighlight("vorp") || (s.vorp != null ? (s.vorp >= 0 ? "text-emerald-400" : "text-red-400") : "text-slate-700")}`}>{s.vorp != null ? (s.vorp >= 0 ? `+${s.vorp.toFixed(1)}` : s.vorp.toFixed(1)) : "—"}</td>}
                   </tr>
                 ))}
               </tbody>

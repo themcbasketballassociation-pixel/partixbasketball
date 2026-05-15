@@ -6,6 +6,12 @@ const ALL_REGULAR_SEASONS = [
   "Season 1","Season 2","Season 3","Season 4","Season 5","Season 6","Season 7",
 ];
 
+// VORP constants — 24 min/game league
+const GAME_MIN = 24;
+const REPLACEMENT_PER_24 = 15.0; // box-score units a replacement player contributes per 24 min
+const VORP_ELIGIBLE_SEASONS = new Set(["Season 6", "Season 7", "all"]);
+const VORP_MIN_MINUTES = 30; // minimum total minutes before VORP is shown
+
 function getQuerySeasons(season: string, type: string): string[] {
   const base = season === "all" ? ALL_REGULAR_SEASONS : [season];
   if (type === "playoffs") return base.map((s) => `${s} Playoffs`);
@@ -21,6 +27,7 @@ function mergePlayerRows(rows: Record<string, unknown>[]) {
   let wOReb = 0, oRebGames = 0;
   let wDReb = 0, dRebGames = 0;
   let wMpg = 0, mpgGames = 0;
+  let vorpSum = 0, hasVorp = false;
   for (const r of rows) {
     const g = (r.gp as number) ?? 0;
     gp += g;
@@ -45,8 +52,11 @@ function mergePlayerRows(rows: Record<string, unknown>[]) {
     // Minutes per game — only tracked Season 6+
     const mpgP = (r.mpg as number) ?? 0;
     if (mpgP > 0) { wMpg += mpgP * g; mpgGames += g; }
+    // VORP — sum across seasons (it's a counting stat)
+    if ((r.vorp as number | null) != null) { vorpSum += (r.vorp as number); hasVorp = true; }
   }
   const r1 = (n: number) => Math.round(n * 10) / 10;
+  const r2 = (n: number) => Math.round(n * 100) / 100;
   return {
     gp,
     ppg: gp > 0 ? r1(wPts / gp) : null,
@@ -64,6 +74,7 @@ function mergePlayerRows(rows: Record<string, unknown>[]) {
     pass_attempts_pg: gp > 0 ? r1(wPass / gp) : null,
     possession_time_pg: gp > 0 ? Math.round(wPoss / gp) : null,
     mpg: mpgGames > 0 ? r1(wMpg / mpgGames) : null,
+    vorp: hasVorp ? r2(vorpSum) : null,
   };
 }
 
@@ -189,13 +200,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const r1 = (n: number) => Math.round(n * 10) / 10;
+    const r2 = (n: number) => Math.round(n * 100) / 100;
+    const isVorpEligible = VORP_ELIGIBLE_SEASONS.has(seasonStr);
     const computedRows = Object.entries(computedByUuid).map(([uuid, c]) => {
       const cv = c as Record<string, number>;
       const gp = cv.gp;
+      // VORP: box_total - (replacement_per_24 / 24) * total_minutes
+      // Only for Season 6, Season 7, or "all" (career). Requires ≥30 total minutes.
+      const totalMin = cv.min / 60;
+      const boxTotal = cv.pts + 0.7 * cv.reb + 0.7 * cv.ast + 1.5 * cv.stl + 1.5 * cv.blk - 0.7 * cv.tov;
+      const vorp = (isVorpEligible && totalMin >= VORP_MIN_MINUTES)
+        ? r2(boxTotal - (REPLACEMENT_PER_24 / GAME_MIN) * totalMin)
+        : null;
       return {
         mc_uuid: uuid,
         season: seasonStr,
         gp,
+        vorp,
         ppg:  gp > 0 ? r1(cv.pts / gp) : null,
         rpg:  gp > 0 ? r1(cv.reb / gp) : null,
         orpg: gp > 0 ? r1(cv.orb / gp) : null,
