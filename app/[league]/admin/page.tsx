@@ -395,7 +395,7 @@ function PlayersTab({ league }: { league: string }) {
     const r = await fetch(`/api/players/${p.mc_uuid}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ new_uuid: uuid, new_username: mcNewName.trim() }),
+      body: JSON.stringify({ new_uuid: mcNewUuid, new_username: mcNewName.trim() }),
     });
     const d = await r.json();
     setMcSaving(false);
