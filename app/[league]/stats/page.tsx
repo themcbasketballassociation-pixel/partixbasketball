@@ -71,6 +71,7 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
   const [sortAsc, setSortAsc] = React.useState(false);
   const [page, setPage] = React.useState(0);
 
+  const [displayMode, setDisplayMode] = React.useState<"perGame" | "totals">("perGame");
   const [viewMode, setViewMode] = React.useState<"player" | "team">("player");
   const [teamStats, setTeamStats] = React.useState<TeamStatRow[]>([]);
   const [teamSortKey, setTeamSortKey] = React.useState<TeamSortKey>("ppg");
@@ -210,6 +211,19 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
               </button>
             ))}
           </div>
+          {/* Per Game / Totals toggle */}
+          {viewMode === "player" && (
+            <div className="flex rounded-md border border-slate-700 overflow-hidden text-xs">
+              {(["perGame", "totals"] as const).map((v) => (
+                <button key={v} onClick={() => setDisplayMode(v)}
+                  className={`px-3 py-1.5 font-semibold transition ${
+                    displayMode === v ? "bg-slate-700 text-white" : "bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700"
+                  }`}>
+                  {v === "perGame" ? "Per Game" : "Totals"}
+                </button>
+              ))}
+            </div>
+          )}
           {/* Stat type toggle */}
           <div className="flex rounded-md border border-slate-700 overflow-hidden text-xs">
             {(["regular", "playoffs", "total"] as StatType[]).map((t) => (
@@ -250,15 +264,24 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
                 <tr className="border-b border-slate-800">
                   <th className={thClass("_rank")}>#</th>
                   <th className={thClass("_player", true)}>Player</th>
-                  {COLS.filter((c) => c.key !== "_rank" && c.key !== "_player" && (c.key !== "mpg" || showMpg) && (c.key !== "vorp" || showVorp)).map((c) => (
-                    <th
-                      key={c.key}
-                      className={thClass(c.key as SortKey)}
-                      onClick={() => handleSort(c.key as SortKey)}
-                    >
-                      {c.label}<SortIcon col={c.key as SortKey} />
-                    </th>
-                  ))}
+                  {COLS.filter((c) => c.key !== "_rank" && c.key !== "_player" && (c.key !== "mpg" || showMpg) && (c.key !== "vorp" || showVorp)).map((c) => {
+                    const totalsLabel: Record<string, string> = {
+                      gp: "GP", ppg: "PTS", rpg: "REB", orpg: "OREB", drpg: "DREB",
+                      apg: "AST", spg: "STL", bpg: "BLK", topg: "TOV", tppg: "3PM",
+                      fg_pct: "FG%", three_pt_pct: "3FG%", mpg: "MIN",
+                      pass_attempts_pg: "PASS", possession_time_pg: "POSS", vorp: "VORP",
+                    };
+                    const label = displayMode === "totals" ? (totalsLabel[c.key] ?? c.label) : c.label;
+                    return (
+                      <th
+                        key={c.key}
+                        className={thClass(c.key as SortKey)}
+                        onClick={() => handleSort(c.key as SortKey)}
+                      >
+                        {label}<SortIcon col={c.key as SortKey} />
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/40">
@@ -283,21 +306,39 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
                       </div>
                     </td>
                     <td className={`px-3 py-2.5 text-center text-slate-500 ${tdHighlight("gp")}`}>{s.gp}</td>
-                    <td className={`px-3 py-2.5 text-center ${tdHighlight("ppg") || "text-slate-200"}`}>{fmt(s.ppg)}</td>
-                    <td className={`px-3 py-2.5 text-center ${tdHighlight("rpg") || "text-slate-300"}`}>{fmt(s.rpg)}</td>
-                    <td className={`px-3 py-2.5 text-center ${tdHighlight("orpg") || "text-slate-400"}`}>{s.orpg != null ? fmt(s.orpg) : <span className="text-slate-700">—</span>}</td>
-                    <td className={`px-3 py-2.5 text-center ${tdHighlight("drpg") || "text-slate-400"}`}>{s.drpg != null ? fmt(s.drpg) : <span className="text-slate-700">—</span>}</td>
-                    <td className={`px-3 py-2.5 text-center ${tdHighlight("apg") || "text-slate-300"}`}>{fmt(s.apg)}</td>
-                    <td className={`px-3 py-2.5 text-center ${tdHighlight("spg") || "text-slate-300"}`}>{fmt(s.spg)}</td>
-                    <td className={`px-3 py-2.5 text-center ${tdHighlight("bpg") || "text-slate-300"}`}>{fmt(s.bpg)}</td>
-                    <td className={`px-3 py-2.5 text-center ${tdHighlight("topg") || "text-slate-300"}`}>{fmt(s.topg)}</td>
-                    <td className={`px-3 py-2.5 text-center ${tdHighlight("tppg") || "text-slate-400"}`}>{s.tppg != null ? fmt(s.tppg) : <span className="text-slate-700">—</span>}</td>
-                    <td className={`px-3 py-2.5 text-center ${tdHighlight("fg_pct") || "text-slate-300"}`}>{s.fg_pct != null ? `${s.fg_pct.toFixed(1)}%` : "—"}</td>
-                    <td className={`px-3 py-2.5 text-center ${tdHighlight("three_pt_pct") || "text-slate-300"}`}>{s.three_pt_pct != null ? `${s.three_pt_pct.toFixed(1)}%` : "—"}</td>
-                    {showMpg && <td className={`px-3 py-2.5 text-center ${tdHighlight("mpg") || "text-slate-300"}`}>{fmt(s.mpg)}</td>}
-                    <td className={`px-3 py-2.5 text-center ${tdHighlight("pass_attempts_pg") || "text-slate-400"}`}>{s.pass_attempts_pg != null ? fmt(s.pass_attempts_pg) : <span className="text-slate-700">—</span>}</td>
-                    <td className={`px-3 py-2.5 text-center ${tdHighlight("possession_time_pg") || "text-slate-400"}`}>{s.possession_time_pg != null ? `${s.possession_time_pg}s` : <span className="text-slate-700">—</span>}</td>
-                    {showVorp && <td className={`px-3 py-2.5 text-center font-mono ${tdHighlight("vorp") || (s.vorp != null ? (s.vorp >= 0 ? "text-emerald-400" : "text-red-400") : "text-slate-700")}`}>{s.vorp != null ? (s.vorp >= 0 ? `+${s.vorp.toFixed(1)}` : s.vorp.toFixed(1)) : "—"}</td>}
+                    {displayMode === "totals" ? <>
+                      <td className={`px-3 py-2.5 text-center ${tdHighlight("ppg") || "text-slate-200"}`}>{s.ppg != null ? Math.round(s.ppg * s.gp) : "—"}</td>
+                      <td className={`px-3 py-2.5 text-center ${tdHighlight("rpg") || "text-slate-300"}`}>{s.rpg != null ? Math.round(s.rpg * s.gp) : "—"}</td>
+                      <td className={`px-3 py-2.5 text-center ${tdHighlight("orpg") || "text-slate-400"}`}>{s.orpg != null ? Math.round(s.orpg * s.gp) : <span className="text-slate-700">—</span>}</td>
+                      <td className={`px-3 py-2.5 text-center ${tdHighlight("drpg") || "text-slate-400"}`}>{s.drpg != null ? Math.round(s.drpg * s.gp) : <span className="text-slate-700">—</span>}</td>
+                      <td className={`px-3 py-2.5 text-center ${tdHighlight("apg") || "text-slate-300"}`}>{s.apg != null ? Math.round(s.apg * s.gp) : "—"}</td>
+                      <td className={`px-3 py-2.5 text-center ${tdHighlight("spg") || "text-slate-300"}`}>{s.spg != null ? Math.round(s.spg * s.gp) : "—"}</td>
+                      <td className={`px-3 py-2.5 text-center ${tdHighlight("bpg") || "text-slate-300"}`}>{s.bpg != null ? Math.round(s.bpg * s.gp) : "—"}</td>
+                      <td className={`px-3 py-2.5 text-center ${tdHighlight("topg") || "text-slate-300"}`}>{s.topg != null ? Math.round(s.topg * s.gp) : "—"}</td>
+                      <td className={`px-3 py-2.5 text-center ${tdHighlight("tppg") || "text-slate-400"}`}>{s.tppg != null ? Math.round(s.tppg * s.gp) : <span className="text-slate-700">—</span>}</td>
+                      <td className={`px-3 py-2.5 text-center ${tdHighlight("fg_pct") || "text-slate-300"}`}>{s.fg_pct != null ? `${s.fg_pct.toFixed(1)}%` : "—"}</td>
+                      <td className={`px-3 py-2.5 text-center ${tdHighlight("three_pt_pct") || "text-slate-300"}`}>{s.three_pt_pct != null ? `${s.three_pt_pct.toFixed(1)}%` : "—"}</td>
+                      {showMpg && <td className={`px-3 py-2.5 text-center ${tdHighlight("mpg") || "text-slate-300"}`}>{s.mpg != null ? Math.round(s.mpg * s.gp) : "—"}</td>}
+                      <td className={`px-3 py-2.5 text-center ${tdHighlight("pass_attempts_pg") || "text-slate-400"}`}>{s.pass_attempts_pg != null ? Math.round(s.pass_attempts_pg * s.gp) : <span className="text-slate-700">—</span>}</td>
+                      <td className={`px-3 py-2.5 text-center ${tdHighlight("possession_time_pg") || "text-slate-400"}`}>{s.possession_time_pg != null ? `${s.possession_time_pg * s.gp}s` : <span className="text-slate-700">—</span>}</td>
+                      {showVorp && <td className={`px-3 py-2.5 text-center font-mono ${tdHighlight("vorp") || (s.vorp != null ? (s.vorp >= 0 ? "text-emerald-400" : "text-red-400") : "text-slate-700")}`}>{s.vorp != null ? (s.vorp >= 0 ? `+${s.vorp.toFixed(1)}` : s.vorp.toFixed(1)) : "—"}</td>}
+                    </> : <>
+                      <td className={`px-3 py-2.5 text-center ${tdHighlight("ppg") || "text-slate-200"}`}>{fmt(s.ppg)}</td>
+                      <td className={`px-3 py-2.5 text-center ${tdHighlight("rpg") || "text-slate-300"}`}>{fmt(s.rpg)}</td>
+                      <td className={`px-3 py-2.5 text-center ${tdHighlight("orpg") || "text-slate-400"}`}>{s.orpg != null ? fmt(s.orpg) : <span className="text-slate-700">—</span>}</td>
+                      <td className={`px-3 py-2.5 text-center ${tdHighlight("drpg") || "text-slate-400"}`}>{s.drpg != null ? fmt(s.drpg) : <span className="text-slate-700">—</span>}</td>
+                      <td className={`px-3 py-2.5 text-center ${tdHighlight("apg") || "text-slate-300"}`}>{fmt(s.apg)}</td>
+                      <td className={`px-3 py-2.5 text-center ${tdHighlight("spg") || "text-slate-300"}`}>{fmt(s.spg)}</td>
+                      <td className={`px-3 py-2.5 text-center ${tdHighlight("bpg") || "text-slate-300"}`}>{fmt(s.bpg)}</td>
+                      <td className={`px-3 py-2.5 text-center ${tdHighlight("topg") || "text-slate-300"}`}>{fmt(s.topg)}</td>
+                      <td className={`px-3 py-2.5 text-center ${tdHighlight("tppg") || "text-slate-400"}`}>{s.tppg != null ? fmt(s.tppg) : <span className="text-slate-700">—</span>}</td>
+                      <td className={`px-3 py-2.5 text-center ${tdHighlight("fg_pct") || "text-slate-300"}`}>{s.fg_pct != null ? `${s.fg_pct.toFixed(1)}%` : "—"}</td>
+                      <td className={`px-3 py-2.5 text-center ${tdHighlight("three_pt_pct") || "text-slate-300"}`}>{s.three_pt_pct != null ? `${s.three_pt_pct.toFixed(1)}%` : "—"}</td>
+                      {showMpg && <td className={`px-3 py-2.5 text-center ${tdHighlight("mpg") || "text-slate-300"}`}>{fmt(s.mpg)}</td>}
+                      <td className={`px-3 py-2.5 text-center ${tdHighlight("pass_attempts_pg") || "text-slate-400"}`}>{s.pass_attempts_pg != null ? fmt(s.pass_attempts_pg) : <span className="text-slate-700">—</span>}</td>
+                      <td className={`px-3 py-2.5 text-center ${tdHighlight("possession_time_pg") || "text-slate-400"}`}>{s.possession_time_pg != null ? `${s.possession_time_pg}s` : <span className="text-slate-700">—</span>}</td>
+                      {showVorp && <td className={`px-3 py-2.5 text-center font-mono ${tdHighlight("vorp") || (s.vorp != null ? (s.vorp >= 0 ? "text-emerald-400" : "text-red-400") : "text-slate-700")}`}>{s.vorp != null ? (s.vorp >= 0 ? `+${s.vorp.toFixed(1)}` : s.vorp.toFixed(1)) : "—"}</td>}
+                    </>}
                   </tr>
                 ))}
               </tbody>

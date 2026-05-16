@@ -384,21 +384,14 @@ function PlayersTab({ league }: { league: string }) {
         const r = await fetch(`/api/mojang/${encodeURIComponent(val.trim())}`);
         const d = await r.json();
         if (d.found) { setMcNewUuid(d.uuid); setMcLookupState("found"); }
-        else { setMcLookupState("notfound"); }
+        else { setMcNewUuid(d.uuid); setMcLookupState("notfound"); }
       } catch { setMcLookupState("notfound"); }
     }, 600);
   };
 
   const saveMCAccount = async (p: Player) => {
-    if (!mcNewName.trim()) return;
+    if (!mcNewName.trim() || !mcNewUuid) return;
     setMcSaving(true); setMcMsg("");
-    // Generate a deterministic UUID if Mojang lookup failed
-    let uuid = mcNewUuid;
-    if (!uuid) {
-      const enc = new TextEncoder();
-      const bytes = enc.encode(mcNewName.trim());
-      uuid = "00000000-0000-3000-8000-" + Array.from(bytes).map(b => b.toString(16).padStart(2,"0")).join("").slice(0,12).padEnd(12,"0");
-    }
     const r = await fetch(`/api/players/${p.mc_uuid}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -631,7 +624,7 @@ function PlayersTab({ league }: { league: string }) {
                       )}
                       {mcMsg && <p className="text-xs text-red-400">{mcMsg}</p>}
                       <div className="flex gap-2">
-                        <button className={btnPrimary} style={{ fontSize: 12, padding: "3px 14px" }} onClick={() => saveMCAccount(p)} disabled={mcSaving || !mcNewName.trim() || mcLookupState === "loading"}>
+                        <button className={btnPrimary} style={{ fontSize: 12, padding: "3px 14px" }} onClick={() => saveMCAccount(p)} disabled={mcSaving || !mcNewName.trim() || mcLookupState === "loading" || !mcNewUuid}>
                           {mcSaving ? "Saving…" : "Save"}
                         </button>
                         <button className={btnSecondary} style={{ fontSize: 12, padding: "3px 10px" }} onClick={() => { setEditingMC(null); setMcNewName(""); setMcNewUuid(""); setMcLookupState("idle"); setMcMsg(""); }}>Cancel</button>
