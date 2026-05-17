@@ -1965,13 +1965,13 @@ function parseStatBlock(text: string, players: Player[]): ParsedStat[] {
         three_fg: tfgM ? `${tfgM[1]}/${tfgM[2]}` : "",
         ft: ftM ? `${ftM[1]}/${ftM[2]}` : "",
         fouls: ext(/\bFOUL\s+(\d+)/i),
-        assists: ext(/\bAST(?:\/PASS)?\s+(\d+)/i),
+        assists: (() => { const m = line.match(/\bAST\/PASS\s+(\d+)\/(\d+)/i); return m ? m[1] : ext(/\bAST\s+(\d+)/i); })(),
         rebounds_off: ext(/\bOREB\s+(\d+)/i),
         rebounds_def: ext(/\bDREB\s+(\d+)/i),
         steals: ext(/\bSTL\s+(\d+)/i),
         blocks: ext(/\bBLK\s+(\d+)/i),
         turnovers: ext(/\bTOV\s+(\d+)/i),
-        pass_attempts: ext(/\bPASS\s+(\d+)/i),
+        pass_attempts: (() => { const m = line.match(/\bAST\/PASS\s+(\d+)\/(\d+)/i); return m ? m[2] : ext(/\bPASS\s+(\d+)/i); })(),
         possession_time: ext(/\bPOSS\s+(\d+)/i),
       };
     } else {
