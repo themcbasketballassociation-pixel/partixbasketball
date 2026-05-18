@@ -1964,7 +1964,7 @@ function parseStatBlock(text: string, players: Player[]): ParsedStat[] {
         fg: fgM ? `${fgM[1]}/${fgM[2]}` : "",
         three_fg: tfgM ? `${tfgM[1]}/${tfgM[2]}` : "",
         ft: ftM ? `${ftM[1]}/${ftM[2]}` : "",
-        fouls: ext(/\bFOUL\s+(\d+)/i),
+        fouls: ext(/\b(?:PF|FOUL)\s+(\d+)/i),
         assists: (() => { const m = line.match(/\bAST\/PASS\s+(\d+)\/(\d+)/i); return m ? m[1] : ext(/\bAST\s+(\d+)/i); })(),
         rebounds_off: ext(/\bOREB\s+(\d+)/i),
         rebounds_def: ext(/\bDREB\s+(\d+)/i),
