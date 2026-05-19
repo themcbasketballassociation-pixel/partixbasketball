@@ -1958,6 +1958,7 @@ function parseStatBlock(text: string, players: Player[]): ParsedStat[] {
       const fgM = line.match(/\bFG\s+(\d+)\/(\d+)/i);
       const tfgM = line.match(/\b3FG\s+(\d+)\/(\d+)/i);
       const ftM = line.match(/\bFT\s+(\d+)\/(\d+)/i);
+      const astPassM = line.match(/\bAST\/PASS\s+(\d+)\/(\d+)/i);
       fields = {
         minutes_played: ext(/\bMIN\s+(\d+:\d+)/i),
         points: ext(/\bPTS\s+(\d+)/i),
@@ -1965,13 +1966,13 @@ function parseStatBlock(text: string, players: Player[]): ParsedStat[] {
         three_fg: tfgM ? `${tfgM[1]}/${tfgM[2]}` : "",
         ft: ftM ? `${ftM[1]}/${ftM[2]}` : "",
         fouls: ext(/\b(?:PF|FOUL)\s+(\d+)/i),
-        assists: (() => { const m = line.match(/\bAST\/PASS\s+(\d+)\/(\d+)/i); return m ? m[1] : ext(/\bAST\s+(\d+)/i); })(),
+        assists: astPassM ? astPassM[1] : ext(/\bAST\s+(\d+)/i),
         rebounds_off: ext(/\bOREB\s+(\d+)/i),
         rebounds_def: ext(/\bDREB\s+(\d+)/i),
         steals: ext(/\bSTL\s+(\d+)/i),
         blocks: ext(/\bBLK\s+(\d+)/i),
         turnovers: ext(/\bTOV\s+(\d+)/i),
-        pass_attempts: (() => { const m = line.match(/\bAST\/PASS\s+(\d+)\/(\d+)/i); return m ? m[2] : ext(/\bPASS\s+(\d+)/i); })(),
+        pass_attempts: astPassM ? astPassM[2] : ext(/\bPASS\s+(\d+)/i),
         possession_time: ext(/\bPOSS\s+(\d+)/i),
       };
     } else {
@@ -2347,7 +2348,7 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
                           <span className="text-red-400 font-semibold">⚠ {entry.name} — no match found</span>
                         )}
                         <span className="ml-auto text-xs text-slate-600 font-mono">
-                          {entry.fields.points || "—"}pts {entry.fields.fg || "—"}fg {entry.fields.three_fg || "—"}3fg {entry.fields.minutes_played || "—"}min
+                          {entry.fields.points || "—"}pts {entry.fields.assists || "—"}ast/{entry.fields.pass_attempts || "—"}pass {entry.fields.fg || "—"}fg {entry.fields.three_fg || "—"}3fg {entry.fields.minutes_played || "—"}min
                         </span>
                       </div>
                     ))}
