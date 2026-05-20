@@ -1,5 +1,6 @@
 "use client";
 import React from "react";
+import Link from "next/link";
 
 const leagueNames: Record<string, string> = {
   mba: "Minecraft Basketball Association",
@@ -340,13 +341,14 @@ function TeamDetailModal({ team, league, seasons, defaultSeason, onClose }: {
                               const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Etc/GMT+5" });
                               let result = "";
                               let resultColor = "#aaa";
-                              if (g.status === "final" && myScore != null && oppScore != null) {
+                              const isCompleted = g.status === "completed" || g.status === "final";
+                              if (isCompleted && myScore != null && oppScore != null) {
                                 if (myScore > oppScore) { result = "W"; resultColor = "#22c55e"; }
                                 else if (myScore < oppScore) { result = "L"; resultColor = "#ef4444"; }
                                 else { result = "T"; }
                               }
-                              return (
-                                <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "#0a0d12", border: "1px solid #171b26", borderRadius: "0.6rem", flexWrap: "wrap" }}>
+                              const rowContent = (
+                                <>
                                   <span style={{ color: "#555", fontSize: "0.75rem", minWidth: 120 }}>{date} · {time}</span>
                                   <span style={{ color: "#444", fontSize: "0.72rem", minWidth: 14, textAlign: "center" }}>{isHome ? "vs" : "@"}</span>
                                   <span style={{ color: "#ccc", fontWeight: 600, fontSize: "0.875rem", flex: 1 }}>{opponent?.name ?? "TBD"}</span>
@@ -359,6 +361,19 @@ function TeamDetailModal({ team, league, seasons, defaultSeason, onClose }: {
                                       {g.status === "scheduled" ? "Upcoming" : g.status}
                                     </span>
                                   )}
+                                  {isCompleted && (
+                                    <span style={{ color: "#3b82f6", fontSize: "0.7rem", flexShrink: 0 }}>Box →</span>
+                                  )}
+                                </>
+                              );
+                              const rowStyle: React.CSSProperties = { display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "#0a0d12", border: "1px solid #171b26", borderRadius: "0.6rem", flexWrap: "wrap" as const, textDecoration: "none" };
+                              return isCompleted ? (
+                                <Link key={g.id} href={`/${league}/boxscores/${g.id}`} style={{ ...rowStyle, cursor: "pointer" }}>
+                                  {rowContent}
+                                </Link>
+                              ) : (
+                                <div key={g.id} style={rowStyle}>
+                                  {rowContent}
                                 </div>
                               );
                             })}
