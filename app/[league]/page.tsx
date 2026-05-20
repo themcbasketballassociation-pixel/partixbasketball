@@ -481,24 +481,14 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
       .catch(() => {});
   }, [slug]);
 
-  // Fetch MVP for each recent game
+  // Fetch MVP for each recent game — always from the winning team
   React.useEffect(() => {
     if (recentGames.length === 0) return;
     recentGames.forEach(async g => {
       try {
-        const r = await fetch(`/api/game-stats?game_id=${g.id}`);
-        const stats: GameStat[] = await r.json();
-        if (Array.isArray(stats) && stats.length > 0) {
-          const eff = (s: GameStat) =>
-            (s.points ?? 0) +
-            1.2 * ((s.rebounds_off ?? 0) + (s.rebounds_def ?? 0)) +
-            1.5 * (s.assists ?? 0) +
-            2 * (s.steals ?? 0) +
-            2 * (s.blocks ?? 0) -
-            (s.turnovers ?? 0);
-          const mvp = [...stats].sort((a, b) => eff(b) - eff(a))[0];
-          setGameMvps(prev => ({ ...prev, [g.id]: mvp }));
-        }
+        const r = await fetch(`/api/game-stats/mvp?game_id=${g.id}`);
+        const mvp: GameStat | null = await r.json();
+        if (mvp) setGameMvps(prev => ({ ...prev, [g.id]: mvp }));
       } catch { /**/ }
     });
   }, [recentGames]);
