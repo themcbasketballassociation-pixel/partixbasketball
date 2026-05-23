@@ -71,5 +71,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json(data);
   }
 
+  if (req.method === "DELETE") {
+    const admin = await requireAdmin(req, res);
+    if (!admin) return;
+    const { game_id, mc_uuid } = req.query;
+    if (!game_id || !mc_uuid) return res.status(400).json({ error: "game_id and mc_uuid required" });
+    const { error } = await supabase
+      .from("game_stats")
+      .delete()
+      .eq("game_id", game_id as string)
+      .eq("mc_uuid", mc_uuid as string);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json({ success: true });
+  }
+
   return res.status(405).json({ error: "Method not allowed" });
 }

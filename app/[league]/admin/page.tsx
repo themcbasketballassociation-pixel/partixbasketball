@@ -2073,6 +2073,7 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
   const [selectedGameId, setSelectedGameId] = useState<string>("");
   const [statForm, setStatForm] = useState<Record<string, Record<string, string>>>({});
   const [activeUuids, setActiveUuids] = useState<string[]>([]); // uuids shown in table
+  const [savedGameUuids, setSavedGameUuids] = useState<Set<string>>(new Set()); // uuids persisted in DB for current game
   const [addUuid, setAddUuid] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [statsSaved, setStatsSaved] = useState(false);
@@ -2106,6 +2107,7 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
     if (!selectedGameId) return;
     setActiveUuids([]);
     setAddUuid("");
+    setSavedGameUuids(new Set());
     fetch(`/api/game-stats?game_id=${selectedGameId}`)
       .then((r) => r.json())
       .then((data) => {
@@ -2131,8 +2133,10 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
             possession_time: s.possession_time === null ? "" : String(s.possession_time),
           };
         }
+        const uuids = rows.map(s => s.mc_uuid);
         setStatForm(form);
-        setActiveUuids(rows.map(s => s.mc_uuid));
+        setActiveUuids(uuids);
+        setSavedGameUuids(new Set(uuids));
       });
   }, [selectedGameId]);
 
@@ -2149,7 +2153,8 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
       const mi = parseInt(m); const ai = parseInt(a);
       return [isNaN(mi) ? null : mi, isNaN(ai) ? null : ai];
     };
-    for (const [uuid, fields] of Object.entries(statForm)) {
+    for (const uuid of activeUuids) {
+      const fields = statForm[uuid] ?? {};
       const [fgMade, fgAtt] = parseSlash(fields.fg);
       const [tpMade, tpAtt] = parseSlash(fields.three_fg);
       const [ftMade, ftAtt] = parseSlash(fields.ft);
@@ -2173,6 +2178,7 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
       if (!r.ok) { const d = await r.json(); setErr(d.error ?? "Save failed"); setSaving(false); return; }
     }
     setSaving(false);
+    setSavedGameUuids(new Set(activeUuids));
     setStatsSaved(true);
     setPostMsg("");
   };
@@ -2449,7 +2455,14 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
                           <button
                             className="text-slate-600 hover:text-red-400 text-xs px-1 transition"
                             title="Remove from list"
-                            onClick={() => setActiveUuids(prev => prev.filter(u => u !== uuid))}
+                            onClick={async () => {
+                              if (savedGameUuids.has(uuid)) {
+                                await fetch(`/api/game-stats?game_id=${selectedGameId}&mc_uuid=${uuid}`, { method: "DELETE" });
+                                setSavedGameUuids(prev => { const s = new Set(prev); s.delete(uuid); return s; });
+                              }
+                              setActiveUuids(prev => prev.filter(u => u !== uuid));
+                              setStatForm(prev => { const f = { ...prev }; delete f[uuid]; return f; });
+                            }}
                           >✕</button>
                         </td>
                       </tr>
