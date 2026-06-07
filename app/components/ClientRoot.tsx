@@ -6,7 +6,7 @@ export default function ClientRoot({ children }: { children: React.ReactNode }) 
   return (
     <SessionProvider>
       <Header />
-      {children}
+      <main className="site-main">{children}</main>
     </SessionProvider>
   );
 }
