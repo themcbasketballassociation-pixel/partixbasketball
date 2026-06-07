@@ -30,9 +30,9 @@ type Pool = {
 };
 
 type Pick = StatRow & { slot: Slot };
-type Slot = "PG" | "SG" | "SF" | "PF" | "C";
+type Slot = "#1" | "#2" | "#3" | "Bench";
 
-const SLOTS: Slot[] = ["PG", "SG", "SF", "PF", "C"];
+const SLOTS: Slot[] = ["#1", "#2", "#3", "Bench"];
 const EPOCH_MS = new Date("2026-04-13T14:00:00Z").getTime();
 
 function getDayNum() {
@@ -77,7 +77,7 @@ function playerScore(p: StatRow) {
 }
 
 function calculateRecord(picks: Pick[]) {
-  if (picks.length < 5) return { wins: 0, losses: 0, ovr: 0, scoring: 0, rebounding: 0, playmaking: 0, defense: 0, efficiency: 0 };
+  if (picks.length < SLOTS.length) return { wins: 0, losses: 0, ovr: 0, scoring: 0, rebounding: 0, playmaking: 0, defense: 0, efficiency: 0 };
 
   const avg = (fn: (pick: Pick) => number) => picks.reduce((sum, pick) => sum + fn(pick), 0) / picks.length;
   const scoring = avg((p) => p.ppg ?? 0);
@@ -100,7 +100,7 @@ function calculateRecord(picks: Pick[]) {
     Math.max(0, 3.8 - playmaking) * 4.8 +
     Math.max(0, 2.0 - defense) * 8.5 +
     Math.max(0, -0.5 - efficiency) * 3.2;
-  const starPower = picks.reduce((sum, p) => sum + playerScore(p), 0) / 5;
+  const starPower = picks.reduce((sum, p) => sum + playerScore(p), 0) / picks.length;
   const ovr = Math.max(
     35,
     Math.min(
@@ -160,7 +160,7 @@ export default function EightyTwoOhPage({ params }: { params?: Promise<{ league?
   const [pools, setPools] = React.useState<Pool[]>([]);
   const [roundPools, setRoundPools] = React.useState<Pool[]>([]);
   const [round, setRound] = React.useState(0);
-  const [selectedSlot, setSelectedSlot] = React.useState<Slot>("PG");
+  const [selectedSlot, setSelectedSlot] = React.useState<Slot>("#1");
   const [picks, setPicks] = React.useState<Pick[]>([]);
   const [started, setStarted] = React.useState(false);
   const [teamRerollUsed, setTeamRerollUsed] = React.useState(false);
@@ -212,7 +212,7 @@ export default function EightyTwoOhPage({ params }: { params?: Promise<{ league?
 
       if (!cancelled) {
         setPools(validPools);
-        setRoundPools(shuffle(validPools, day * 820 + league.length).slice(0, 5));
+        setRoundPools(shuffle(validPools, day * 820 + league.length).slice(0, SLOTS.length));
         setLoading(false);
       }
     })().catch(() => {
@@ -228,7 +228,7 @@ export default function EightyTwoOhPage({ params }: { params?: Promise<{ league?
   const openSlots = SLOTS.filter((slot) => !picks.some((pick) => pick.slot === slot));
   const currentPool = roundPools[round] ?? null;
   const result = calculateRecord(picks);
-  const complete = picks.length === 5;
+  const complete = picks.length === SLOTS.length;
   const options = React.useMemo(() => {
     if (!currentPool) return [];
     const alreadyPicked = new Set(picks.map((pick) => pick.mc_uuid));
@@ -239,11 +239,11 @@ export default function EightyTwoOhPage({ params }: { params?: Promise<{ league?
   const canEraReroll = !!currentPool && pools.some((pool) => pool.team.id === currentPool.team.id && pool.season !== currentPool.season);
 
   const start = () => {
-    const fresh = shuffle(pools, Date.now() % 100000).slice(0, 5);
-    setRoundPools(fresh.length >= 5 ? fresh : roundPools);
+    const fresh = shuffle(pools, Date.now() % 100000).slice(0, SLOTS.length);
+    setRoundPools(fresh.length >= SLOTS.length ? fresh : roundPools);
     setPicks([]);
     setRound(0);
-    setSelectedSlot("PG");
+    setSelectedSlot("#1");
     setTeamRerollUsed(false);
     setEraRerollUsed(false);
     setStarted(true);
@@ -253,7 +253,7 @@ export default function EightyTwoOhPage({ params }: { params?: Promise<{ league?
     if (!openSlots.includes(selectedSlot)) return;
     setPicks((prev) => [...prev, { ...player, slot: selectedSlot }]);
     const nextSlots = openSlots.filter((slot) => slot !== selectedSlot);
-    setSelectedSlot(nextSlots[0] ?? "PG");
+    setSelectedSlot(nextSlots[0] ?? "#1");
     setRound((prev) => prev + 1);
   };
 
@@ -261,10 +261,10 @@ export default function EightyTwoOhPage({ params }: { params?: Promise<{ league?
     setStarted(false);
     setPicks([]);
     setRound(0);
-    setSelectedSlot("PG");
+    setSelectedSlot("#1");
     setTeamRerollUsed(false);
     setEraRerollUsed(false);
-    setRoundPools(shuffle(pools, day * 820 + Math.floor(Math.random() * 1000)).slice(0, 5));
+    setRoundPools(shuffle(pools, day * 820 + Math.floor(Math.random() * 1000)).slice(0, SLOTS.length));
   };
 
   const replaceCurrentPool = (replacement: Pool) => {
@@ -304,11 +304,11 @@ export default function EightyTwoOhPage({ params }: { params?: Promise<{ league?
             <div className="text-[11px] font-black uppercase tracking-[0.25em] text-red-400">Hoop IQ Draft</div>
             <h2 className="mt-1 text-4xl font-black tracking-tight text-white">82-0</h2>
             <p className="mt-2 max-w-2xl text-sm text-slate-400">
-              Draft five Minecraft Basketball starters from random team and past-season pools. Stats are hidden until the final record.
+              Draft #1, #2, #3, and Bench from exact team-season pools. Stats are hidden until the final record.
             </p>
           </div>
           <div className="rounded-xl border border-slate-700 bg-slate-950 px-5 py-3 text-right">
-            <div className="text-3xl font-black text-amber-300">{complete ? `${result.wins}-${result.losses}` : `${picks.length}/5`}</div>
+            <div className="text-3xl font-black text-amber-300">{complete ? `${result.wins}-${result.losses}` : `${picks.length}/${SLOTS.length}`}</div>
             <div className="text-xs font-black uppercase tracking-widest text-slate-500">{complete ? "record" : "lineup"}</div>
           </div>
         </div>
@@ -319,7 +319,7 @@ export default function EightyTwoOhPage({ params }: { params?: Promise<{ league?
           <div className="rounded-xl border border-slate-800 bg-slate-950 p-10 text-center text-slate-500">Loading player pools...</div>
         ) : error ? (
           <div className="rounded-xl border border-red-900 bg-red-950/30 p-10 text-center text-red-200">{error}</div>
-        ) : pools.length < 5 ? (
+        ) : pools.length < SLOTS.length ? (
           <div className="rounded-xl border border-slate-800 bg-slate-950 p-10 text-center text-slate-500">
             Not enough season/team stat pools yet.
           </div>
@@ -327,10 +327,10 @@ export default function EightyTwoOhPage({ params }: { params?: Promise<{ league?
           <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
             <div className="rounded-2xl border border-slate-800 bg-slate-950 p-6">
               <div className="text-xs font-black uppercase tracking-widest text-slate-500">How it works</div>
-              <h3 className="mt-3 text-2xl font-black text-white">Build a five-man lineup from your league history.</h3>
+              <h3 className="mt-3 text-2xl font-black text-white">Build a four-man lineup from your league history.</h3>
               <div className="mt-5 grid gap-3 text-sm text-slate-300">
-                <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">Each round gives you one team and one season.</div>
-                <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">Pick one player without seeing the raw box-score stats.</div>
+                <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">Each round gives you one team from one exact season.</div>
+                <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">The choices are only players who had stats for that team in that season.</div>
                 <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">You get one Team reroll and one Era reroll for the full draft.</div>
                 <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">Scoring, boards, assists, steals, blocks, efficiency, and VORP all matter.</div>
               </div>
@@ -346,7 +346,7 @@ export default function EightyTwoOhPage({ params }: { params?: Promise<{ league?
               <div className="text-xs font-black uppercase tracking-widest text-slate-500">Available pools</div>
               <div className="mt-4 text-5xl font-black text-white">{pools.length}</div>
               <div className="mt-1 text-sm text-slate-500">team-season groups loaded</div>
-              <div className="mt-6 grid grid-cols-5 gap-2">
+              <div className="mt-6 grid grid-cols-4 gap-2">
                 {SLOTS.map((slot) => (
                   <div key={slot} className="rounded-lg border border-slate-800 bg-slate-900 py-3 text-center text-sm font-black text-slate-300">{slot}</div>
                 ))}
@@ -393,7 +393,7 @@ export default function EightyTwoOhPage({ params }: { params?: Promise<{ league?
         ) : currentPool ? (
           <div className="grid gap-5 xl:grid-cols-[320px_1fr]">
             <aside className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
-              <div className="text-xs font-black uppercase tracking-widest text-slate-500">Round {round + 1} of 5</div>
+              <div className="text-xs font-black uppercase tracking-widest text-slate-500">Round {round + 1} of {SLOTS.length}</div>
               <div className="mt-5 flex items-center gap-4">
                 <TeamLogo team={currentPool.team} />
                 <div>
@@ -421,7 +421,7 @@ export default function EightyTwoOhPage({ params }: { params?: Promise<{ league?
               </div>
 
               <div className="mt-7 text-xs font-black uppercase tracking-widest text-slate-500">Choose slot</div>
-              <div className="mt-3 grid grid-cols-5 gap-2 xl:grid-cols-1">
+              <div className="mt-3 grid grid-cols-4 gap-2 xl:grid-cols-1">
                 {SLOTS.map((slot) => {
                   const taken = picks.some((pick) => pick.slot === slot);
                   return (
