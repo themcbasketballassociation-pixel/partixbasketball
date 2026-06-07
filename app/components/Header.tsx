@@ -17,15 +17,15 @@ const tabs: { label: string; path: string; global: boolean; only: string[] | nul
   { label: "Schedule", path: "/schedule", global: false, only: null, top: true },
   { label: "Stats", path: "/stats", global: false, only: null, top: true },
   { label: "Players", path: "/players", global: false, only: null, top: true },
-  { label: "Auction", path: "/auction", global: false, only: ["mba"], top: true },
+  { label: "Games", path: "/games", global: false, only: null, top: true },
   { label: "Portal", path: "/portal", global: false, only: ["mcaa"], top: true },
   { label: "Admin", path: "/admin", global: false, only: null, top: true },
+  { label: "Auction", path: "/auction", global: false, only: ["mba"] },
   { label: "Standings", path: "/standings", global: false, only: null },
   { label: "Box Scores", path: "/boxscores", global: false, only: null },
   { label: "Advanced Stats", path: "/players/advanced", global: false, only: null },
   { label: "Accolades", path: "/accolades", global: false, only: null },
   { label: "News", path: "/articles", global: false, only: null },
-  { label: "Games", path: "/games", global: false, only: null },
   { label: "Links", path: "/links", global: true, only: null },
 ];
 
