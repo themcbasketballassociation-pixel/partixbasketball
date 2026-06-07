@@ -63,7 +63,8 @@ const computeVORP = (player: StatRow | null, all: StatRow[]): number | null => {
   const impactDiff = eff(player) - avgEff;
   const maxGP = Math.max(1, ...qualified.map(s => s.gp ?? 0));
   const minutesScale = Math.min(1, Math.max(0.35, (player.mpg ?? 18) / 24));
-  return Math.round(impactDiff * minutesScale * ((player.gp ?? 0) / maxGP) * 10) / 10;
+  const estimated = impactDiff * 0.28 * minutesScale * ((player.gp ?? 0) / maxGP);
+  return Math.round(Math.max(-9.9, Math.min(9.9, estimated)) * 10) / 10;
 };
 
 const vorpContext = (v: number): { label: string; color: string } => {

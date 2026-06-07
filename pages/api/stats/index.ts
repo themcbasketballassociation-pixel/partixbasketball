@@ -11,9 +11,63 @@ const ALL_REGULAR_SEASONS = [
 // No replacement-level bonus is added, so weak seasons can go negative.
 const GAME_MIN = 24;
 const SEASON_GP_NORM = 13; // season length in this league
-const VORP_SCALE = 0.85;
-const VORP_ELIGIBLE_SEASONS = new Set(["Season 6", "Season 7", "all"]);
+const VORP_SCALE = 0.28;
+const VORP_MAX = 9.9;
+const VORP_DEFAULT_MPG = 18;
 const VORP_MIN_MINUTES = 30; // minimum total minutes before VORP is shown
+
+const clampVorp = (n: number) => Math.max(-VORP_MAX, Math.min(VORP_MAX, n));
+
+function num(row: Record<string, unknown>, key: string) {
+  const value = row[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function manualImpact(row: Record<string, unknown>, leagueAvgFg: number, leagueAvgThree: number) {
+  const fg = num(row, "fg_pct");
+  const three = num(row, "three_pt_pct");
+  const tppg = num(row, "tppg");
+  const fgEff = fg > 0 && leagueAvgFg > 0 ? (fg - leagueAvgFg) * 0.055 : 0;
+  const threeEff = three > 0 && leagueAvgThree > 0 ? (three - leagueAvgThree) * 0.035 : 0;
+  return (
+    num(row, "ppg") +
+    0.55 * num(row, "rpg") +
+    0.75 * num(row, "apg") +
+    1.7 * num(row, "spg") +
+    1.5 * num(row, "bpg") +
+    0.25 * tppg -
+    1.15 * num(row, "topg") +
+    fgEff +
+    threeEff
+  );
+}
+
+function addManualVorp(rows: Record<string, unknown>[]): Record<string, unknown>[] {
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  const bySeason: Record<string, Record<string, unknown>[]> = {};
+  for (const row of rows) {
+    const season = String(row.season ?? "Unknown");
+    if (!bySeason[season]) bySeason[season] = [];
+    bySeason[season].push(row);
+  }
+
+  return rows.map((row) => {
+    const seasonRows = bySeason[String(row.season ?? "Unknown")] ?? [];
+    const fgRows = seasonRows.filter((r) => num(r, "fg_pct") > 0);
+    const threeRows = seasonRows.filter((r) => num(r, "three_pt_pct") > 0);
+    const leagueAvgFg = fgRows.length ? fgRows.reduce((s, r) => s + num(r, "fg_pct"), 0) / fgRows.length : 0;
+    const leagueAvgThree = threeRows.length ? threeRows.reduce((s, r) => s + num(r, "three_pt_pct"), 0) / threeRows.length : 0;
+    const impacts = seasonRows.map((r) => manualImpact(r, leagueAvgFg, leagueAvgThree));
+    const leagueAvgImpact = impacts.length ? impacts.reduce((s, v) => s + v, 0) / impacts.length : 0;
+    const gp = num(row, "gp");
+    const mpg = num(row, "mpg") > 0 ? num(row, "mpg") : VORP_DEFAULT_MPG;
+    const impactDiff = manualImpact(row, leagueAvgFg, leagueAvgThree) - leagueAvgImpact;
+    const vorp = gp > 0
+      ? r2(clampVorp(impactDiff * VORP_SCALE * (mpg / GAME_MIN) * (gp / SEASON_GP_NORM)))
+      : null;
+    return { ...row, vorp };
+  });
+}
 
 function getQuerySeasons(season: string, type: string): string[] {
   const base = season === "all" ? ALL_REGULAR_SEASONS : [season];
@@ -148,9 +202,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     const { data: manualData, error } = await statsQuery;
     if (error) return res.status(500).json({ error: error.message });
+    const manualRows = addManualVorp((manualData ?? []) as Record<string, unknown>[]);
 
     // Set of players who have manual stats — these won't be overwritten
-    const manualUuids = new Set((manualData ?? []).map((r) => r.mc_uuid as string));
+    const manualUuids = new Set(manualRows.map((r) => r.mc_uuid as string));
 
     // ── 2. Compute stats from game_stats for this season ──────────────────
     let gamesQuery = supabase
@@ -204,13 +259,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const r1 = (n: number) => Math.round(n * 10) / 10;
     const r2 = (n: number) => Math.round(n * 100) / 100;
-    const isVorpEligible = VORP_ELIGIBLE_SEASONS.has(seasonStr);
 
     // ── VORP multi-pass ───────────────────────────────────────────────────
     // Pass 1: collect league averages for TOV/pg, 3FG%, and possession time/pg
     let leagueAvgBoxPg = 0;
     const playerBoxPg: Record<string, number> = {};
-    if (isVorpEligible) {
+    if (Object.keys(computedByUuid).length > 0) {
       let topgSum = 0, topgN = 0;
       let tpctSum = 0, tpctN = 0;
       let possSum = 0, possN = 0;
@@ -275,8 +329,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const totalMin = cv.min / 60;
       const mpg = gp > 0 ? totalMin / gp : 0;
       const impactDiff = (playerBoxPg[uuid] ?? 0) - leagueAvgBoxPg;
-      const vorp = (isVorpEligible && totalMin >= VORP_MIN_MINUTES && gp > 0)
-        ? r2(impactDiff * VORP_SCALE * (mpg / GAME_MIN) * (gp / SEASON_GP_NORM))
+      const vorp = (totalMin >= VORP_MIN_MINUTES && gp > 0)
+        ? r2(clampVorp(impactDiff * VORP_SCALE * (mpg / GAME_MIN) * (gp / SEASON_GP_NORM)))
         : null;
       return {
         mc_uuid: uuid,
@@ -302,7 +356,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
 
     // ── 3. Merge: manual rows + computed rows ─────────────────────────────
-    const allRows = [...(manualData ?? []), ...computedRows];
+    const allRows = [...manualRows, ...computedRows];
 
     const byPlayer: Record<string, Record<string, unknown>[]> = {};
     for (const row of allRows) {
