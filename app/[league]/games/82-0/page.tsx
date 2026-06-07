@@ -92,32 +92,44 @@ function calculateRecord(picks: Pick[]) {
   const avgVorp = avg((p) => p.vorp ?? 0);
   const teamCount = new Set(picks.map((p) => p.team?.id).filter(Boolean)).size;
   const seasonSpread = new Set(picks.map((p) => p.season)).size;
-  const balanceBonus = Math.min(4, teamCount * 0.35 + seasonSpread * 0.25);
-  const weakLinkPenalty = Math.max(0, 30 - Math.min(...picks.map(playerScore))) * 0.9;
+  const balanceBonus = Math.min(3, teamCount * 0.25 + seasonSpread * 0.2);
+  const weakestPlayer = Math.min(...picks.map(playerScore));
+  const weakLinkPenalty = Math.max(0, 44 - weakestPlayer) * 1.35;
   const categoryPenalty =
-    Math.max(0, 15 - scoring) * 1.2 +
-    Math.max(0, 5.5 - rebounding) * 4.4 +
-    Math.max(0, 3.8 - playmaking) * 4.8 +
-    Math.max(0, 2.0 - defense) * 8.5 +
-    Math.max(0, -0.5 - efficiency) * 3.2;
+    Math.max(0, 19 - scoring) * 1.9 +
+    Math.max(0, 7.2 - rebounding) * 7.2 +
+    Math.max(0, 5.2 - playmaking) * 7.8 +
+    Math.max(0, 3.0 - defense) * 12 +
+    Math.max(0, 1.8 - efficiency) * 5.5 +
+    Math.max(0, 3.2 - avgVorp) * 2.2;
   const starPower = picks.reduce((sum, p) => sum + playerScore(p), 0) / picks.length;
   const ovr = Math.max(
     35,
     Math.min(
       110,
-      starPower * 0.72 +
-        scoring * 1.25 +
-        rebounding * 3.4 +
-        playmaking * 3.9 +
-        defense * 7.6 +
-        efficiency * 2.2 +
-        avgVorp * 1.7 +
+      starPower * 0.5 +
+        scoring * 0.85 +
+        rebounding * 4.2 +
+        playmaking * 4.7 +
+        defense * 9.8 +
+        efficiency * 2.6 +
+        avgVorp * 1.3 +
         balanceBonus -
         weakLinkPenalty -
         categoryPenalty
     )
   );
-  const wins = Math.max(10, Math.min(82, Math.round(82 * Math.pow(ovr / 112, 2.35))));
+  const baseWins = Math.max(8, Math.min(82, Math.round(82 * Math.pow(ovr / 118, 3.1))));
+  const ceilings = [
+    scoring >= 23 ? 82 : scoring >= 20 ? 79 : scoring >= 17 ? 74 : 68,
+    rebounding >= 8.2 ? 82 : rebounding >= 7 ? 78 : rebounding >= 5.8 ? 72 : 66,
+    playmaking >= 6.2 ? 82 : playmaking >= 5 ? 78 : playmaking >= 4 ? 72 : 65,
+    defense >= 3.4 ? 82 : defense >= 2.8 ? 78 : defense >= 2.2 ? 72 : 64,
+    efficiency >= 2.8 ? 82 : efficiency >= 1.4 ? 78 : efficiency >= 0 ? 72 : 66,
+    avgVorp >= 5 ? 82 : avgVorp >= 3.5 ? 79 : avgVorp >= 2 ? 74 : 68,
+    weakestPlayer >= 58 ? 82 : weakestPlayer >= 48 ? 78 : weakestPlayer >= 40 ? 73 : 66,
+  ];
+  const wins = Math.min(baseWins, ...ceilings);
   return {
     wins,
     losses: 82 - wins,
