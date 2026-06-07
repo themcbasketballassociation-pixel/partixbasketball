@@ -67,26 +67,67 @@ function playerScore(p: StatRow) {
   const scoring = p.ppg ?? 0;
   const boards = p.rpg ?? 0;
   const passing = p.apg ?? 0;
-  const stocks = (p.spg ?? 0) + (p.bpg ?? 0);
-  const shooting = p.fg_pct != null ? (p.fg_pct - 45) * 0.12 : 0;
-  const three = p.three_pt_pct != null ? (p.three_pt_pct - 32) * 0.06 : 0;
+  const steals = p.spg ?? 0;
+  const blocks = p.bpg ?? 0;
+  const shooting = p.fg_pct != null ? (p.fg_pct - 45) * 0.18 : 0;
+  const three = p.three_pt_pct != null ? (p.three_pt_pct - 32) * 0.1 : 0;
   const turnovers = p.topg ?? 0;
   const vorp = p.vorp ?? 0;
-  return scoring * 2.15 + boards * 1.15 + passing * 1.65 + stocks * 4.25 + shooting + three + vorp * 5.5 - turnovers * 2.4;
+  return scoring * 1.45 + boards * 2.55 + passing * 3.25 + steals * 7.25 + blocks * 6.4 + shooting + three + vorp * 1.5 - turnovers * 3;
 }
 
 function calculateRecord(picks: Pick[]) {
-  if (picks.length < 5) return { wins: 0, losses: 0, ovr: 0 };
+  if (picks.length < 5) return { wins: 0, losses: 0, ovr: 0, scoring: 0, rebounding: 0, playmaking: 0, defense: 0, efficiency: 0 };
 
-  const raw = picks.reduce((sum, p) => sum + playerScore(p), 0);
-  const avgVorp = picks.reduce((sum, p) => sum + (p.vorp ?? 0), 0) / picks.length;
+  const avg = (fn: (pick: Pick) => number) => picks.reduce((sum, pick) => sum + fn(pick), 0) / picks.length;
+  const scoring = avg((p) => p.ppg ?? 0);
+  const rebounding = avg((p) => p.rpg ?? 0);
+  const playmaking = avg((p) => p.apg ?? 0);
+  const defense = avg((p) => (p.spg ?? 0) * 1.35 + (p.bpg ?? 0) * 1.2);
+  const efficiency = avg((p) => {
+    const fg = p.fg_pct != null ? (p.fg_pct - 42) / 3.2 : 0;
+    const three = p.three_pt_pct != null ? (p.three_pt_pct - 30) / 5 : 0;
+    return fg + three - (p.topg ?? 0) * 0.75;
+  });
+  const avgVorp = avg((p) => p.vorp ?? 0);
   const teamCount = new Set(picks.map((p) => p.team?.id).filter(Boolean)).size;
   const seasonSpread = new Set(picks.map((p) => p.season)).size;
-  const balanceBonus = Math.min(6, teamCount * 0.8 + seasonSpread * 0.45);
-  const weakLinkPenalty = Math.max(0, 22 - Math.min(...picks.map(playerScore))) * 0.85;
-  const ovr = Math.max(35, Math.min(110, raw / 3.1 + avgVorp * 2.2 + balanceBonus - weakLinkPenalty));
-  const wins = Math.max(12, Math.min(82, Math.round(82 * Math.pow(ovr / 110, 1.85))));
-  return { wins, losses: 82 - wins, ovr: Math.round(ovr) };
+  const balanceBonus = Math.min(4, teamCount * 0.35 + seasonSpread * 0.25);
+  const weakLinkPenalty = Math.max(0, 30 - Math.min(...picks.map(playerScore))) * 0.9;
+  const categoryPenalty =
+    Math.max(0, 15 - scoring) * 1.2 +
+    Math.max(0, 5.5 - rebounding) * 4.4 +
+    Math.max(0, 3.8 - playmaking) * 4.8 +
+    Math.max(0, 2.0 - defense) * 8.5 +
+    Math.max(0, -0.5 - efficiency) * 3.2;
+  const starPower = picks.reduce((sum, p) => sum + playerScore(p), 0) / 5;
+  const ovr = Math.max(
+    35,
+    Math.min(
+      110,
+      starPower * 0.72 +
+        scoring * 1.25 +
+        rebounding * 3.4 +
+        playmaking * 3.9 +
+        defense * 7.6 +
+        efficiency * 2.2 +
+        avgVorp * 1.7 +
+        balanceBonus -
+        weakLinkPenalty -
+        categoryPenalty
+    )
+  );
+  const wins = Math.max(10, Math.min(82, Math.round(82 * Math.pow(ovr / 112, 2.35))));
+  return {
+    wins,
+    losses: 82 - wins,
+    ovr: Math.round(ovr),
+    scoring: Math.round(scoring * 10) / 10,
+    rebounding: Math.round(rebounding * 10) / 10,
+    playmaking: Math.round(playmaking * 10) / 10,
+    defense: Math.round(defense * 10) / 10,
+    efficiency: Math.round(efficiency * 10) / 10,
+  };
 }
 
 function grade(wins: number) {
@@ -122,6 +163,8 @@ export default function EightyTwoOhPage({ params }: { params?: Promise<{ league?
   const [selectedSlot, setSelectedSlot] = React.useState<Slot>("PG");
   const [picks, setPicks] = React.useState<Pick[]>([]);
   const [started, setStarted] = React.useState(false);
+  const [teamRerollUsed, setTeamRerollUsed] = React.useState(false);
+  const [eraRerollUsed, setEraRerollUsed] = React.useState(false);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -192,6 +235,8 @@ export default function EightyTwoOhPage({ params }: { params?: Promise<{ league?
     const poolPlayers = currentPool.players.filter((player) => !alreadyPicked.has(player.mc_uuid));
     return shuffle(poolPlayers.slice(0, 10), day * 1000 + round * 17).slice(0, 6);
   }, [currentPool, day, picks, round]);
+  const canTeamReroll = !!currentPool && pools.some((pool) => pool.season === currentPool.season && pool.team.id !== currentPool.team.id);
+  const canEraReroll = !!currentPool && pools.some((pool) => pool.team.id === currentPool.team.id && pool.season !== currentPool.season);
 
   const start = () => {
     const fresh = shuffle(pools, Date.now() % 100000).slice(0, 5);
@@ -199,6 +244,8 @@ export default function EightyTwoOhPage({ params }: { params?: Promise<{ league?
     setPicks([]);
     setRound(0);
     setSelectedSlot("PG");
+    setTeamRerollUsed(false);
+    setEraRerollUsed(false);
     setStarted(true);
   };
 
@@ -215,7 +262,35 @@ export default function EightyTwoOhPage({ params }: { params?: Promise<{ league?
     setPicks([]);
     setRound(0);
     setSelectedSlot("PG");
+    setTeamRerollUsed(false);
+    setEraRerollUsed(false);
     setRoundPools(shuffle(pools, day * 820 + Math.floor(Math.random() * 1000)).slice(0, 5));
+  };
+
+  const replaceCurrentPool = (replacement: Pool) => {
+    setRoundPools((prev) => prev.map((pool, idx) => (idx === round ? replacement : pool)));
+  };
+
+  const rerollTeam = () => {
+    if (!currentPool || teamRerollUsed) return;
+    const usedKeys = new Set(roundPools.map((pool) => pool.key));
+    const candidates = pools.filter((pool) => pool.season === currentPool.season && pool.team.id !== currentPool.team.id && !usedKeys.has(pool.key));
+    const fallback = pools.filter((pool) => pool.season === currentPool.season && pool.team.id !== currentPool.team.id);
+    const next = shuffle(candidates.length ? candidates : fallback, Date.now() % 100000)[0];
+    if (!next) return;
+    replaceCurrentPool(next);
+    setTeamRerollUsed(true);
+  };
+
+  const rerollEra = () => {
+    if (!currentPool || eraRerollUsed) return;
+    const usedKeys = new Set(roundPools.map((pool) => pool.key));
+    const candidates = pools.filter((pool) => pool.team.id === currentPool.team.id && pool.season !== currentPool.season && !usedKeys.has(pool.key));
+    const fallback = pools.filter((pool) => pool.team.id === currentPool.team.id && pool.season !== currentPool.season);
+    const next = shuffle(candidates.length ? candidates : fallback, Date.now() % 100000)[0];
+    if (!next) return;
+    replaceCurrentPool(next);
+    setEraRerollUsed(true);
   };
 
   return (
@@ -229,7 +304,7 @@ export default function EightyTwoOhPage({ params }: { params?: Promise<{ league?
             <div className="text-[11px] font-black uppercase tracking-[0.25em] text-red-400">Hoop IQ Draft</div>
             <h2 className="mt-1 text-4xl font-black tracking-tight text-white">82-0</h2>
             <p className="mt-2 max-w-2xl text-sm text-slate-400">
-              Draft five Minecraft Basketball starters from random team and season pools. Stats are hidden until the final record.
+              Draft five Minecraft Basketball starters from random team and past-season pools. Stats are hidden until the final record.
             </p>
           </div>
           <div className="rounded-xl border border-slate-700 bg-slate-950 px-5 py-3 text-right">
@@ -256,7 +331,8 @@ export default function EightyTwoOhPage({ params }: { params?: Promise<{ league?
               <div className="mt-5 grid gap-3 text-sm text-slate-300">
                 <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">Each round gives you one team and one season.</div>
                 <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">Pick one player without seeing the raw box-score stats.</div>
-                <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">Fill PG, SG, SF, PF, and C, then get an 82-game projection.</div>
+                <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">You get one Team reroll and one Era reroll for the full draft.</div>
+                <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">Scoring, boards, assists, steals, blocks, efficiency, and VORP all matter.</div>
               </div>
               <button
                 type="button"
@@ -283,6 +359,12 @@ export default function EightyTwoOhPage({ params }: { params?: Promise<{ league?
               <div className="text-6xl font-black text-amber-300">{result.wins}-{result.losses}</div>
               <div className="mt-2 text-lg font-black text-white">{grade(result.wins)}</div>
               <div className="mt-1 text-sm text-slate-400">Team OVR {result.ovr}</div>
+              <div className="mt-5 grid grid-cols-2 gap-2 text-xs text-slate-300">
+                <div className="rounded-lg border border-slate-800 bg-slate-950 p-3"><b className="block text-white">{result.scoring}</b>Scoring</div>
+                <div className="rounded-lg border border-slate-800 bg-slate-950 p-3"><b className="block text-white">{result.rebounding}</b>Rebounding</div>
+                <div className="rounded-lg border border-slate-800 bg-slate-950 p-3"><b className="block text-white">{result.playmaking}</b>Assists</div>
+                <div className="rounded-lg border border-slate-800 bg-slate-950 p-3"><b className="block text-white">{result.defense}</b>Defense</div>
+              </div>
               <button type="button" onClick={reset} className="mt-6 rounded-xl bg-slate-800 px-5 py-3 text-sm font-black text-white hover:bg-slate-700">
                 Draft again
               </button>
@@ -318,6 +400,24 @@ export default function EightyTwoOhPage({ params }: { params?: Promise<{ league?
                   <div className="text-xl font-black text-white">{currentPool.team.name}</div>
                   <div className="text-sm font-bold text-slate-500">{currentPool.season}</div>
                 </div>
+              </div>
+              <div className="mt-5 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  disabled={teamRerollUsed || !canTeamReroll}
+                  onClick={rerollTeam}
+                  className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-3 text-xs font-black uppercase tracking-widest text-white transition hover:border-red-500 disabled:cursor-not-allowed disabled:border-slate-900 disabled:bg-slate-950 disabled:text-slate-700"
+                >
+                  Team {teamRerollUsed ? "Used" : "Reroll"}
+                </button>
+                <button
+                  type="button"
+                  disabled={eraRerollUsed || !canEraReroll}
+                  onClick={rerollEra}
+                  className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-3 text-xs font-black uppercase tracking-widest text-white transition hover:border-red-500 disabled:cursor-not-allowed disabled:border-slate-900 disabled:bg-slate-950 disabled:text-slate-700"
+                >
+                  Era {eraRerollUsed ? "Used" : "Reroll"}
+                </button>
               </div>
 
               <div className="mt-7 text-xs font-black uppercase tracking-widest text-slate-500">Choose slot</div>
@@ -363,13 +463,16 @@ export default function EightyTwoOhPage({ params }: { params?: Promise<{ league?
                 <div className="text-xs font-bold uppercase tracking-widest text-slate-500">Slot: {selectedSlot}</div>
               </div>
               <div className="grid gap-3 md:grid-cols-2">
-                {options.map((player) => (
+                {options.map((player, idx) => (
                   <button
                     key={player.mc_uuid}
                     type="button"
                     onClick={() => draft(player)}
                     className="flex min-h-24 items-center gap-4 rounded-xl border border-slate-800 bg-slate-900/70 p-4 text-left transition hover:border-red-500 hover:bg-slate-900"
                   >
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-red-500/40 bg-red-950/30 text-sm font-black text-red-200">
+                      #{idx + 1}
+                    </span>
                     <img src={`https://minotar.net/avatar/${player.mc_username}/52`} alt="" className="h-14 w-14 rounded-xl border border-slate-700 bg-slate-950" />
                     <span className="min-w-0">
                       <span className="block truncate text-lg font-black text-white">{player.mc_username}</span>
