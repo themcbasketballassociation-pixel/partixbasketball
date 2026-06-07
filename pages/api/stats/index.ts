@@ -372,14 +372,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const playerMap: Record<string, string> = {};
     for (const p of playerRows ?? []) playerMap[p.mc_uuid] = p.mc_username;
 
-    // 1. Try player_teams with exact season (works for historical seasons)
+    // 1. Try player_teams with season variants (works for historical seasons)
     const lookupSeason = seasonStr === "all" ? null : seasonStr.replace(/ Playoffs$/, "");
+    const lookupSeasonNumber = lookupSeason?.match(/\d+/)?.[0] ?? null;
+    const seasonCandidates = lookupSeason
+      ? [...new Set([lookupSeason, lookupSeasonNumber, lookupSeasonNumber ? `S${lookupSeasonNumber}` : null].filter((s): s is string => !!s))]
+      : [];
     let ptQuery = supabase
       .from("player_teams")
       .select("mc_uuid, teams(id, name, abbreviation, logo_url)")
       .eq("league", league as string)
       .in("mc_uuid", uuids);
-    if (lookupSeason) ptQuery = ptQuery.eq("season", lookupSeason);
+    if (seasonCandidates.length > 0) ptQuery = ptQuery.in("season", seasonCandidates);
     const { data: teamRows } = await ptQuery;
     const teamMap: Record<string, unknown> = {};
     for (const row of teamRows ?? []) {
@@ -395,13 +399,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .select("mc_uuid, teams(id, name, abbreviation, logo_url)")
         .eq("league", league as string)
         .in("mc_uuid", unresolvedUuids);
-      if (lookupSeason) {
-        contractQuery = contractQuery.eq("season", lookupSeason);
+      if (seasonCandidates.length > 0) {
+        contractQuery = contractQuery.in("season", seasonCandidates);
       } else {
         contractQuery = contractQuery.eq("status", "active");
       }
       const { data: contractTeamRows } = await contractQuery;
       for (const row of contractTeamRows ?? []) {
+        if (row.mc_uuid && row.teams && !teamMap[row.mc_uuid]) teamMap[row.mc_uuid] = row.teams;
+      }
+    }
+
+    // 3. Last historical fallback: old roster rows may not have season filled in.
+    const stillUnresolvedUuids = uuids.filter((u) => !teamMap[u]);
+    if (stillUnresolvedUuids.length > 0 && lookupSeason) {
+      const { data: anySeasonTeamRows } = await supabase
+        .from("player_teams")
+        .select("mc_uuid, teams(id, name, abbreviation, logo_url)")
+        .eq("league", league as string)
+        .in("mc_uuid", stillUnresolvedUuids);
+      for (const row of anySeasonTeamRows ?? []) {
         if (row.mc_uuid && row.teams && !teamMap[row.mc_uuid]) teamMap[row.mc_uuid] = row.teams;
       }
     }

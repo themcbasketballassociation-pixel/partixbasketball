@@ -11,22 +11,22 @@ const leagues = [
   { short: "MCAA", full: "College", slug: "mcaa", logo: "/logos/mcaa.webp", accent: "#1f5eff" },
 ];
 
-const tabs = [
-  { label: "Home", path: "", global: false, only: null },
-  { label: "Teams", path: "/teams", global: false, only: null },
+const tabs: { label: string; path: string; global: boolean; only: string[] | null; top?: boolean }[] = [
+  { label: "Home", path: "", global: false, only: null, top: true },
+  { label: "Teams", path: "/teams", global: false, only: null, top: true },
+  { label: "Schedule", path: "/schedule", global: false, only: null, top: true },
+  { label: "Stats", path: "/stats", global: false, only: null, top: true },
+  { label: "Players", path: "/players", global: false, only: null, top: true },
+  { label: "Auction", path: "/auction", global: false, only: ["mba"], top: true },
+  { label: "Portal", path: "/portal", global: false, only: ["mcaa"], top: true },
+  { label: "Admin", path: "/admin", global: false, only: null, top: true },
   { label: "Standings", path: "/standings", global: false, only: null },
-  { label: "Schedule", path: "/schedule", global: false, only: null },
   { label: "Box Scores", path: "/boxscores", global: false, only: null },
-  { label: "Stats", path: "/stats", global: false, only: null },
-  { label: "Advanced", path: "/players/advanced", global: false, only: null },
-  { label: "Players", path: "/players", global: false, only: null },
+  { label: "Advanced Stats", path: "/players/advanced", global: false, only: null },
   { label: "Accolades", path: "/accolades", global: false, only: null },
   { label: "News", path: "/articles", global: false, only: null },
-  { label: "Auction", path: "/auction", global: false, only: ["mba"] },
-  { label: "Portal", path: "/portal", global: false, only: ["mcaa"] },
   { label: "Games", path: "/games", global: false, only: null },
   { label: "Links", path: "/links", global: true, only: null },
-  { label: "Admin", path: "/admin", global: false, only: null },
 ];
 
 export default function Header() {
@@ -43,11 +43,19 @@ export default function Header() {
   }, []);
 
   useEffect(() => {
+    const leagueFromPath = pathname.split("/").filter(Boolean)[0];
+    if (leagues.some((league) => league.slug === leagueFromPath) && leagueFromPath !== selected) {
+      setSelected(leagueFromPath);
+    }
+  }, [pathname, selected]);
+
+  useEffect(() => {
     localStorage.setItem("partix:selectedLeague", selected);
   }, [selected]);
 
   const currentLeague = leagues.find((l) => l.slug === selected) ?? leagues[0];
   const visibleTabs = tabs.filter((tab) => !tab.only || tab.only.includes(selected));
+  const topTabs = visibleTabs.filter((tab) => tab.top);
   const normalizedPath = pathname.replace(/\/$/, "") || "/";
   const activeTab = visibleTabs
     .filter((tab) => !tab.global && tab.path !== "")
@@ -69,19 +77,19 @@ export default function Header() {
             <Image src={currentLeague.logo} alt={currentLeague.short} width={42} height={50} unoptimized />
           </span>
           <span className="brand-lockup__copy">
-            <span className="brand-lockup__eyebrow">Partix Basketball</span>
+            <span className="brand-lockup__eyebrow">Minecraft Basketball</span>
             <span className="brand-lockup__title">{currentLeague.short}</span>
           </span>
         </Link>
 
         <nav className="nav-pill" aria-label="Primary navigation">
-          {visibleTabs.map((tab) => {
+          {topTabs.map((tab) => {
             const href = tab.global ? tab.path : `/${selected}${tab.path}`;
             const isActive = tab.global
               ? normalizedPath === tab.path
               : tab.path === ""
                 ? normalizedPath === `/${selected}`
-                : activeTab?.path === tab.path;
+                : activeTab?.path === tab.path || !!activeTab?.path.startsWith(`${tab.path}/`);
             return (
               <Link
                 key={tab.label}

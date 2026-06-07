@@ -207,16 +207,16 @@ function ResultCard({ game, slug, mvp, isPlayoffs }: { game: Game; slug: string;
 
       {/* Match MVP */}
       {mvpName && (
-        <div style={{ background: "#080b0f", borderTop: "1px solid #1a1f28", padding: "9px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ color: "#f59e0b", fontSize: 8, fontWeight: 900, letterSpacing: "0.12em", textTransform: "uppercase", flexShrink: 0 }}>MATCH MVP</span>
-          <img src={`https://minotar.net/avatar/${mvpName}/24`} alt={mvpName}
-            style={{ width: 22, height: 22, borderRadius: 4, flexShrink: 0 }}
-            onError={e => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/24"; }} />
-          <span style={{ color: "#ccc", fontSize: 11, fontWeight: 600, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{mvpName}</span>
+        <div style={{ background: "linear-gradient(90deg, #0b0d12, #111015)", borderTop: "1px solid #2a2f3a", padding: "12px 14px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <span style={{ color: "#f5c451", fontSize: 10, fontWeight: 950, letterSpacing: "0.14em", textTransform: "uppercase", flexShrink: 0 }}>MATCH MVP</span>
+          <img src={`https://minotar.net/avatar/${mvpName}/40`} alt={mvpName}
+            style={{ width: 38, height: 38, borderRadius: 7, flexShrink: 0, border: "1px solid #3a4150", background: "#08090d" }}
+            onError={e => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/40"; }} />
+          <span style={{ color: "#fff", fontSize: 15, fontWeight: 850, flex: "1 1 120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{mvpName}</span>
           {([["PTS", mvpPts], ["REB", mvpReb], ["AST", mvpAst], ["STL", mvpStl], ["BLK", mvpBlk]] as [string, number][]).map(([label, val]) => (
-            <div key={label} style={{ textAlign: "center", flexShrink: 0, minWidth: 30 }}>
-              <div style={{ color: "#fff", fontSize: 15, fontWeight: 800, lineHeight: 1.1, fontVariantNumeric: "tabular-nums" }}>{val}</div>
-              <div style={{ color: "#555", fontSize: 8, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginTop: 1 }}>{label}</div>
+            <div key={label} style={{ textAlign: "center", flexShrink: 0, minWidth: 38 }}>
+              <div style={{ color: "#fff", fontSize: 19, fontWeight: 900, lineHeight: 1.05, fontVariantNumeric: "tabular-nums" }}>{val}</div>
+              <div style={{ color: "#8c95a3", fontSize: 9, fontWeight: 850, letterSpacing: "0.1em", textTransform: "uppercase", marginTop: 2 }}>{label}</div>
             </div>
           ))}
         </div>
