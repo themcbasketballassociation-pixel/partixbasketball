@@ -184,11 +184,20 @@ export default function EightyTwoOhPage({ params }: { params?: Promise<{ league?
 
       const fetched = await Promise.all(
         seasons.map(async (season) => {
-          const res = await fetch(`/api/stats?league=${league}&season=${encodeURIComponent(season)}&type=regular`);
-          const rows = await res.json().catch(() => []);
+          const [statsRes, teamsRes] = await Promise.all([
+            fetch(`/api/stats?league=${league}&season=${encodeURIComponent(season)}&type=regular&strictTeamSeason=1`),
+            fetch(`/api/teams?league=${league}&season=${encodeURIComponent(season)}`),
+          ]);
+          const rows = await statsRes.json().catch(() => []);
+          const teams = await teamsRes.json().catch(() => []);
+          const validTeamIds = new Set(
+            Array.isArray(teams)
+              ? teams.map((team: Team) => team.id).filter((id: string | undefined): id is string => !!id)
+              : []
+          );
           return Array.isArray(rows)
             ? rows
-                .filter((row: StatRow) => row.mc_uuid && row.mc_username && row.team?.id && (row.gp ?? 0) > 0)
+                .filter((row: StatRow) => row.mc_uuid && row.mc_username && row.team?.id && validTeamIds.has(row.team.id) && (row.gp ?? 0) > 0)
                 .map((row: StatRow) => ({ ...row, season }))
             : [];
         })

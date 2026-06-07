@@ -170,7 +170,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({ success: true });
   }
 
-  const { mc_uuid, season, type } = req.query;
+  const { mc_uuid, season, type, strictTeamSeason } = req.query;
 
   // GET with mc_uuid + season — load a single player's manual stats (used by admin)
   if (mc_uuid && season) {
@@ -412,7 +412,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 3. Last historical fallback: old roster rows may not have season filled in.
     const stillUnresolvedUuids = uuids.filter((u) => !teamMap[u]);
-    if (stillUnresolvedUuids.length > 0 && lookupSeason) {
+    if (stillUnresolvedUuids.length > 0 && lookupSeason && strictTeamSeason !== "1") {
       const { data: anySeasonTeamRows } = await supabase
         .from("player_teams")
         .select("mc_uuid, teams(id, name, abbreviation, logo_url)")
