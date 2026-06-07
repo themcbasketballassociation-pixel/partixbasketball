@@ -207,18 +207,25 @@ function ResultCard({ game, slug, mvp, isPlayoffs }: { game: Game; slug: string;
 
       {/* Match MVP */}
       {mvpName && (
-        <div style={{ background: "linear-gradient(90deg, #0b0d12, #111015)", borderTop: "1px solid #2a2f3a", padding: "12px 14px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <span style={{ color: "#f5c451", fontSize: 10, fontWeight: 950, letterSpacing: "0.14em", textTransform: "uppercase", flexShrink: 0 }}>MATCH MVP</span>
-          <img src={`https://minotar.net/avatar/${mvpName}/40`} alt={mvpName}
-            style={{ width: 38, height: 38, borderRadius: 7, flexShrink: 0, border: "1px solid #3a4150", background: "#08090d" }}
-            onError={e => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/40"; }} />
-          <span style={{ color: "#fff", fontSize: 15, fontWeight: 850, flex: "1 1 120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{mvpName}</span>
-          {([["PTS", mvpPts], ["REB", mvpReb], ["AST", mvpAst], ["STL", mvpStl], ["BLK", mvpBlk]] as [string, number][]).map(([label, val]) => (
-            <div key={label} style={{ textAlign: "center", flexShrink: 0, minWidth: 38 }}>
-              <div style={{ color: "#fff", fontSize: 19, fontWeight: 900, lineHeight: 1.05, fontVariantNumeric: "tabular-nums" }}>{val}</div>
-              <div style={{ color: "#8c95a3", fontSize: 9, fontWeight: 850, letterSpacing: "0.1em", textTransform: "uppercase", marginTop: 2 }}>{label}</div>
+        <div style={{ background: "linear-gradient(90deg, #0b0d12, #111015)", borderTop: "1px solid #2a2f3a", padding: "12px 14px", overflowX: "auto" }}>
+          <div style={{ minWidth: 470, display: "grid", gridTemplateColumns: "auto 1fr auto", alignItems: "center", gap: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+              <span style={{ color: "#f5c451", fontSize: 10, fontWeight: 950, letterSpacing: "0.14em", textTransform: "uppercase", flexShrink: 0 }}>MATCH MVP</span>
+              <img src={`https://minotar.net/avatar/${mvpName}/40`} alt={mvpName}
+                style={{ width: 38, height: 38, borderRadius: 7, flexShrink: 0, border: "1px solid #3a4150", background: "#08090d" }}
+                onError={e => { (e.target as HTMLImageElement).src = "https://minotar.net/avatar/MHF_Steve/40"; }} />
+              <span style={{ color: "#fff", fontSize: 15, fontWeight: 850, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{mvpName}</span>
             </div>
-          ))}
+            <div />
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(38px, auto))", gap: 12, alignItems: "center" }}>
+              {([["PTS", mvpPts], ["REB", mvpReb], ["AST", mvpAst], ["STL", mvpStl], ["BLK", mvpBlk]] as [string, number][]).map(([label, val]) => (
+                <div key={label} style={{ textAlign: "center", minWidth: 38 }}>
+                  <div style={{ color: "#fff", fontSize: 19, fontWeight: 900, lineHeight: 1.05, fontVariantNumeric: "tabular-nums" }}>{val}</div>
+                  <div style={{ color: "#8c95a3", fontSize: 9, fontWeight: 850, letterSpacing: "0.1em", textTransform: "uppercase", marginTop: 2 }}>{label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -536,12 +543,12 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
     : seedOrder(teamStandings.slice(0, 4)).map((tr, i) => ({ ...tr, conf: "", seed: SEED_NUMS[i] }));
 
   return (
-    <main style={{ background: "#080808", minHeight: "100vh" }}>
+    <main style={{ minHeight: "100vh" }}>
 
       {/* ── HERO ── */}
-      <div style={{ position: "relative", overflow: "hidden", background: "#080808", borderBottom: "1px solid #131820" }}>
-        <div style={{ position: "absolute", left: "-5%", top: "50%", transform: "translateY(-50%)", width: 500, height: 500, borderRadius: "50%", background: `radial-gradient(circle, ${color}0d 0%, transparent 65%)`, pointerEvents: "none" }} />
-        <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px" }}>
+      <div style={{ position: "relative", overflow: "hidden", background: "linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))", border: "1px solid #282d38", borderRadius: 18, boxShadow: "0 18px 70px rgba(0,0,0,0.32)" }}>
+        <div style={{ position: "absolute", right: "-12%", top: "-40%", width: 460, height: 460, borderRadius: "50%", background: `radial-gradient(circle, ${color}22 0%, transparent 65%)`, pointerEvents: "none" }} />
+        <div style={{ maxWidth: 1280, margin: "0 auto", padding: "34px 26px", position: "relative" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}>
             <span style={{ width: 6, height: 6, borderRadius: "50%", background: color, display: "inline-block", flexShrink: 0 }} />
             <span style={{ color: "#555", fontSize: 10, fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase" }}>{leagueDisplay}</span>
@@ -559,7 +566,7 @@ export default function LeagueHome({ params }: { params?: Promise<{ league?: str
       </div>
 
       {/* ── MAIN CONTENT ── */}
-      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "28px 24px" }}>
+      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "28px 0 0" }}>
 
         {/* Row 1: Upcoming | Latest Results | Stat Leaders */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 270px", gap: 20, marginBottom: 24, alignItems: "start" }}>

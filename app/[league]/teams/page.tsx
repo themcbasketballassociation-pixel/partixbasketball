@@ -436,31 +436,31 @@ function TeamCard({ team, players, capUsed, onClick, showCap }: { team: Team; pl
     <div
       onClick={onClick}
       style={{
-        borderRadius: "0.875rem", border: "1px solid #1c2028", background: "#13161e",
-        overflow: "hidden", display: "flex", flexDirection: "column",
-        borderLeft: accent ? `3px solid ${accent}` : "1px solid #1c2028",
-        cursor: "pointer", transition: "border-color 0.15s, background 0.15s",
+        borderRadius: "1rem", border: "1px solid #282d38", background: "linear-gradient(180deg, #10131a, #0b0d12)",
+        overflow: "hidden", display: "flex", flexDirection: "column", minHeight: 210,
+        borderTop: accent ? `3px solid ${accent}` : "1px solid #282d38",
+        cursor: "pointer", transition: "border-color 0.15s, background 0.15s, transform 0.15s", boxShadow: "0 16px 45px rgba(0,0,0,0.22)",
       }}
-      onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = "#171b26"; }}
-      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = "#13161e"; }}
+      onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = accent ?? "#3d4350"; (e.currentTarget as HTMLDivElement).style.transform = "translateY(-2px)"; }}
+      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = "#282d38"; (e.currentTarget as HTMLDivElement).style.transform = "translateY(0)"; }}
     >
       {/* Logo + name */}
-      <div style={{ borderBottom: "1px solid #1c2028", padding: "16px 18px", display: "flex", alignItems: "center", gap: 14 }}>
-        <div style={{ width: 48, height: 48, borderRadius: 8, background: "#101318", border: "1px solid #272c36", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" }}>
+      <div style={{ borderBottom: "1px solid #282d38", padding: "18px 20px", display: "flex", alignItems: "center", gap: 15 }}>
+        <div style={{ width: 58, height: 58, borderRadius: 12, background: "#07090d", border: "1px solid #3d4350", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" }}>
           {team.logo_url
-            ? <img src={team.logo_url} alt={team.abbreviation} style={{ width: 40, height: 40, objectFit: "contain" }} />
+            ? <img src={team.logo_url} alt={team.abbreviation} style={{ width: 48, height: 48, objectFit: "contain" }} />
             : <span style={{ fontSize: "0.8rem", fontWeight: 800, color: "#666" }}>{team.abbreviation}</span>
           }
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontWeight: 700, color: "#fff", fontSize: "1rem", lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{team.name}</div>
-          <div style={{ fontSize: "0.72rem", color: "#555", fontFamily: "monospace", marginTop: 2 }}>{team.abbreviation}</div>
+          <div style={{ fontWeight: 850, color: "#fff", fontSize: "1.12rem", lineHeight: 1.18, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{team.name}</div>
+          <div style={{ fontSize: "0.78rem", color: "#8c95a3", fontFamily: "monospace", marginTop: 3 }}>{team.abbreviation}</div>
         </div>
         <span style={{ fontSize: "0.7rem", color: "#444", flexShrink: 0 }}>→</span>
       </div>
 
       {/* Roster */}
-      <div style={{ padding: "14px 20px", flex: 1 }}>
+      <div style={{ padding: "15px 20px", flex: 1 }}>
         {players.length === 0 ? (
           <p style={{ color: "#333", fontSize: "0.78rem", margin: 0, fontStyle: "italic" }}>No players assigned</p>
         ) : (
@@ -481,7 +481,7 @@ function TeamCard({ team, players, capUsed, onClick, showCap }: { team: Team; pl
 
       {/* Cap bar */}
       {showCap && (
-        <div style={{ padding: "10px 18px 14px", borderTop: "1px solid #1c2028" }}>
+        <div style={{ padding: "11px 20px 15px", borderTop: "1px solid #282d38" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
             <span style={{ color: "#555", fontSize: "0.72rem" }}>Cap used</span>
             <span style={{ fontSize: "0.72rem", fontWeight: 700 }}>
@@ -658,19 +658,25 @@ export default function TeamsPage({ params }: { params?: Promise<{ league?: stri
         />
       )}
 
-      <div style={{ borderRadius: "1rem", border: "1px solid #1c2028", background: "#101318", overflow: "hidden" }}>
+      <div style={{ borderRadius: "1.15rem", border: "1px solid #282d38", background: "linear-gradient(180deg, #0f1218, #090b10)", overflow: "hidden", boxShadow: "0 18px 70px rgba(0,0,0,0.34)" }}>
         {/* Header */}
-        <div style={{ padding: "20px 24px", borderBottom: "1px solid #1c2028", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+        <div style={{ padding: "22px 24px", borderBottom: "1px solid #282d38", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 14 }}>
           <div>
-            <h2 style={{ fontSize: "1.5rem", fontWeight: 700, color: "#fff", margin: 0 }}>Teams</h2>
-            <p style={{ color: "#888", fontSize: "0.875rem", margin: "2px 0 0" }}>{leagueDisplay} · {season} · {teams.length} teams · click a team to view details</p>
+            <h2 style={{ fontSize: "1.75rem", fontWeight: 900, color: "#fff", margin: 0, letterSpacing: "-0.02em" }}>Teams</h2>
+            <p style={{ color: "#a5adba", fontSize: "0.95rem", margin: "4px 0 0" }}>{leagueDisplay} · {season} · {teams.length} teams · click a team to view details</p>
           </div>
-          {seasons.length > 0 && (
-            <select value={season} onChange={e => setSeason(e.target.value)}
-              style={{ background: "#0a0d12", border: "1px solid #272c36", color: "#fff", borderRadius: "0.75rem", padding: "6px 14px", fontSize: "0.875rem", outline: "none", cursor: "pointer" }}>
-              {seasons.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", padding: 4, border: "1px solid #353945", borderRadius: 999, background: "#07090d" }}>
+              <span style={{ display: "inline-flex", alignItems: "center", minHeight: 34, padding: "0 14px", borderRadius: 999, background: "#b98722", color: "#fff", fontSize: "0.8rem", fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase" }}>Teams</span>
+              <Link href={`/${slug}/standings`} style={{ display: "inline-flex", alignItems: "center", minHeight: 34, padding: "0 14px", borderRadius: 999, color: "#a5adba", fontSize: "0.8rem", fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase", textDecoration: "none" }}>Standings</Link>
+            </div>
+            {seasons.length > 0 && (
+              <select value={season} onChange={e => setSeason(e.target.value)}
+                style={{ background: "#0a0d12", border: "1px solid #353945", color: "#fff", borderRadius: "0.75rem", padding: "8px 14px", fontSize: "0.875rem", outline: "none", cursor: "pointer" }}>
+                {seasons.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            )}
+          </div>
         </div>
 
         {loading ? (
