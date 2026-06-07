@@ -84,12 +84,20 @@ export default function PlayersPage({ params }: { params?: Promise<{ league?: st
           <h2 className="text-lg font-bold text-white">Players</h2>
           <p className="text-slate-500 text-xs mt-0.5">{leagueDisplay}</p>
         </div>
-        <input
-          className="rounded-md border border-slate-700 bg-slate-800 text-white text-xs px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 w-44"
-          placeholder="Search players..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
+        <div className="flex items-center gap-2 flex-wrap">
+          <Link
+            href={`/${slug}/players/advanced`}
+            className="rounded-md border border-cyan-900/70 bg-cyan-950/40 px-3 py-1.5 text-xs font-bold text-cyan-200 hover:border-cyan-600 hover:bg-cyan-900/50 transition"
+          >
+            Advanced Stats
+          </Link>
+          <input
+            className="rounded-md border border-slate-700 bg-slate-800 text-white text-xs px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 w-44"
+            placeholder="Search players..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
       </div>
 
       {loading ? (

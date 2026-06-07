@@ -1,5 +1,6 @@
 "use client";
 import React from "react";
+import Link from "next/link";
 
 const leagueNames: Record<string, string> = {
   mba: "Minecraft Basketball Association",
@@ -199,6 +200,12 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
           <p className="text-slate-500 text-xs mt-0.5">{leagueDisplay}</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <Link
+            href={`/${slug}/players/advanced`}
+            className="rounded-md border border-cyan-900/70 bg-cyan-950/40 px-3 py-1.5 text-xs font-bold text-cyan-200 hover:border-cyan-600 hover:bg-cyan-900/50 transition"
+          >
+            Advanced Player Lab
+          </Link>
           {/* Player / Team toggle */}
           <div className="flex rounded-md border border-slate-700 overflow-hidden text-xs">
             {(["player", "team"] as const).map((v) => (

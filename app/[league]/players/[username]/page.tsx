@@ -10,6 +10,7 @@ type StatRow = {
   gp: number | null; ppg: number | null; rpg: number | null; apg: number | null;
   spg: number | null; bpg: number | null; fg_pct: number | null;
   three_pt_made: number | null; tppg: number | null; three_pt_pct: number | null;
+  mpg?: number | null; topg?: number | null; vorp?: number | null;
 };
 type Accolade = { id: string; type: string; season: string; description: string | null; mc_uuid: string };
 type PlayerTeam = { mc_uuid: string; team_id: string; season: string | null };
@@ -46,13 +47,23 @@ const grade = (pct: number | null): { letter: string; color: string; label: stri
 
 const computeVORP = (player: StatRow | null, all: StatRow[]): number | null => {
   if (!player || (player.gp ?? 0) === 0) return null;
+  if (player.vorp != null) return player.vorp;
   const qualified = all.filter(s => (s.gp ?? 0) >= 1);
   if (qualified.length === 0) return null;
-  const eff = (s: StatRow) => (s.ppg ?? 0) + 1.2 * (s.rpg ?? 0) + 1.5 * (s.apg ?? 0) + 2 * (s.spg ?? 0) + 2 * (s.bpg ?? 0);
+  const eff = (s: StatRow) =>
+    (s.ppg ?? 0) +
+    0.55 * (s.rpg ?? 0) +
+    0.75 * (s.apg ?? 0) +
+    1.7 * (s.spg ?? 0) +
+    1.5 * (s.bpg ?? 0) +
+    0.35 * (s.tppg ?? 0) -
+    1.15 * (s.topg ?? 0) +
+    (((s.fg_pct ?? 45) - 45) / 4);
   const avgEff = qualified.reduce((sum, s) => sum + eff(s), 0) / qualified.length;
-  const bpm = eff(player) - avgEff;
+  const impactDiff = eff(player) - avgEff;
   const maxGP = Math.max(1, ...qualified.map(s => s.gp ?? 0));
-  return Math.round((bpm + 2.0) * ((player.gp ?? 0) / maxGP) * 10) / 10;
+  const minutesScale = Math.min(1, Math.max(0.35, (player.mpg ?? 18) / 24));
+  return Math.round(impactDiff * minutesScale * ((player.gp ?? 0) / maxGP) * 10) / 10;
 };
 
 const vorpContext = (v: number): { label: string; color: string } => {

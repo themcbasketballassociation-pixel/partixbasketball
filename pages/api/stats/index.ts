@@ -6,11 +6,12 @@ const ALL_REGULAR_SEASONS = [
   "Season 1","Season 2","Season 3","Season 4","Season 5","Season 6","Season 7",
 ];
 
-// VORP constants — NBA-style formula: VORP = (BPM + 2) × (MPG / 24) × (GP / 82)
-// BPM = player box score per game − league average box score per game
-// 24 = game length in this league, 82 = NBA normalization factor, +2 = replacement level offset
+// VORP constants. This is intentionally scaled like plus/minus:
+// player impact per game vs league average, adjusted by minutes and games played.
+// No replacement-level bonus is added, so weak seasons can go negative.
 const GAME_MIN = 24;
 const SEASON_GP_NORM = 13; // season length in this league
+const VORP_SCALE = 0.85;
 const VORP_ELIGIBLE_SEASONS = new Set(["Season 6", "Season 7", "all"]);
 const VORP_MIN_MINUTES = 30; // minimum total minutes before VORP is shown
 
@@ -224,44 +225,58 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const leagueAvgTpct   = tpctN > 0 ? tpctSum / tpctN : 0;
       const leagueAvgPossPg = possN > 0 ? possSum / possN : 0;
 
-      // Pass 2: compute adjusted box score per game for each player
-      //   • Extra TOV penalty  — above-average turnovers drag down playmaking value
-      //   • 3FG% possession bonus — efficient 3pt shooting matters more when you
-      //     spend less time with the ball (catch-and-shoot reward)
+      // Pass 2: compute adjusted box impact per game for each player.
+      // This is not meant to be NBA BPM. It is tuned for this league so MVP seasons
+      // separate upward while inefficient / low-impact seasons can fall below zero.
       for (const [uuid, c] of Object.entries(computedByUuid)) {
         const cv = c as Record<string, number>;
         if (cv.gp === 0) continue;
         const gp    = cv.gp;
-        const boxPg = (cv.pts + 0.7 * cv.reb + 0.7 * cv.ast + 1.5 * cv.stl + 1.5 * cv.blk - 0.7 * cv.tov) / gp;
+        const fgaPg = cv.fga / gp;
+        const tpaPg = cv.tpa / gp;
+        const fgPct = cv.fga > 0 ? cv.fgm / cv.fga : 0;
+        const tpPct = cv.tpa > 0 ? cv.tpm / cv.tpa : 0;
+        const boxPg =
+          (cv.pts +
+            0.55 * cv.reb +
+            0.75 * cv.ast +
+            1.7 * cv.stl +
+            1.5 * cv.blk +
+            0.35 * cv.tpm -
+            1.15 * cv.tov) / gp;
 
         // Extra penalty for above-average turnovers (per game over the avg)
-        const extraTovPen = Math.max(0, cv.tov / gp - leagueAvgTopg) * 0.5;
+        const extraTovPen = Math.max(0, cv.tov / gp - leagueAvgTopg) * 0.65;
 
-        // 3FG% bonus — only when possession data and 3pt attempts both exist
-        let threePctBonus = 0;
-        if (cv.tpa > 0 && cv.possGames > 0 && leagueAvgTpct > 0 && leagueAvgPossPg > 0) {
-          const pctAdv    = Math.max(0, cv.tpm / cv.tpa - leagueAvgTpct);
-          // possRatio > 1 means player uses less possession time than average → bigger boost
-          const possRatio = Math.min(leagueAvgPossPg / Math.max(cv.poss / cv.possGames, 1), 3);
-          threePctBonus   = pctAdv * possRatio * (cv.tpm / gp) * 0.5;
-        }
+        // Efficiency matters, but it only matters with volume.
+        const fgEff = (fgPct - 0.45) * fgaPg * 1.8;
+        const threeEff = leagueAvgTpct > 0 ? (tpPct - leagueAvgTpct) * tpaPg * 1.25 : 0;
 
-        playerBoxPg[uuid] = boxPg - extraTovPen + threePctBonus;
+        // High possession time with low passing is a drag; efficient low-touch shooting
+        // gets a small bump.
+        const possPg = cv.possGames > 0 ? cv.poss / cv.possGames : 0;
+        const passPg = cv.passGames > 0 ? cv.pass / cv.passGames : 0;
+        const possBalance = leagueAvgPossPg > 0
+          ? Math.max(-1.5, Math.min(1.5, (leagueAvgPossPg - possPg) / Math.max(leagueAvgPossPg, 1))) * Math.min(cv.tpm / Math.max(gp, 1), 3) * 0.18
+          : 0;
+        const playmakingBalance = passPg > 0 ? Math.min(passPg / 45, 1.2) * 0.35 : 0;
+
+        playerBoxPg[uuid] = boxPg + fgEff + threeEff + possBalance + playmakingBalance - extraTovPen;
       }
 
       const vals = Object.values(playerBoxPg);
       if (vals.length > 0) leagueAvgBoxPg = vals.reduce((a, b) => a + b, 0) / vals.length;
     }
 
-    // Pass 2: compute each player's VORP = (BPM + 2) × (MPG / 24) × (GP / 82)
+    // Pass 3: compute VORP as plus/minus-style impact over league average.
     const computedRows = Object.entries(computedByUuid).map(([uuid, c]) => {
       const cv = c as Record<string, number>;
       const gp = cv.gp;
       const totalMin = cv.min / 60;
       const mpg = gp > 0 ? totalMin / gp : 0;
-      const bpm = (playerBoxPg[uuid] ?? 0) - leagueAvgBoxPg;
+      const impactDiff = (playerBoxPg[uuid] ?? 0) - leagueAvgBoxPg;
       const vorp = (isVorpEligible && totalMin >= VORP_MIN_MINUTES && gp > 0)
-        ? r2((bpm + 2) * (mpg / GAME_MIN) * (gp / SEASON_GP_NORM))
+        ? r2(impactDiff * VORP_SCALE * (mpg / GAME_MIN) * (gp / SEASON_GP_NORM))
         : null;
       return {
         mc_uuid: uuid,

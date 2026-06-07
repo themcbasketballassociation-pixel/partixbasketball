@@ -18,6 +18,7 @@ const tabs = [
   { label: "Schedule",    path: "/schedule",  global: false, only: null },
   { label: "Box Scores",  path: "/boxscores", global: false, only: null },
   { label: "Stats",       path: "/stats",     global: false, only: null },
+  { label: "Advanced",    path: "/players/advanced", global: false, only: null },
   { label: "Players",     path: "/players",   global: false, only: null },
   { label: "Accolades",   path: "/accolades", global: false, only: null },
   { label: "News",        path: "/articles",  global: false, only: null },
@@ -50,6 +51,13 @@ export default function Header() {
 
   const parts = pathname.split("/");
   const section = parts.length >= 3 ? `/${parts[2]}` : "";
+  const visibleTabs = tabs.filter((tab) => !tab.only || tab.only.includes(selected));
+  const normalizedPath = pathname.replace(/\/$/, "") || "/";
+  const activeTab = visibleTabs
+    .filter((tab) => !tab.global && tab.path !== "")
+    .map((tab) => ({ tab, href: `/${selected}${tab.path}`.replace(/\/$/, "") }))
+    .filter(({ href }) => normalizedPath === href || normalizedPath.startsWith(`${href}/`))
+    .sort((a, b) => b.tab.path.length - a.tab.path.length)[0]?.tab;
 
   return (
     <header className="sticky top-0 z-40" style={{ background: "#0c0f18", borderBottom: "1px solid #1c2028" }}>
@@ -119,7 +127,7 @@ export default function Header() {
               key={l.slug}
               onClick={() => {
                 setSelected(l.slug);
-                const currentTab = tabs.find(t => !t.global && (t.path === "" ? section === "" : section === t.path));
+                const currentTab = activeTab ?? tabs.find(t => !t.global && (t.path === "" ? section === "" : section === t.path));
                 const targetPath = currentTab && !currentTab.global ? `/${l.slug}${currentTab.path}` : `/${l.slug}`;
                 router.push(targetPath);
               }}
@@ -138,13 +146,13 @@ export default function Header() {
       {/* Nav tabs */}
       <div className="overflow-x-auto" style={{ background: "#090c14", borderTop: "1px solid #171b26" }}>
         <div className="mx-auto max-w-7xl px-4 sm:px-6 flex">
-          {tabs.filter((tab) => !tab.only || tab.only.includes(selected)).map((tab) => {
+          {visibleTabs.map((tab) => {
             const href = tab.global ? tab.path : `/${selected}${tab.path}`;
             const isActive = tab.global
-              ? pathname === tab.path
+              ? normalizedPath === tab.path
               : tab.path === ""
-                ? section === "" || section === undefined
-                : section === tab.path;
+                ? normalizedPath === `/${selected}`
+                : activeTab?.path === tab.path;
             return (
               <Link
                 key={tab.label}
