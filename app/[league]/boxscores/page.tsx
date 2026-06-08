@@ -1,6 +1,7 @@
 "use client";
-import React from "react";
+
 import Link from "next/link";
+import React from "react";
 
 const leagueNames: Record<string, string> = {
   mba: "Minecraft Basketball Association",
@@ -10,14 +11,19 @@ const leagueNames: Record<string, string> = {
 
 type Team = { id: string; name: string; abbreviation: string; logo_url?: string | null };
 type Game = {
-  id: string; league: string; scheduled_at: string; status: string;
-  home_score: number | null; away_score: number | null;
-  home_team: Team; away_team: Team;
+  id: string;
+  league: string;
+  scheduled_at: string;
+  status: string;
+  home_score: number | null;
+  away_score: number | null;
+  home_team: Team | null;
+  away_team: Team | null;
 };
 
 function getWeekKey(scheduledAt: string): string {
   const etDateStr = new Date(scheduledAt).toLocaleDateString("en-CA", { timeZone: "Etc/GMT+5" });
-  const d = new Date(etDateStr + "T12:00:00");
+  const d = new Date(`${etDateStr}T12:00:00`);
   const dow = d.getDay();
   const daysToThursday = dow >= 4 ? dow - 4 : dow + 3;
   const thu = new Date(d);
@@ -25,27 +31,60 @@ function getWeekKey(scheduledAt: string): string {
   return thu.toISOString().slice(0, 10);
 }
 
+function TeamMark({ team, won }: { team: Team | null; won: boolean }) {
+  if (team?.logo_url) {
+    return <img src={team.logo_url} className={`h-10 w-10 shrink-0 object-contain ${won ? "" : "opacity-35"}`} alt="" />;
+  }
+  return (
+    <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-slate-700 bg-slate-900 text-[10px] font-black ${won ? "text-slate-200" : "text-slate-600"}`}>
+      {team?.abbreviation ?? "TBD"}
+    </div>
+  );
+}
+
+function TeamSide({ team, score, won, align }: { team: Team | null; score: number | null; won: boolean; align: "left" | "right" }) {
+  const reverse = align === "right";
+  return (
+    <div className={`flex min-w-0 items-center gap-3 ${reverse ? "justify-end text-right" : "justify-start text-left"}`}>
+      {reverse && (
+        <div className="min-w-0">
+          <div className={`truncate text-base font-black ${won ? "text-white" : "text-slate-500"}`}>{team?.name ?? "Unknown"}</div>
+          <div className="text-[10px] font-black uppercase tracking-widest text-slate-600">{team?.abbreviation ?? "-"}</div>
+        </div>
+      )}
+      <TeamMark team={team} won={won} />
+      {!reverse && (
+        <div className="min-w-0">
+          <div className={`truncate text-base font-black ${won ? "text-white" : "text-slate-500"}`}>{team?.name ?? "Unknown"}</div>
+          <div className="text-[10px] font-black uppercase tracking-widest text-slate-600">{team?.abbreviation ?? "-"}</div>
+        </div>
+      )}
+      <div className={`shrink-0 text-3xl font-black tabular-nums ${won ? "text-white" : "text-slate-600"}`}>{score ?? "-"}</div>
+    </div>
+  );
+}
+
 export default function BoxScoresPage({ params }: { params?: Promise<{ league?: string }> }) {
   const resolved = React.use(params ?? Promise.resolve({})) as { league?: string };
   const slug = resolved.league ?? "";
   const leagueDisplay = leagueNames[slug] ?? slug.toUpperCase();
 
-  const [games, setGames]                   = React.useState<Game[]>([]);
-  const [loading, setLoading]               = React.useState(true);
+  const [games, setGames] = React.useState<Game[]>([]);
+  const [loading, setLoading] = React.useState(true);
   const [regularSeasons, setRegularSeasons] = React.useState<string[]>([]);
   const [playoffSeasons, setPlayoffSeasons] = React.useState<string[]>([]);
-  const [season, setSeason]                 = React.useState<string>("");
-  const [tab, setTab]                       = React.useState<"regular" | "playoffs">("regular");
+  const [season, setSeason] = React.useState("");
+  const [tab, setTab] = React.useState<"regular" | "playoffs">("regular");
 
   React.useEffect(() => {
     if (!slug) return;
     fetch(`/api/stats/seasons?league=${slug}`)
-      .then(r => r.json())
+      .then((r) => r.json())
       .then((data: { season: string }[]) => {
         if (!Array.isArray(data)) return;
-        const all = data.map(d => d.season).filter(Boolean);
-        const reg = [...new Set(all.filter(s => !s.toLowerCase().includes("playoff")))].sort((a, b) => b.localeCompare(a));
-        const po  = [...new Set(all.filter(s =>  s.toLowerCase().includes("playoff")))].sort((a, b) => b.localeCompare(a));
+        const all = data.map((d) => d.season).filter(Boolean);
+        const reg = [...new Set(all.filter((s) => !s.toLowerCase().includes("playoff")))].sort((a, b) => b.localeCompare(a));
+        const po = [...new Set(all.filter((s) => s.toLowerCase().includes("playoff")))].sort((a, b) => b.localeCompare(a));
         setRegularSeasons(reg);
         setPlayoffSeasons(po);
         if (reg.length > 0) setSeason(reg[0]);
@@ -55,142 +94,112 @@ export default function BoxScoresPage({ params }: { params?: Promise<{ league?: 
   React.useEffect(() => {
     if (tab === "regular" && regularSeasons.length > 0) setSeason(regularSeasons[0]);
     if (tab === "playoffs" && playoffSeasons.length > 0) setSeason(playoffSeasons[0]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab]);
+  }, [tab, regularSeasons, playoffSeasons]);
 
   React.useEffect(() => {
     if (!slug || !season) return;
     setLoading(true);
     fetch(`/api/games?league=${slug}&season=${encodeURIComponent(season)}`)
-      .then(r => r.json())
-      .then(data => {
+      .then((r) => r.json())
+      .then((data) => {
         const completed = Array.isArray(data)
           ? data.filter((g: Game) => g.home_score !== null && g.away_score !== null)
           : [];
-        setGames(completed.reverse());
+        setGames([...completed].reverse());
         setLoading(false);
       })
       .catch(() => setLoading(false));
   }, [slug, season]);
 
+  const grouped = React.useMemo(() => {
+    const map = new Map<string, Game[]>();
+    for (const g of games) {
+      const key = getWeekKey(g.scheduled_at);
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(g);
+    }
+    const keys = [...map.keys()].sort();
+    const weekNumMap = new Map(keys.map((k, i) => [k, i + 1]));
+    return [...map.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([key, value]) => ({ key, games: value, week: weekNumMap.get(key) ?? 0 }));
+  }, [games]);
+
+  const visibleSeasons = tab === "regular" ? regularSeasons : playoffSeasons;
+
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
-      {/* Header */}
-      <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between flex-wrap gap-3">
+    <div className="overflow-hidden rounded-2xl border border-slate-800 bg-[#0b0f16] shadow-xl">
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-slate-800 bg-gradient-to-br from-slate-950 via-slate-950 to-red-950/30 px-6 py-6">
         <div>
-          <h2 className="text-lg font-bold text-white">Box Scores</h2>
-          <p className="text-slate-500 text-xs mt-0.5">{leagueDisplay}</p>
+          <div className="text-[11px] font-black uppercase tracking-[0.22em] text-red-400">{leagueDisplay}</div>
+          <h1 className="mt-1 text-4xl font-black tracking-tight text-white">Box Scores</h1>
+          <p className="mt-2 max-w-2xl text-sm text-slate-400">Completed games, final scores, and full box score links.</p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Regular / Playoffs toggle */}
-          <div className="flex rounded-lg overflow-hidden border border-slate-700">
-            {(["regular", "playoffs"] as const).map(t => (
-              <button key={t} onClick={() => setTab(t)}
-                className={`px-4 py-1.5 text-xs font-bold transition ${tab === t ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-400 hover:text-white"}`}
-                style={{ borderRight: t === "regular" ? "1px solid #334155" : "none" }}>
-                {t === "regular" ? "Regular Season" : "🏆 Playoffs"}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex overflow-hidden rounded-lg border border-slate-700 bg-slate-950 text-xs">
+            {(["regular", "playoffs"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTab(t)}
+                className={`px-4 py-2 font-black transition ${tab === t ? "bg-red-600 text-white" : "text-slate-400 hover:bg-slate-900 hover:text-white"}`}
+              >
+                {t === "regular" ? "Regular" : "Playoffs"}
               </button>
             ))}
           </div>
-          {/* Season dropdown */}
-          {(tab === "regular" ? regularSeasons : playoffSeasons).length > 0 && (
-            <select value={season} onChange={e => setSeason(e.target.value)}
-              className="rounded-lg border border-slate-700 bg-slate-800 text-white text-sm px-3 py-1.5 focus:outline-none cursor-pointer">
-              {(tab === "regular" ? regularSeasons : playoffSeasons).map(s => <option key={s} value={s}>{s}</option>)}
+          {visibleSeasons.length > 0 && (
+            <select
+              value={season}
+              onChange={(e) => setSeason(e.target.value)}
+              className="cursor-pointer rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-bold text-white outline-none"
+            >
+              {visibleSeasons.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
           )}
         </div>
       </div>
 
-      {/* Games list */}
       {loading ? (
-        <div className="p-12 text-center text-slate-500">Loading…</div>
+        <div className="p-12 text-center text-slate-500">Loading...</div>
       ) : games.length === 0 ? (
-        <div className="p-12 text-center text-slate-500">
-          {tab === "playoffs" ? "No playoff box scores yet." : "No completed games yet."}
-        </div>
-      ) : (() => {
-        // Group by week (newest first — games are already reversed)
-        const grouped = new Map<string, Game[]>();
-        for (const g of games) {
-          const key = getWeekKey(g.scheduled_at);
-          if (!grouped.has(key)) grouped.set(key, []);
-          grouped.get(key)!.push(g);
-        }
-        const weekEntries = [...grouped.entries()].sort((a, b) => b[0].localeCompare(a[0]));
-        // Compute week numbers ascending so "Week 1" is earliest
-        const allKeys = [...grouped.keys()].sort();
-        const weekNumMap = new Map(allKeys.map((k, i) => [k, i + 1]));
-
-        return (
-          <div className="p-3 flex flex-col gap-3">
-            {weekEntries.map(([weekKey, weekGames]) => (
-              <div key={weekKey} className="rounded-xl border border-slate-800 bg-slate-950 overflow-hidden">
-                {/* Week header */}
-                <div className="flex items-center justify-between px-4 py-2 border-b border-slate-800 bg-slate-900">
-                  <span className="text-xs font-bold text-white tracking-wide">WEEK {weekNumMap.get(weekKey)}</span>
-                  <span className="text-[10px] text-slate-500">
-                    {new Date(weekKey + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", timeZone: "Etc/GMT+5" })} week
-                  </span>
-                </div>
-                {/* Games in this week */}
-                <div className="flex flex-col gap-px p-1.5">
-                  {weekGames.map(g => {
-                    const homeWon = (g.home_score ?? 0) > (g.away_score ?? 0);
-                    const awayWon = (g.away_score ?? 0) > (g.home_score ?? 0);
-                    return (
-                      <Link
-                        key={g.id}
-                        href={`/${slug}/boxscores/${g.id}`}
-                        className="block rounded-lg border border-slate-800/50 hover:border-slate-600 hover:bg-slate-800/30 transition"
-                      >
-                        <div className="grid items-center px-3 py-2.5 gap-2" style={{ gridTemplateColumns: "1fr auto 1fr" }}>
-                          {/* Home team */}
-                          <div className="flex items-center gap-2 justify-end">
-                            <div className="text-right">
-                              <div className={`font-semibold text-sm leading-tight ${homeWon ? "text-white" : "text-slate-500"}`}>{g.home_team?.name}</div>
-                              <div className="text-[9px] text-slate-700 uppercase tracking-wide">{g.home_team?.abbreviation}</div>
-                            </div>
-                            {g.home_team?.logo_url
-                              ? <img src={g.home_team.logo_url} className={`w-8 h-8 object-contain flex-shrink-0 ${homeWon ? "" : "opacity-30"}`} alt="" />
-                              : <div className="w-8 h-8 rounded-md bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-600 text-[9px] font-bold flex-shrink-0">{g.home_team?.abbreviation}</div>}
-                          </div>
-
-                          {/* Score */}
-                          <div className="text-center min-w-[80px]">
-                            <div className="flex items-center justify-center gap-1.5">
-                              <span className={`text-xl font-black tabular-nums leading-none ${homeWon ? "text-white" : "text-slate-600"}`}>{g.home_score}</span>
-                              <span className="text-slate-700 text-xs">–</span>
-                              <span className={`text-xl font-black tabular-nums leading-none ${awayWon ? "text-white" : "text-slate-600"}`}>{g.away_score}</span>
-                            </div>
-                            <div className="flex items-center justify-center gap-1.5 mt-0.5">
-                              <span className="text-[8px] font-bold text-green-500 bg-green-950/60 border border-green-900 rounded-full px-1.5 py-px">FINAL</span>
-                              <span className="text-[9px] text-slate-600">
-                                {new Date(g.scheduled_at).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "Etc/GMT+5" })}
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Away team */}
-                          <div className="flex items-center gap-2 justify-start">
-                            {g.away_team?.logo_url
-                              ? <img src={g.away_team.logo_url} className={`w-8 h-8 object-contain flex-shrink-0 ${awayWon ? "" : "opacity-30"}`} alt="" />
-                              : <div className="w-8 h-8 rounded-md bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-600 text-[9px] font-bold flex-shrink-0">{g.away_team?.abbreviation}</div>}
-                            <div>
-                              <div className={`font-semibold text-sm leading-tight ${awayWon ? "text-white" : "text-slate-500"}`}>{g.away_team?.name}</div>
-                              <div className="text-[9px] text-slate-700 uppercase tracking-wide">{g.away_team?.abbreviation}</div>
-                            </div>
-                          </div>
-                        </div>
-                      </Link>
-                    );
-                  })}
+        <div className="p-12 text-center text-slate-500">{tab === "playoffs" ? "No playoff box scores yet." : "No completed games yet."}</div>
+      ) : (
+        <div className="flex flex-col gap-4 p-4">
+          {grouped.map(({ key, games: weekGames, week }) => (
+            <section key={key} className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-950">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 bg-slate-900/70 px-4 py-3">
+                <div className="text-xs font-black uppercase tracking-widest text-white">Week {week}</div>
+                <div className="text-[11px] font-bold text-slate-500">
+                  {new Date(`${key}T12:00:00`).toLocaleDateString("en-US", { month: "long", day: "numeric", timeZone: "Etc/GMT+5" })} week
                 </div>
               </div>
-            ))}
-          </div>
-        );
-      })()}
+              <div className="grid gap-2 p-2">
+                {weekGames.map((g) => {
+                  const homeWon = (g.home_score ?? 0) > (g.away_score ?? 0);
+                  const awayWon = (g.away_score ?? 0) > (g.home_score ?? 0);
+                  return (
+                    <Link
+                      key={g.id}
+                      href={`/${slug}/boxscores/${g.id}`}
+                      className="block rounded-xl border border-slate-800 bg-[#080b11] p-4 transition hover:border-slate-600 hover:bg-slate-900/70"
+                    >
+                      <div className="grid items-center gap-4 md:grid-cols-[1fr_auto_1fr]">
+                        <TeamSide team={g.home_team} score={g.home_score} won={homeWon} align="right" />
+                        <div className="text-center">
+                          <div className="text-xs font-black uppercase tracking-widest text-slate-500">Final</div>
+                          <div className="mt-1 text-[11px] font-bold text-slate-600">
+                            {new Date(g.scheduled_at).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "Etc/GMT+5" })}
+                          </div>
+                        </div>
+                        <TeamSide team={g.away_team} score={g.away_score} won={awayWon} align="left" />
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

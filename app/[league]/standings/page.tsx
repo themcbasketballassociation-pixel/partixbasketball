@@ -50,11 +50,11 @@ function applyTiebreakers(group: StandingRow[], games: Game[]): StandingRow[] {
 }
 
 function sortStandings(rows: StandingRow[], games: Game[]): StandingRow[] {
-  const sorted = [...rows].sort((a, b) => b.w !== a.w ? b.w - a.w : b.pct - a.pct);
+  const sorted = [...rows].sort((a, b) => b.w - a.w);
   const groups: StandingRow[][] = [];
   for (const row of sorted) {
     const last = groups[groups.length - 1];
-    if (last && last[0].w === row.w && Math.abs(last[0].pct - row.pct) < 0.0001) last.push(row);
+    if (last && last[0].w === row.w) last.push(row);
     else groups.push([row]);
   }
   return groups.flatMap((g) => applyTiebreakers(g, games));
@@ -203,7 +203,7 @@ export default function StandingsPage({ params }: { params?: Promise<{ league?: 
         <div>
           <div style={{ color: "#f43f5e", fontSize: 11, fontWeight: 900, letterSpacing: "0.2em", textTransform: "uppercase" }}>{leagueDisplay}</div>
           <h2 style={{ fontSize: "clamp(2rem, 4vw, 3.2rem)", fontWeight: 950, color: "#fff", margin: "3px 0 0", lineHeight: 1 }}>Standings</h2>
-          <p style={{ color: "#94a3b8", fontSize: 14, margin: "8px 0 0" }}>{season || "Season"} table, tiebreakers, and point differential.</p>
+          <p style={{ color: "#94a3b8", fontSize: 14, margin: "8px 0 0" }}>{season || "Season"} table, conference record, H2H, and point differential.</p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <Link href={`/${slug}/teams`} style={{ border: "1px solid #334155", background: "#111827", color: "#f8fafc", borderRadius: 10, padding: "10px 14px", fontSize: 13, fontWeight: 900, textDecoration: "none" }}>
@@ -256,7 +256,7 @@ export default function StandingsPage({ params }: { params?: Promise<{ league?: 
 
       {!loading && allRows.length > 0 && (
         <div style={{ padding: "13px 20px", borderTop: "1px solid #263244", fontSize: 12, color: "#64748b", background: "#080b11" }}>
-          Tiebreakers: Wins, win percentage, conference record, head-to-head, then point differential.
+          Tiebreakers: Wins, conference record, head-to-head, then point differential.
         </div>
       )}
     </div>
