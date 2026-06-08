@@ -18,7 +18,6 @@ const tabs: { label: string; path: string; global: boolean; only: string[] | nul
   { label: "Stats", path: "/stats", global: false, only: null, top: true },
   { label: "Players", path: "/players", global: false, only: null, top: true },
   { label: "Box Scores", path: "/boxscores", global: false, only: null, top: true },
-  { label: "Accolades", path: "/accolades", global: false, only: null, top: true },
   { label: "Games", path: "/games", global: false, only: null, top: true },
   { label: "Portal", path: "/portal", global: false, only: ["mcaa"], top: true },
   { label: "Admin", path: "/admin", global: false, only: null, top: true },

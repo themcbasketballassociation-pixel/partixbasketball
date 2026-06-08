@@ -8,6 +8,58 @@ const leagueNames: Record<string, string> = {
   mbgl: "G League",
 };
 
+// ── Accolades types & helpers ─────────────────────────────────────────────────
+
+type Accolade = {
+  id: string; type: string; season: string; description: string | null;
+  mc_uuid: string; players?: { mc_uuid: string; mc_username: string } | null;
+};
+type RecordEntry = { mc_uuid: string; mc_username: string; value: number; season: string };
+type Records = {
+  season?: Record<string, RecordEntry>; seasonAvg?: Record<string, RecordEntry>;
+  career?: Record<string, RecordEntry>; careerAvg?: Record<string, RecordEntry>;
+};
+
+function PlayerFace({ username, size = 40 }: { username: string; size?: number }) {
+  return (
+    <img
+      src={`https://minotar.net/avatar/${username || "MHF_Steve"}/${size}`}
+      alt="" className="shrink-0 rounded-lg border border-slate-700 bg-slate-950"
+      style={{ width: size, height: size }}
+      onError={(e) => { (e.currentTarget as HTMLImageElement).src = `https://minotar.net/avatar/MHF_Steve/${size}`; }}
+    />
+  );
+}
+function RecordCard({ label, entry, suffix }: { label: string; entry?: RecordEntry; suffix?: string }) {
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 transition hover:border-slate-600">
+      <div className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</div>
+      {!entry?.mc_uuid ? (
+        <div className="text-sm font-bold text-slate-600">No data</div>
+      ) : (
+        <div className="flex items-center gap-3">
+          <PlayerFace username={entry.mc_username} />
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-black text-white">{entry.mc_username || entry.mc_uuid}</div>
+            <div className="truncate text-[10px] font-bold text-slate-500">{entry.season}</div>
+          </div>
+          <div className="shrink-0 text-base font-black tabular-nums text-sky-300">
+            {entry.value.toLocaleString()}{suffix ?? ""}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+function SecTitle({ title }: { title: string }) {
+  return <h3 className="mb-3 text-xs font-black uppercase tracking-widest text-slate-400">{title}</h3>;
+}
+function awardLabel(type: string) {
+  return type.startsWith("Single Game Record:")
+    ? `${type.replace("Single Game Record:", "Single Game").trim()} Record`
+    : type;
+}
+
 type StatRow = {
   mc_uuid: string; mc_username: string; rank: number; gp: number;
   ppg: number | null; rpg: number | null; orpg: number | null; drpg: number | null;
@@ -72,11 +124,19 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
   const [sortAsc, setSortAsc] = React.useState(false);
   const [page, setPage] = React.useState(0);
 
-  const [viewMode, setViewMode] = React.useState<"player" | "team">("player");
+  const [viewMode, setViewMode] = React.useState<"player" | "team" | "accolades">("player");
   const [teamStats, setTeamStats] = React.useState<TeamStatRow[]>([]);
   const [teamSortKey, setTeamSortKey] = React.useState<TeamSortKey>("ppg");
   const [teamSortAsc, setTeamSortAsc] = React.useState(false);
   const [teamView, setTeamView] = React.useState<"for"|"against">("for");
+
+  // Accolades state
+  const [accolades, setAccolades] = React.useState<Accolade[]>([]);
+  const [gameRecords, setGameRecords] = React.useState<Accolade[]>([]);
+  const [records, setRecords] = React.useState<Records | null>(null);
+  const [accoladesLoading, setAccoladesLoading] = React.useState(false);
+  const [accoladesLoaded, setAccoladesLoaded] = React.useState(false);
+  const [accoladeSeason, setAccoladeSeason] = React.useState("All");
 
   const seasonNum = parseInt(season.replace(/\D/g, "")) || 0;
   const showMpg = seasonNum >= 6;
@@ -136,6 +196,23 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
       .catch(() => setTeamStats([]));
   }, [slug, season, statType]);
 
+  // Load accolades lazily the first time the tab is opened
+  React.useEffect(() => {
+    if (!slug || viewMode !== "accolades" || accoladesLoaded) return;
+    setAccoladesLoading(true);
+    Promise.all([
+      fetch(`/api/accolades?league=${slug}`).then(r => r.json()),
+      fetch(`/api/stats/records?league=${slug}`).then(r => r.json()),
+    ]).then(([accoladesData, recordsData]) => {
+      const all = Array.isArray(accoladesData) ? accoladesData : [];
+      setGameRecords(all.filter((a: Accolade) => a.type.startsWith("Single Game Record:")));
+      setAccolades(all.filter((a: Accolade) => a.type !== "Finals Champion" && !a.type.startsWith("Single Game Record:")));
+      setRecords(recordsData && !recordsData.error ? recordsData : null);
+      setAccoladesLoading(false);
+      setAccoladesLoaded(true);
+    }).catch(() => setAccoladesLoading(false));
+  }, [slug, viewMode, accoladesLoaded]);
+
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
       setSortAsc((a) => !a);
@@ -194,52 +271,62 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
       {/* Header */}
-      <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between flex-wrap gap-3">
+      <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between flex-wrap gap-3 bg-slate-950">
         <div>
-          <h2 className="text-lg font-bold text-white">Stats</h2>
-          <p className="text-slate-500 text-xs mt-0.5">{leagueDisplay}</p>
+          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-red-400">{leagueDisplay}</div>
+          <h2 className="text-2xl font-black text-white leading-tight">Stats</h2>
+          <p className="text-slate-500 text-xs mt-0.5">
+            Player stats, team stats, advanced stats, accolades, and records.
+          </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <Link
-            href={`/${slug}/players/advanced`}
-            className="rounded-md border border-cyan-900/70 bg-cyan-950/40 px-3 py-1.5 text-xs font-bold text-cyan-200 hover:border-cyan-600 hover:bg-cyan-900/50 transition"
-          >
-            Advanced Player Lab
-          </Link>
-          {/* Player / Team toggle */}
-          <div className="flex rounded-md border border-slate-700 overflow-hidden text-xs">
-            {(["player", "team"] as const).map((v) => (
+          {viewMode !== "accolades" && (
+            <Link
+              href={`/${slug}/players/advanced`}
+              className="rounded-md border border-cyan-900/70 bg-cyan-950/40 px-3 py-1.5 text-xs font-bold text-cyan-200 hover:border-cyan-600 hover:bg-cyan-900/50 transition"
+            >
+              Advanced Player Lab
+            </Link>
+          )}
+          {/* Player / Team / Accolades toggle */}
+          <div className="flex rounded-lg border border-slate-700 overflow-hidden text-xs">
+            {(["player", "team", "accolades"] as const).map((v) => (
               <button key={v} onClick={() => setViewMode(v)}
-                className={`px-3 py-1.5 font-semibold capitalize transition ${
-                  viewMode === v ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700"
+                className={`px-3 py-2 font-black transition ${
+                  viewMode === v
+                    ? v === "accolades" ? "bg-red-600 text-white" : "bg-blue-600 text-white"
+                    : v === "accolades" ? "bg-red-950/40 text-red-200 hover:bg-red-900/60 hover:text-white" : "bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700"
                 }`}>
-                {v === "player" ? "Players" : "Teams"}
+                {v === "player" ? "Players" : v === "team" ? "Teams" : "Accolades & Records"}
               </button>
             ))}
           </div>
-          {/* Stat type toggle */}
-          <div className="flex rounded-md border border-slate-700 overflow-hidden text-xs">
-            {(["regular", "playoffs", "total"] as StatType[]).map((t) => (
-              <button
-                key={t}
-                onClick={() => setStatType(t)}
-                className={`px-3 py-1.5 font-semibold capitalize transition whitespace-nowrap ${
-                  statType === t ? "bg-slate-700 text-white" : "bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700"
-                }`}
+          {/* Stat type + season — hidden on Accolades tab */}
+          {viewMode !== "accolades" && (
+            <>
+              <div className="flex rounded-md border border-slate-700 overflow-hidden text-xs">
+                {(["regular", "playoffs", "total"] as StatType[]).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setStatType(t)}
+                    className={`px-3 py-1.5 font-semibold capitalize transition whitespace-nowrap ${
+                      statType === t ? "bg-slate-700 text-white" : "bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700"
+                    }`}
+                  >
+                    {t === "total" ? "Combined" : t.charAt(0).toUpperCase() + t.slice(1)}
+                  </button>
+                ))}
+              </div>
+              <select
+                className="rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs text-white focus:border-zinc-500 focus:outline-none"
+                value={season}
+                onChange={(e) => setSeason(e.target.value)}
               >
-                {t === "total" ? "Combined" : t.charAt(0).toUpperCase() + t.slice(1)}
-              </button>
-            ))}
-          </div>
-          {/* Season dropdown */}
-          <select
-            className="rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs text-white focus:border-zinc-500 focus:outline-none"
-            value={season}
-            onChange={(e) => setSeason(e.target.value)}
-          >
-            <option value="all">All Time</option>
-            {regularSeasons.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
+                <option value="all">All Time</option>
+                {regularSeasons.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </>
+          )}
         </div>
       </div>
 
@@ -340,6 +427,135 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
           )}
         </>
       ))}
+
+      {/* ── Accolades ── */}
+      {viewMode === "accolades" && (() => {
+        const availableSeasons = [...new Set(accolades.map(a => a.season.replace(/ Playoffs$/, "")))].sort();
+        const filtered = accoladeSeason === "All" ? accolades : accolades.filter(a => a.season === accoladeSeason || a.season === `${accoladeSeason} Playoffs`);
+        const groupedSeasons = [...new Set(filtered.map(a => a.season))].sort((a, b) => b.localeCompare(a));
+        const singleGameMap = gameRecords.reduce<Record<string, RecordEntry>>((map, a) => {
+          const key = a.type.replace("Single Game Record:", "").trim().toLowerCase();
+          const value = parseFloat((a.description ?? "").match(/^(\d+(\.\d+)?)/)?.[1] ?? "0");
+          map[key] = { mc_uuid: a.mc_uuid, mc_username: a.players?.mc_username ?? a.mc_uuid, value, season: a.season };
+          return map;
+        }, {});
+
+        return (
+          <div>
+            {accoladesLoading ? (
+              <div className="p-12 text-center text-slate-500">Loading...</div>
+            ) : (
+              <div className="space-y-0">
+                {/* Records */}
+                {records && (
+                  <div className="border-b border-slate-800">
+                    <div className="px-5 py-4 border-b border-slate-800">
+                      <h2 className="text-sm font-bold text-white">Records</h2>
+                      <p className="mt-0.5 text-xs text-slate-500">All-time bests from box scores</p>
+                    </div>
+                    <div className="space-y-6 p-4">
+                      {Object.keys(singleGameMap).length > 0 && (
+                        <section>
+                          <SecTitle title="Single Game" />
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                            <RecordCard label="Most Points in a Game" entry={singleGameMap.pts} />
+                            <RecordCard label="Most Rebounds in a Game" entry={singleGameMap.reb} />
+                            <RecordCard label="Most Assists in a Game" entry={singleGameMap.ast} />
+                            <RecordCard label="Most Steals in a Game" entry={singleGameMap.stl} />
+                            <RecordCard label="Most Blocks in a Game" entry={singleGameMap.blk} />
+                            <RecordCard label="Most Turnovers in a Game" entry={singleGameMap.tov} />
+                          </div>
+                        </section>
+                      )}
+                      <section>
+                        <SecTitle title="Season Totals" />
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                          <RecordCard label="Most Points" entry={records.season?.points} />
+                          <RecordCard label="Most Assists" entry={records.season?.assists} />
+                          <RecordCard label="Most Rebounds" entry={records.season?.rebounds} />
+                          <RecordCard label="Most Steals" entry={records.season?.steals} />
+                          <RecordCard label="Most Blocks" entry={records.season?.blocks} />
+                        </div>
+                      </section>
+                      <section>
+                        <SecTitle title="Season Averages" />
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                          <RecordCard label="Highest PPG" entry={records.seasonAvg?.ppg} suffix=" PPG" />
+                          <RecordCard label="Highest APG" entry={records.seasonAvg?.apg} suffix=" APG" />
+                          <RecordCard label="Highest RPG" entry={records.seasonAvg?.rpg} suffix=" RPG" />
+                          <RecordCard label="Highest SPG" entry={records.seasonAvg?.spg} suffix=" SPG" />
+                          <RecordCard label="Highest BPG" entry={records.seasonAvg?.bpg} suffix=" BPG" />
+                        </div>
+                      </section>
+                      <section>
+                        <SecTitle title="Career Totals" />
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                          <RecordCard label="Career Points" entry={records.career?.points} />
+                          <RecordCard label="Career Assists" entry={records.career?.assists} />
+                          <RecordCard label="Career Rebounds" entry={records.career?.rebounds} />
+                          <RecordCard label="Career Steals" entry={records.career?.steals} />
+                          <RecordCard label="Career Blocks" entry={records.career?.blocks} />
+                        </div>
+                      </section>
+                    </div>
+                  </div>
+                )}
+
+                {/* Award History */}
+                <div>
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-5 py-4">
+                    <div>
+                      <h2 className="text-sm font-bold text-white">Award History</h2>
+                    </div>
+                    <div className="flex overflow-x-auto rounded-lg border border-slate-700 text-xs">
+                      {["All", ...availableSeasons].map((s) => (
+                        <button key={s} type="button" onClick={() => setAccoladeSeason(s)}
+                          className={`whitespace-nowrap px-3 py-2 font-bold transition ${accoladeSeason === s ? "bg-red-600 text-white" : "bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white"}`}>
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {filtered.length === 0 ? (
+                    <div className="p-12 text-center text-slate-500">No accolades for {accoladeSeason === "All" ? "this league" : accoladeSeason} yet.</div>
+                  ) : (
+                    <div className="space-y-5 p-4">
+                      {groupedSeasons.map((s) => (
+                        <section key={s}>
+                          <SecTitle title={s} />
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                            {filtered.filter(a => a.season === s).sort((a, b) => {
+                              const order: Record<string, number> = { MVP: 0, OPY: 1, DPOY: 2 };
+                              return (order[a.type] ?? 99) - (order[b.type] ?? 99) || a.type.localeCompare(b.type);
+                            }).map((a) => {
+                              const username = a.players?.mc_username ?? a.mc_uuid;
+                              return (
+                                <div key={a.id} className="rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 transition hover:border-slate-600">
+                                  <div className="mb-3 flex items-center gap-3">
+                                    <PlayerFace username={username} />
+                                    <div className="min-w-0">
+                                      <div className="truncate text-sm font-black text-white">{username}</div>
+                                      <div className="text-[10px] font-bold text-slate-500">{a.season}</div>
+                                    </div>
+                                  </div>
+                                  <div className="rounded-lg border border-slate-700/60 bg-slate-900/70 px-3 py-2">
+                                    <div className="text-xs font-black text-white">{awardLabel(a.type)}</div>
+                                    {a.description && <div className="mt-1 text-[11px] text-slate-400">{a.description}</div>}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </section>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ── Team Stats ── */}
       {viewMode === "team" && (
