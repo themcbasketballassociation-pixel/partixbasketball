@@ -83,7 +83,7 @@ function slotWeight(slot: Slot) {
 function categoryCap(value: number, elite: number, solid: number, floor: number, penalty: number) {
   if (value >= elite) return 82;
   if (value >= solid) return Math.max(floor, 82 - Math.ceil((elite - value) * penalty));
-  return Math.max(floor, 76 - Math.ceil((solid - value) * penalty * 1.25));
+  return Math.max(floor, 74 - Math.ceil((solid - value) * penalty * 1.45));
 }
 
 function calculateRecord(picks: Pick[]) {
@@ -120,7 +120,7 @@ function calculateRecord(picks: Pick[]) {
     Math.max(0, 22 - benchProduction) * 1.8;
   const starPower = picks.reduce((sum, p) => sum + playerScore(p) * slotWeight(p.slot), 0) / totalWeight;
   const ovr = Math.max(
-    35,
+    0,
     Math.min(
       110,
       starPower * 0.5 +
@@ -143,18 +143,27 @@ function calculateRecord(picks: Pick[]) {
       efficiency * 0.29 +
       avgVorp * 0.37 +
       benchProduction * 0.09) % 1;
-  const baseWins = Math.max(8, Math.min(82, Math.floor(82 * Math.pow(ovr / 121, 3.35) + recordTexture)));
+  const baseWins = Math.max(0, Math.min(82, Math.floor(82 * Math.pow(ovr / 121, 3.35) + recordTexture)));
   const ceilings = [
-    categoryCap(scoring, 24, 19, 62, 1.55),
-    categoryCap(rebounding, 9, 7, 58, 4.1),
-    categoryCap(playmaking, 7, 5, 58, 4.3),
-    categoryCap(defense, 4.1, 2.9, 56, 7.2),
-    categoryCap(efficiency, 3.8, 1.3, 57, 3.6),
-    categoryCap(avgVorp, 5.8, 3.4, 60, 3.2),
-    categoryCap(weakestStarter, 68, 52, 56, 0.78),
-    categoryCap(benchProduction, 52, 32, 48, 0.86),
+    categoryCap(scoring, 24, 19, 0, 2.2),
+    categoryCap(rebounding, 9, 7, 0, 5.8),
+    categoryCap(playmaking, 7, 5, 0, 6.1),
+    categoryCap(defense, 4.1, 2.9, 0, 9.4),
+    categoryCap(efficiency, 3.8, 1.3, 0, 4.6),
+    categoryCap(avgVorp, 5.8, 3.4, 0, 4.3),
+    categoryCap(weakestStarter, 68, 52, 0, 1.05),
+    categoryCap(benchProduction, 52, 32, 0, 1.2),
   ];
-  const wins = Math.min(baseWins, ...ceilings);
+  const collapsePenalty =
+    Math.max(0, 8 - scoring) * 1.7 +
+    Math.max(0, 3 - rebounding) * 4.2 +
+    Math.max(0, 1.5 - playmaking) * 5 +
+    Math.max(0, 0.8 - defense) * 8 +
+    Math.max(0, -2.5 - efficiency) * 2.8 +
+    Math.max(0, 0 - avgVorp) * 2.4 +
+    Math.max(0, 5 - benchProduction) * 2.2 +
+    Math.max(0, 12 - weakestStarter) * 0.7;
+  const wins = Math.max(0, Math.min(baseWins, ...ceilings) - Math.round(collapsePenalty));
   return {
     wins,
     losses: 82 - wins,
