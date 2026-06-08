@@ -80,6 +80,12 @@ function slotWeight(slot: Slot) {
   return slot === "Bench" ? 0.62 : 1;
 }
 
+function categoryCap(value: number, elite: number, solid: number, floor: number, penalty: number) {
+  if (value >= elite) return 82;
+  if (value >= solid) return Math.max(floor, 82 - Math.ceil((elite - value) * penalty));
+  return Math.max(floor, 76 - Math.ceil((solid - value) * penalty * 1.25));
+}
+
 function calculateRecord(picks: Pick[]) {
   if (picks.length < SLOTS.length) return { wins: 0, losses: 0, ovr: 0, scoring: 0, rebounding: 0, playmaking: 0, defense: 0, efficiency: 0 };
 
@@ -129,16 +135,24 @@ function calculateRecord(picks: Pick[]) {
         categoryPenalty
     )
   );
-  const baseWins = Math.max(8, Math.min(82, Math.round(82 * Math.pow(ovr / 118, 3.1))));
+  const recordTexture =
+    (scoring * 0.31 +
+      rebounding * 0.47 +
+      playmaking * 0.53 +
+      defense * 0.71 +
+      efficiency * 0.29 +
+      avgVorp * 0.37 +
+      benchProduction * 0.09) % 1;
+  const baseWins = Math.max(8, Math.min(82, Math.floor(82 * Math.pow(ovr / 121, 3.35) + recordTexture)));
   const ceilings = [
-    scoring >= 23 ? 82 : scoring >= 20 ? 79 : scoring >= 17 ? 74 : 68,
-    rebounding >= 8.2 ? 82 : rebounding >= 7 ? 78 : rebounding >= 5.8 ? 72 : 66,
-    playmaking >= 6.2 ? 82 : playmaking >= 5 ? 78 : playmaking >= 4 ? 72 : 65,
-    defense >= 3.4 ? 82 : defense >= 2.8 ? 78 : defense >= 2.2 ? 72 : 64,
-    efficiency >= 2.8 ? 82 : efficiency >= 1.4 ? 78 : efficiency >= 0 ? 72 : 66,
-    avgVorp >= 5 ? 82 : avgVorp >= 3.5 ? 79 : avgVorp >= 2 ? 74 : 68,
-    weakestStarter >= 62 ? 82 : weakestStarter >= 52 ? 78 : weakestStarter >= 44 ? 72 : 64,
-    benchProduction >= 45 ? 82 : benchProduction >= 32 ? 76 : benchProduction >= 22 ? 68 : benchProduction >= 12 ? 60 : 52,
+    categoryCap(scoring, 24, 19, 62, 1.55),
+    categoryCap(rebounding, 9, 7, 58, 4.1),
+    categoryCap(playmaking, 7, 5, 58, 4.3),
+    categoryCap(defense, 4.1, 2.9, 56, 7.2),
+    categoryCap(efficiency, 3.8, 1.3, 57, 3.6),
+    categoryCap(avgVorp, 5.8, 3.4, 60, 3.2),
+    categoryCap(weakestStarter, 68, 52, 56, 0.78),
+    categoryCap(benchProduction, 52, 32, 48, 0.86),
   ];
   const wins = Math.min(baseWins, ...ceilings);
   return {
