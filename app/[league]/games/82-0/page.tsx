@@ -82,8 +82,13 @@ function slotWeight(slot: Slot) {
 
 function categoryCap(value: number, elite: number, solid: number, floor: number, penalty: number) {
   if (value >= elite) return 82;
-  if (value >= solid) return Math.max(floor, 82 - Math.ceil((elite - value) * penalty));
-  return Math.max(floor, 74 - Math.ceil((solid - value) * penalty * 1.45));
+  if (value >= solid) return Math.max(floor, 82 - (elite - value) * penalty);
+  return Math.max(floor, 74 - (solid - value) * penalty * 1.45);
+}
+
+function seasonLookupKeys(season: string) {
+  const n = season.match(/\d+/)?.[0];
+  return [...new Set([season, n, n ? `S${n}` : null].filter((s): s is string => !!s))];
 }
 
 function calculateRecord(picks: Pick[]) {
@@ -143,7 +148,7 @@ function calculateRecord(picks: Pick[]) {
       efficiency * 0.29 +
       avgVorp * 0.37 +
       benchProduction * 0.09) % 1;
-  const baseWins = Math.max(0, Math.min(82, Math.floor(82 * Math.pow(ovr / 121, 3.35) + recordTexture)));
+  const baseWins = Math.max(0, Math.min(82, 82 * Math.pow(ovr / 121, 3.35) + recordTexture));
   const ceilings = [
     categoryCap(scoring, 24, 19, 0, 2.2),
     categoryCap(rebounding, 9, 7, 0, 5.8),
@@ -163,7 +168,8 @@ function calculateRecord(picks: Pick[]) {
     Math.max(0, 0 - avgVorp) * 2.4 +
     Math.max(0, 5 - benchProduction) * 2.2 +
     Math.max(0, 12 - weakestStarter) * 0.7;
-  const wins = Math.max(0, Math.min(baseWins, ...ceilings) - Math.round(collapsePenalty));
+  const winsFloat = Math.max(0, Math.min(baseWins, ...ceilings) - collapsePenalty);
+  const wins = Math.max(0, Math.min(82, Math.round(winsFloat)));
   return {
     wins,
     losses: 82 - wins,
@@ -230,27 +236,51 @@ export default function EightyTwoOhPage({ params }: { params?: Promise<{ league?
 
       const fetched = await Promise.all(
         seasons.map(async (season) => {
-          const [statsRes, teamsRes] = await Promise.all([
+          const rosterRequests = seasonLookupKeys(season).map((key) =>
+            fetch(`/api/teams/players?league=${league}&season=${encodeURIComponent(key)}`)
+              .then((r) => r.json())
+              .catch(() => [])
+          );
+          const [statsRes, teamsRes, ...rosterResults] = await Promise.all([
             fetch(`/api/stats?league=${league}&season=${encodeURIComponent(season)}&type=regular&strictTeamSeason=1`),
             fetch(`/api/teams?league=${league}&season=${encodeURIComponent(season)}`),
+            ...rosterRequests,
           ]);
           const rows = await statsRes.json().catch(() => []);
           const teams = await teamsRes.json().catch(() => []);
-          const validTeamIds = new Set(
-            Array.isArray(teams)
-              ? teams.map((team: Team) => team.id).filter((id: string | undefined): id is string => !!id)
-              : []
-          );
+          const validTeams = new Map<string, Team>();
+          if (Array.isArray(teams)) {
+            for (const team of teams as Team[]) {
+              if (team.id) validTeams.set(team.id, team);
+            }
+          }
+          const rosterTeamByPlayer = new Map<string, Team>();
+          for (const rosterRows of rosterResults) {
+            if (!Array.isArray(rosterRows)) continue;
+            for (const entry of rosterRows) {
+              const playerUuid = entry?.mc_uuid as string | undefined;
+              const team = entry?.teams as Team | undefined;
+              if (playerUuid && team?.id && validTeams.has(team.id) && !rosterTeamByPlayer.has(playerUuid)) {
+                rosterTeamByPlayer.set(playerUuid, validTeams.get(team.id)!);
+              }
+            }
+          }
           return Array.isArray(rows)
             ? rows
-                .filter((row: StatRow) => row.mc_uuid && row.mc_username && row.team?.id && validTeamIds.has(row.team.id) && (row.gp ?? 0) > 0)
-                .map((row: StatRow) => ({ ...row, season }))
+                .map((row: StatRow) => {
+                  const exactTeam = row.team?.id && validTeams.has(row.team.id)
+                    ? validTeams.get(row.team.id)!
+                    : rosterTeamByPlayer.get(row.mc_uuid);
+                  return exactTeam ? { ...row, team: exactTeam, season } : null;
+                })
+                .filter((row: (StatRow | null)): row is StatRow => !!row && !!row.mc_uuid && !!row.mc_username && (row.gp ?? 0) > 0)
             : [];
         })
       );
 
       const byPool = new Map<string, Pool>();
-      for (const row of fetched.flat()) {
+      const statRows = fetched.flat().filter((row) => row != null);
+      for (const row of statRows) {
         if (!row.team) continue;
         const key = `${row.team.id}:${row.season}`;
         const existing = byPool.get(key);
@@ -263,7 +293,7 @@ export default function EightyTwoOhPage({ params }: { params?: Promise<{ league?
 
       const validPools = [...byPool.values()]
         .map((pool) => ({ ...pool, players: [...pool.players].sort((a, b) => playerScore(b) - playerScore(a)) }))
-        .filter((pool) => pool.players.length >= 2);
+        .filter((pool) => pool.players.length >= 1);
 
       if (!cancelled) {
         setPools(validPools);
