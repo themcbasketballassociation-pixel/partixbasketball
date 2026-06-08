@@ -97,7 +97,7 @@ const playerImpactScore = (row: StatRow) => {
   const playmaking = row.apg ?? 0;
   const defense = (row.spg ?? 0) + (row.bpg ?? 0);
   const turnovers = turnoverOverExpected(row.topg ?? 0, row.possession_time_pg);
-  const shootingTrust = clamp(1 - Math.max(0, turnovers) * 0.18 - Math.max(0, (row.topg ?? 0) - 3.5) * 0.1, 0.45, 1);
+  const shootingTrust = clamp(1 - Math.max(0, turnovers) * 0.24, 0.45, 1);
   const shooting = row.fg_pct != null ? ((row.fg_pct - 45) / 4) * shootingTrust : 0;
   return scoring + boards * 0.45 + playmaking * 0.9 + defense * 1.6 + shooting - Math.max(0, turnovers) * 1.25 + Math.max(0, -turnovers) * 0.25;
 };

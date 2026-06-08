@@ -77,7 +77,7 @@ function turnoverOverExpected(topg: number, possPg: number | null | undefined) {
 
 function shootingTrust(p: StatRow) {
   const tovOver = turnoverOverExpected(p.topg ?? 0, p.possession_time_pg);
-  return clamp(1 - Math.max(0, tovOver) * 0.2 - Math.max(0, (p.topg ?? 0) - 3.5) * 0.1, 0.45, 1);
+  return clamp(1 - Math.max(0, tovOver) * 0.26, 0.45, 1);
 }
 
 function playerScore(p: StatRow) {

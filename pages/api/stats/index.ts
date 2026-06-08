@@ -34,8 +34,8 @@ function possessionAdjustedTurnovers(topg: number, possPg: number, leagueAvgTopg
   return topg - expected;
 }
 
-function shootingTrustFromTurnovers(turnoverOverExpected: number, topg: number) {
-  const pressure = Math.max(0, turnoverOverExpected) * 0.22 + Math.max(0, topg - 3.5) * 0.12;
+function shootingTrustFromTurnovers(turnoverOverExpected: number) {
+  const pressure = Math.max(0, turnoverOverExpected) * 0.28;
   return clamp(1 - pressure, 0.45, 1);
 }
 
@@ -46,7 +46,7 @@ function manualImpact(row: Record<string, unknown>, leagueAvgFg: number, leagueA
   const topg = num(row, "topg");
   const possPg = num(row, "possession_time_pg");
   const tovOverExpected = possessionAdjustedTurnovers(topg, possPg);
-  const shootingTrust = shootingTrustFromTurnovers(tovOverExpected, topg);
+  const shootingTrust = shootingTrustFromTurnovers(tovOverExpected);
   const fgEff = fg > 0 && leagueAvgFg > 0 ? (fg - leagueAvgFg) * 0.055 * shootingTrust : 0;
   const threeEff = three > 0 && leagueAvgThree > 0 ? (three - leagueAvgThree) * 0.035 * shootingTrust : 0;
   const playmaking = 0.82 * num(row, "apg") - Math.max(0, tovOverExpected) * 0.9 + Math.max(0, -tovOverExpected) * 0.18;
@@ -324,7 +324,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const passPg = cv.passGames > 0 ? cv.pass / cv.passGames : 0;
         const topg = cv.tov / gp;
         const tovOverExpected = possessionAdjustedTurnovers(topg, possPg, leagueAvgTopg, leagueAvgPossPg);
-        const shootingTrust = shootingTrustFromTurnovers(tovOverExpected, topg);
+        const shootingTrust = shootingTrustFromTurnovers(tovOverExpected);
 
         // Efficiency matters, but high-turnover ball handlers get less shooting credit.
         const fgEff = (fgPct - 0.45) * fgaPg * 1.8 * shootingTrust;
