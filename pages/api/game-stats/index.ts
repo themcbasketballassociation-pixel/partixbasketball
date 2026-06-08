@@ -44,12 +44,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "POST") {
     const admin = await requireAdmin(req, res);
     if (!admin) return;
-    const { game_id, mc_uuid, points, rebounds_off, rebounds_def, assists, steals, blocks, turnovers, minutes_played, fg_made, fg_attempted, three_pt_made, three_pt_attempted, pass_attempts, possession_time, ft_made, ft_attempted, fouls } = req.body;
+    const { game_id, mc_uuid, team_id, points, rebounds_off, rebounds_def, assists, steals, blocks, turnovers, minutes_played, fg_made, fg_attempted, three_pt_made, three_pt_attempted, pass_attempts, possession_time, ft_made, ft_attempted, fouls } = req.body;
     if (!game_id || !mc_uuid) return res.status(400).json({ error: "game_id, mc_uuid required" });
     const { data, error } = await supabase
       .from("game_stats")
       .upsert([{
         game_id, mc_uuid,
+        team_id: team_id ?? null,
         points: points ?? null, rebounds_off: rebounds_off ?? null, rebounds_def: rebounds_def ?? null,
         assists: assists ?? null, steals: steals ?? null, blocks: blocks ?? null,
         turnovers: turnovers ?? null, minutes_played: minutes_played ?? null,

@@ -17,7 +17,7 @@ type Game = {
   home_team: Team; away_team: Team;
 };
 type GameStat = {
-  id: string; game_id: string; mc_uuid: string;
+  id: string; game_id: string; mc_uuid: string; team_id: string | null;
   points: number | null; rebounds_off: number | null; rebounds_def: number | null;
   assists: number | null; steals: number | null; blocks: number | null;
   turnovers: number | null; minutes_played: number | null;
@@ -2089,6 +2089,7 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
   const [cleanMsg, setCleanMsg] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState("");
+  const [playerTeams, setPlayerTeams] = useState<PlayerTeam[]>([]);
 
   useEffect(() => {
     if (!season) return;
@@ -2096,10 +2097,12 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
       fetch(`/api/games?league=${league}&season=${encodeURIComponent(season)}`).then((r) => r.json()),
       fetch("/api/players").then((r) => r.json()),
       fetch(`/api/game-stats?league=${league}&season=${encodeURIComponent(season)}`).then(r => r.json()),
-    ]).then(([g, p, statted]) => {
+      fetch(`/api/teams/players?league=${league}&season=${encodeURIComponent(season)}`).then(r => r.json()),
+    ]).then(([g, p, statted, pt]) => {
       setGames(Array.isArray(g) ? g.filter((x: Game) => x.status === "completed") : []);
       setPlayers(Array.isArray(p) ? p : []);
       setStattedIds(new Set(Array.isArray(statted) ? statted : []));
+      setPlayerTeams(Array.isArray(pt) ? pt : []);
     });
   }, [league, season]);
 
@@ -2153,16 +2156,23 @@ function BoxScoresTab({ league, season }: { league: string; season: string }) {
       const mi = parseInt(m); const ai = parseInt(a);
       return [isNaN(mi) ? null : mi, isNaN(ai) ? null : ai];
     };
+    const selectedGame = games.find(g => g.id === selectedGameId);
     for (const uuid of activeUuids) {
       const fields = statForm[uuid] ?? {};
       const [fgMade, fgAtt] = parseSlash(fields.fg);
       const [tpMade, tpAtt] = parseSlash(fields.three_fg);
       const [ftMade, ftAtt] = parseSlash(fields.ft);
+      // Lock in which team this player was on at save time so trades don't break the boxscore later
+      const pt = playerTeams.find(p => p.mc_uuid === uuid);
+      const teamId = pt?.team_id === selectedGame?.home_team_id ? selectedGame?.home_team_id
+        : pt?.team_id === selectedGame?.away_team_id ? selectedGame?.away_team_id
+        : null;
       const r = await fetch("/api/game-stats", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           game_id: selectedGameId, mc_uuid: uuid,
+          team_id: teamId ?? null,
           points: ni(fields.points), rebounds_off: ni(fields.rebounds_off),
           rebounds_def: ni(fields.rebounds_def), assists: ni(fields.assists),
           steals: ni(fields.steals), blocks: ni(fields.blocks),

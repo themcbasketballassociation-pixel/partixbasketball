@@ -12,7 +12,7 @@ type Game = {
   home_team: Team; away_team: Team;
 };
 type GameStat = {
-  id: string; mc_uuid: string; game_id: string;
+  id: string; mc_uuid: string; game_id: string; team_id: string | null;
   points: number | null; rebounds_off: number | null; rebounds_def: number | null;
   assists: number | null; steals: number | null; blocks: number | null; turnovers: number | null;
   minutes_played: number | null; fg_made: number | null; fg_attempted: number | null;
@@ -169,25 +169,37 @@ function splitStats(stats: GameStat[], game: Game, allPlayerTeams: PlayerTeam[])
   const homeAbbr = game.home_team?.abbreviation?.toUpperCase();
   const awayAbbr = game.away_team?.abbreviation?.toUpperCase();
 
-  let homeStats = stats.filter(s => allPlayerTeams.some(pt => pt.mc_uuid === s.mc_uuid && pt.team_id === homeId));
-  let awayStats = stats.filter(s => allPlayerTeams.some(pt => pt.mc_uuid === s.mc_uuid && pt.team_id === awayId));
-  let matched = homeStats.length + awayStats.length;
+  const homeStats: GameStat[] = [];
+  const awayStats: GameStat[] = [];
 
-  if (matched < Math.ceil(stats.length / 2)) {
-    homeStats = stats.filter(s => allPlayerTeams.some(pt => pt.mc_uuid === s.mc_uuid && pt.teams?.abbreviation?.toUpperCase() === homeAbbr));
-    awayStats = stats.filter(s => allPlayerTeams.some(pt => pt.mc_uuid === s.mc_uuid && pt.teams?.abbreviation?.toUpperCase() === awayAbbr));
-    matched = homeStats.length + awayStats.length;
+  for (const s of stats) {
+    // 1. Stored team_id — written at stat-save time, survives all future trades
+    if (s.team_id === homeId) { homeStats.push(s); continue; }
+    if (s.team_id === awayId) { awayStats.push(s); continue; }
+
+    // 2. Fall back to current roster/contract (works for players who haven't been traded)
+    const pt = allPlayerTeams.find(p => p.mc_uuid === s.mc_uuid);
+    const ptId   = pt?.team_id;
+    const ptAbbr = pt?.teams?.abbreviation?.toUpperCase();
+    if (ptId === homeId || ptAbbr === homeAbbr) { homeStats.push(s); continue; }
+    if (ptId === awayId || ptAbbr === awayAbbr) { awayStats.push(s); continue; }
+
+    // 3. Traded player with no stored team_id — still show under home so nothing is dropped
+    homeStats.push(s);
   }
 
-  const allFallback = stats.length > 0 && matched < Math.ceil(stats.length / 2) ? stats : null;
-
-  // Always show every stat row — players traded since the game was played won't match
-  // either team via current contracts, so append them to the home table so nothing is dropped.
-  if (!allFallback) {
-    const matchedUuids = new Set([...homeStats, ...awayStats].map(s => s.mc_uuid));
-    const unmatched = stats.filter(s => !matchedUuids.has(s.mc_uuid));
-    if (unmatched.length > 0) homeStats = [...homeStats, ...unmatched];
-  }
+  // Legacy fallback: if this is an old game with no team_id stored AND contracts barely match,
+  // collapse to one table so the data is at least readable.
+  const noTeamIdStats = stats.filter(s => !s.team_id);
+  const contractMatched = noTeamIdStats.filter(s =>
+    allPlayerTeams.some(pt => pt.mc_uuid === s.mc_uuid && (pt.team_id === homeId || pt.team_id === awayId))
+  ).length;
+  const hasStoredTeamIds = stats.some(s => s.team_id);
+  const allFallback =
+    !hasStoredTeamIds &&
+    noTeamIdStats.length > 0 &&
+    contractMatched < Math.ceil(noTeamIdStats.length / 2)
+      ? stats : null;
 
   return { homeStats, awayStats, allFallback };
 }
