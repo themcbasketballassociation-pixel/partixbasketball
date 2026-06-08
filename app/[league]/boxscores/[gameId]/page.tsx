@@ -180,6 +180,15 @@ function splitStats(stats: GameStat[], game: Game, allPlayerTeams: PlayerTeam[])
   }
 
   const allFallback = stats.length > 0 && matched < Math.ceil(stats.length / 2) ? stats : null;
+
+  // Always show every stat row — players traded since the game was played won't match
+  // either team via current contracts, so append them to the home table so nothing is dropped.
+  if (!allFallback) {
+    const matchedUuids = new Set([...homeStats, ...awayStats].map(s => s.mc_uuid));
+    const unmatched = stats.filter(s => !matchedUuids.has(s.mc_uuid));
+    if (unmatched.length > 0) homeStats = [...homeStats, ...unmatched];
+  }
+
   return { homeStats, awayStats, allFallback };
 }
 
