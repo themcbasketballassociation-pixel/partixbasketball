@@ -23,20 +23,41 @@ function num(row: Record<string, unknown>, key: string) {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
+function possessionAdjustedTurnovers(topg: number, possPg: number, leagueAvgTopg = 1.4, leagueAvgPossPg = 220) {
+  if (topg <= 0) return 0;
+  if (possPg <= 0 || leagueAvgPossPg <= 0) return topg;
+  const expected = Math.max(0.45, leagueAvgTopg * clamp(possPg / leagueAvgPossPg, 0.45, 1.85));
+  return topg - expected;
+}
+
+function shootingTrustFromTurnovers(turnoverOverExpected: number, topg: number) {
+  const pressure = Math.max(0, turnoverOverExpected) * 0.22 + Math.max(0, topg - 3.5) * 0.12;
+  return clamp(1 - pressure, 0.45, 1);
+}
+
 function manualImpact(row: Record<string, unknown>, leagueAvgFg: number, leagueAvgThree: number) {
   const fg = num(row, "fg_pct");
   const three = num(row, "three_pt_pct");
   const tppg = num(row, "tppg");
-  const fgEff = fg > 0 && leagueAvgFg > 0 ? (fg - leagueAvgFg) * 0.055 : 0;
-  const threeEff = three > 0 && leagueAvgThree > 0 ? (three - leagueAvgThree) * 0.035 : 0;
+  const topg = num(row, "topg");
+  const possPg = num(row, "possession_time_pg");
+  const tovOverExpected = possessionAdjustedTurnovers(topg, possPg);
+  const shootingTrust = shootingTrustFromTurnovers(tovOverExpected, topg);
+  const fgEff = fg > 0 && leagueAvgFg > 0 ? (fg - leagueAvgFg) * 0.055 * shootingTrust : 0;
+  const threeEff = three > 0 && leagueAvgThree > 0 ? (three - leagueAvgThree) * 0.035 * shootingTrust : 0;
+  const playmaking = 0.82 * num(row, "apg") - Math.max(0, tovOverExpected) * 0.9 + Math.max(0, -tovOverExpected) * 0.18;
   return (
     num(row, "ppg") +
     0.55 * num(row, "rpg") +
-    0.75 * num(row, "apg") +
+    playmaking +
     1.7 * num(row, "spg") +
     1.5 * num(row, "bpg") +
     0.25 * tppg -
-    1.15 * num(row, "topg") +
+    0.45 * Math.max(0, topg - 4) +
     fgEff +
     threeEff
   );
@@ -299,23 +320,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             0.35 * cv.tpm -
             1.15 * cv.tov) / gp;
 
-        // Extra penalty for above-average turnovers (per game over the avg)
-        const extraTovPen = Math.max(0, cv.tov / gp - leagueAvgTopg) * 0.65;
-
-        // Efficiency matters, but it only matters with volume.
-        const fgEff = (fgPct - 0.45) * fgaPg * 1.8;
-        const threeEff = leagueAvgTpct > 0 ? (tpPct - leagueAvgTpct) * tpaPg * 1.25 : 0;
-
-        // High possession time with low passing is a drag; efficient low-touch shooting
-        // gets a small bump.
         const possPg = cv.possGames > 0 ? cv.poss / cv.possGames : 0;
         const passPg = cv.passGames > 0 ? cv.pass / cv.passGames : 0;
+        const topg = cv.tov / gp;
+        const tovOverExpected = possessionAdjustedTurnovers(topg, possPg, leagueAvgTopg, leagueAvgPossPg);
+        const shootingTrust = shootingTrustFromTurnovers(tovOverExpected, topg);
+
+        // Efficiency matters, but high-turnover ball handlers get less shooting credit.
+        const fgEff = (fgPct - 0.45) * fgaPg * 1.8 * shootingTrust;
+        const threeEff = leagueAvgTpct > 0 ? (tpPct - leagueAvgTpct) * tpaPg * 1.25 * shootingTrust : 0;
+
+        // High possession time with low passing is a drag; low-turnover creation gets credit.
         const possBalance = leagueAvgPossPg > 0
           ? Math.max(-1.5, Math.min(1.5, (leagueAvgPossPg - possPg) / Math.max(leagueAvgPossPg, 1))) * Math.min(cv.tpm / Math.max(gp, 1), 3) * 0.18
           : 0;
-        const playmakingBalance = passPg > 0 ? Math.min(passPg / 45, 1.2) * 0.35 : 0;
+        const playmakingBalance =
+          (passPg > 0 ? Math.min(passPg / 45, 1.2) * 0.35 : 0) +
+          Math.max(0, -tovOverExpected) * 0.25 -
+          Math.max(0, tovOverExpected) * 0.85;
 
-        playerBoxPg[uuid] = boxPg + fgEff + threeEff + possBalance + playmakingBalance - extraTovPen;
+        playerBoxPg[uuid] = boxPg + fgEff + threeEff + possBalance + playmakingBalance;
       }
 
       const vals = Object.values(playerBoxPg);

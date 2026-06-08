@@ -18,6 +18,7 @@ type StatRow = {
   fg_pct: number | null;
   three_pt_pct: number | null;
   topg: number | null;
+  possession_time_pg?: number | null;
   vorp: number | null;
   team?: Team | null;
 };
@@ -63,6 +64,22 @@ function shuffle<T>(items: T[], seed: number) {
   return arr;
 }
 
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function turnoverOverExpected(topg: number, possPg: number | null | undefined) {
+  if (topg <= 0) return 0;
+  if (!possPg || possPg <= 0) return topg - 1.4;
+  const expected = Math.max(0.45, 1.4 * clamp(possPg / 220, 0.45, 1.85));
+  return topg - expected;
+}
+
+function shootingTrust(p: StatRow) {
+  const tovOver = turnoverOverExpected(p.topg ?? 0, p.possession_time_pg);
+  return clamp(1 - Math.max(0, tovOver) * 0.2 - Math.max(0, (p.topg ?? 0) - 3.5) * 0.1, 0.45, 1);
+}
+
 function playerScore(p: StatRow) {
   const scoring = p.ppg ?? 0;
   const boards = p.rpg ?? 0;
@@ -71,9 +88,10 @@ function playerScore(p: StatRow) {
   const blocks = p.bpg ?? 0;
   const shooting = p.fg_pct != null ? (p.fg_pct - 45) * 0.18 : 0;
   const three = p.three_pt_pct != null ? (p.three_pt_pct - 32) * 0.1 : 0;
-  const turnovers = p.topg ?? 0;
+  const turnovers = turnoverOverExpected(p.topg ?? 0, p.possession_time_pg);
   const vorp = p.vorp ?? 0;
-  return scoring * 1.45 + boards * 2.55 + passing * 3.25 + steals * 7.25 + blocks * 6.4 + shooting + three + vorp * 1.5 - turnovers * 3;
+  const trust = shootingTrust(p);
+  return scoring * 1.45 + boards * 2.55 + passing * 3.45 + steals * 7.25 + blocks * 6.4 + (shooting + three) * trust + vorp * 1.5 - Math.max(0, turnovers) * 4 + Math.max(0, -turnovers) * 0.45;
 }
 
 function slotWeight(slot: Slot) {
@@ -98,12 +116,13 @@ function calculateRecord(picks: Pick[]) {
   const avg = (fn: (pick: Pick) => number) => picks.reduce((sum, pick) => sum + fn(pick) * slotWeight(pick.slot), 0) / totalWeight;
   const scoring = avg((p) => p.ppg ?? 0);
   const rebounding = avg((p) => p.rpg ?? 0);
-  const playmaking = avg((p) => p.apg ?? 0);
+  const playmaking = avg((p) => (p.apg ?? 0) - Math.max(0, turnoverOverExpected(p.topg ?? 0, p.possession_time_pg)) * 0.7 + Math.max(0, -turnoverOverExpected(p.topg ?? 0, p.possession_time_pg)) * 0.18);
   const defense = avg((p) => (p.spg ?? 0) * 1.35 + (p.bpg ?? 0) * 1.2);
   const efficiency = avg((p) => {
     const fg = p.fg_pct != null ? (p.fg_pct - 42) / 3.2 : 0;
     const three = p.three_pt_pct != null ? (p.three_pt_pct - 30) / 5 : 0;
-    return fg + three - (p.topg ?? 0) * 0.75;
+    const tovOver = turnoverOverExpected(p.topg ?? 0, p.possession_time_pg);
+    return (fg + three) * shootingTrust(p) - Math.max(0, tovOver) * 0.8;
   });
   const avgVorp = avg((p) => p.vorp ?? 0);
   const teamCount = new Set(picks.map((p) => p.team?.id).filter(Boolean)).size;

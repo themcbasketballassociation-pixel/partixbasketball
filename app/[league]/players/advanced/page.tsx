@@ -82,14 +82,24 @@ const vorpColor = (value: number | null | undefined) => {
   return "text-red-300";
 };
 
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+const turnoverOverExpected = (topg: number, possPg: number | null | undefined) => {
+  if (topg <= 0) return 0;
+  if (!possPg || possPg <= 0) return topg - 1.4;
+  const expected = Math.max(0.45, 1.4 * clamp(possPg / 220, 0.45, 1.85));
+  return topg - expected;
+};
+
 const playerImpactScore = (row: StatRow) => {
   const scoring = row.ppg ?? 0;
   const boards = row.rpg ?? 0;
   const playmaking = row.apg ?? 0;
   const defense = (row.spg ?? 0) + (row.bpg ?? 0);
-  const turnovers = row.topg ?? 0;
-  const shooting = row.fg_pct != null ? (row.fg_pct - 45) / 4 : 0;
-  return scoring + boards * 0.45 + playmaking * 0.75 + defense * 1.6 + shooting - turnovers * 1.1;
+  const turnovers = turnoverOverExpected(row.topg ?? 0, row.possession_time_pg);
+  const shootingTrust = clamp(1 - Math.max(0, turnovers) * 0.18 - Math.max(0, (row.topg ?? 0) - 3.5) * 0.1, 0.45, 1);
+  const shooting = row.fg_pct != null ? ((row.fg_pct - 45) / 4) * shootingTrust : 0;
+  return scoring + boards * 0.45 + playmaking * 0.9 + defense * 1.6 + shooting - Math.max(0, turnovers) * 1.25 + Math.max(0, -turnovers) * 0.25;
 };
 
 const recentWeightFor = (seasonNum: number, latestSeasonNum: number) => {

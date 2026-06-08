@@ -276,7 +276,7 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
           <div className="text-[10px] font-black uppercase tracking-[0.2em] text-red-400">{leagueDisplay}</div>
           <h2 className="text-2xl font-black text-white leading-tight">Stats</h2>
           <p className="text-slate-500 text-xs mt-0.5">
-            Player stats, team stats, advanced stats, accolades, and records.
+            Player stats, team stats, advanced stats, accolades, and records. Playmaking now adjusts turnovers by possession time.
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
