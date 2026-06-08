@@ -76,10 +76,15 @@ function playerScore(p: StatRow) {
   return scoring * 1.45 + boards * 2.55 + passing * 3.25 + steals * 7.25 + blocks * 6.4 + shooting + three + vorp * 1.5 - turnovers * 3;
 }
 
+function slotWeight(slot: Slot) {
+  return slot === "Bench" ? 0.62 : 1;
+}
+
 function calculateRecord(picks: Pick[]) {
   if (picks.length < SLOTS.length) return { wins: 0, losses: 0, ovr: 0, scoring: 0, rebounding: 0, playmaking: 0, defense: 0, efficiency: 0 };
 
-  const avg = (fn: (pick: Pick) => number) => picks.reduce((sum, pick) => sum + fn(pick), 0) / picks.length;
+  const totalWeight = picks.reduce((sum, pick) => sum + slotWeight(pick.slot), 0);
+  const avg = (fn: (pick: Pick) => number) => picks.reduce((sum, pick) => sum + fn(pick) * slotWeight(pick.slot), 0) / totalWeight;
   const scoring = avg((p) => p.ppg ?? 0);
   const rebounding = avg((p) => p.rpg ?? 0);
   const playmaking = avg((p) => p.apg ?? 0);
@@ -93,16 +98,21 @@ function calculateRecord(picks: Pick[]) {
   const teamCount = new Set(picks.map((p) => p.team?.id).filter(Boolean)).size;
   const seasonSpread = new Set(picks.map((p) => p.season)).size;
   const balanceBonus = Math.min(3, teamCount * 0.25 + seasonSpread * 0.2);
-  const weakestPlayer = Math.min(...picks.map(playerScore));
-  const weakLinkPenalty = Math.max(0, 44 - weakestPlayer) * 1.35;
+  const starterScores = picks.filter((p) => p.slot !== "Bench").map(playerScore);
+  const bench = picks.find((p) => p.slot === "Bench");
+  const benchScore = bench ? playerScore(bench) : 0;
+  const benchProduction = bench ? (bench.ppg ?? 0) + (bench.rpg ?? 0) * 1.4 + (bench.apg ?? 0) * 1.6 + (bench.spg ?? 0) * 4 + (bench.bpg ?? 0) * 3.5 + (bench.vorp ?? 0) * 2 : 0;
+  const weakestStarter = Math.min(...starterScores);
+  const weakLinkPenalty = Math.max(0, 50 - weakestStarter) * 1.5 + Math.max(0, 30 - benchScore) * 1.15;
   const categoryPenalty =
     Math.max(0, 19 - scoring) * 1.9 +
     Math.max(0, 7.2 - rebounding) * 7.2 +
     Math.max(0, 5.2 - playmaking) * 7.8 +
     Math.max(0, 3.0 - defense) * 12 +
     Math.max(0, 1.8 - efficiency) * 5.5 +
-    Math.max(0, 3.2 - avgVorp) * 2.2;
-  const starPower = picks.reduce((sum, p) => sum + playerScore(p), 0) / picks.length;
+    Math.max(0, 3.2 - avgVorp) * 2.2 +
+    Math.max(0, 22 - benchProduction) * 1.8;
+  const starPower = picks.reduce((sum, p) => sum + playerScore(p) * slotWeight(p.slot), 0) / totalWeight;
   const ovr = Math.max(
     35,
     Math.min(
@@ -127,7 +137,8 @@ function calculateRecord(picks: Pick[]) {
     defense >= 3.4 ? 82 : defense >= 2.8 ? 78 : defense >= 2.2 ? 72 : 64,
     efficiency >= 2.8 ? 82 : efficiency >= 1.4 ? 78 : efficiency >= 0 ? 72 : 66,
     avgVorp >= 5 ? 82 : avgVorp >= 3.5 ? 79 : avgVorp >= 2 ? 74 : 68,
-    weakestPlayer >= 58 ? 82 : weakestPlayer >= 48 ? 78 : weakestPlayer >= 40 ? 73 : 66,
+    weakestStarter >= 62 ? 82 : weakestStarter >= 52 ? 78 : weakestStarter >= 44 ? 72 : 64,
+    benchProduction >= 45 ? 82 : benchProduction >= 32 ? 76 : benchProduction >= 22 ? 68 : benchProduction >= 12 ? 60 : 52,
   ];
   const wins = Math.min(baseWins, ...ceilings);
   return {
