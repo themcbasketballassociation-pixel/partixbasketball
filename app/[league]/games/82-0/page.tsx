@@ -113,6 +113,53 @@ function franchiseKey(team: Team) {
   return `${team.name.trim().toLowerCase()}|${team.abbreviation.trim().toLowerCase()}`;
 }
 
+function canonicalFranchise(team: Team) {
+  const abbr = team.abbreviation.trim().toUpperCase();
+  const name = team.name.trim().toLowerCase();
+  const aliases: Record<string, string> = {
+    BOS: "celtics",
+    MC: "celtics",
+    CLE: "cleveland",
+    TOR: "toronto",
+    NK: "koalas",
+    ACR: "reapers",
+    ECR: "reapers",
+    SS: "sentinals",
+    SC: "sentinals",
+    LAL: "los-angeles",
+    LAC: "los-angeles",
+  };
+  if (aliases[abbr]) return aliases[abbr];
+  if (name.includes("celtics")) return "celtics";
+  if (name.includes("toronto")) return "toronto";
+  if (name.includes("cleveland")) return "cleveland";
+  const city = name.split(/\s+/).slice(0, -1).join("-");
+  return city || abbr.toLowerCase();
+}
+
+function eraCandidates(pools: Pool[], currentPool: Pool, usedKeys?: Set<string>) {
+  const sameExact = pools.filter((pool) =>
+    franchiseKey(pool.team) === franchiseKey(currentPool.team) &&
+    pool.season !== currentPool.season &&
+    !usedKeys?.has(pool.key)
+  );
+  if (sameExact.length > 0) return sameExact;
+
+  const currentFranchise = canonicalFranchise(currentPool.team);
+  const sameFranchise = pools.filter((pool) =>
+    canonicalFranchise(pool.team) === currentFranchise &&
+    pool.season !== currentPool.season &&
+    !usedKeys?.has(pool.key)
+  );
+  if (sameFranchise.length > 0) return sameFranchise;
+
+  return pools.filter((pool) =>
+    pool.season !== currentPool.season &&
+    pool.key !== currentPool.key &&
+    !usedKeys?.has(pool.key)
+  );
+}
+
 function calculateRecord(picks: Pick[]) {
   if (picks.length < SLOTS.length) return { wins: 0, losses: 0, ovr: 0, scoring: 0, rebounding: 0, playmaking: 0, defense: 0, efficiency: 0 };
 
@@ -343,7 +390,7 @@ export default function EightyTwoOhPage({ params }: { params?: Promise<{ league?
     return shuffle(poolPlayers.slice(0, 10), day * 1000 + round * 17).slice(0, 6);
   }, [currentPool, day, picks, round]);
   const canTeamReroll = !!currentPool && pools.some((pool) => pool.season === currentPool.season && pool.team.id !== currentPool.team.id);
-  const canEraReroll = !!currentPool && pools.some((pool) => franchiseKey(pool.team) === franchiseKey(currentPool.team) && pool.season !== currentPool.season);
+  const canEraReroll = !!currentPool && eraCandidates(pools, currentPool).length > 0;
 
   const start = () => {
     const fresh = shuffle(pools, Date.now() % 100000).slice(0, SLOTS.length);
@@ -392,9 +439,8 @@ export default function EightyTwoOhPage({ params }: { params?: Promise<{ league?
   const rerollEra = () => {
     if (!currentPool || eraRerollUsed) return;
     const usedKeys = new Set(roundPools.map((pool) => pool.key));
-    const currentFranchise = franchiseKey(currentPool.team);
-    const candidates = pools.filter((pool) => franchiseKey(pool.team) === currentFranchise && pool.season !== currentPool.season && !usedKeys.has(pool.key));
-    const fallback = pools.filter((pool) => franchiseKey(pool.team) === currentFranchise && pool.season !== currentPool.season);
+    const candidates = eraCandidates(pools, currentPool, usedKeys);
+    const fallback = eraCandidates(pools, currentPool);
     const next = shuffle(candidates.length ? candidates : fallback, Date.now() % 100000)[0];
     if (!next) return;
     replaceCurrentPool(next);

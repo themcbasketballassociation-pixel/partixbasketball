@@ -12,27 +12,39 @@ function getDayNum() {
 const GAMES = [
   {
     href: "wordle",
-    badge: "W",
+    badge: "🟩",
+    kicker: "Daily Deduction",
     title: "Player Wordle",
-    desc: "Guess the mystery player in 5 tries. Each guess shows hints about team, division, stats, and rings.",
+    desc: "Guess the mystery player in 5 tries with color-coded clues for team, stats, and awards.",
+    accent: "from-emerald-500/25 via-slate-950 to-slate-950",
+    border: "hover:border-emerald-400/70",
   },
   {
     href: "grid",
-    badge: "3x3",
+    badge: "🎯",
+    kicker: "Immaculate Grid",
     title: "Player Grid",
-    desc: "Fill a 3x3 grid with players matching both the row and column category. 9 total guesses.",
+    desc: "Fill a 3x3 board by matching both row and column categories before your guesses run out.",
+    accent: "from-cyan-500/25 via-slate-950 to-slate-950",
+    border: "hover:border-cyan-400/70",
   },
   {
     href: "82-0",
-    badge: "82",
+    badge: "🏆",
+    kicker: "Perfect Season Draft",
     title: "82-0",
-    desc: "Build a perfect season by picking winners through a gauntlet. One wrong pick ends the streak.",
+    desc: "Draft #1, #2, #3, and Bench from team-season pools and chase the impossible record.",
+    accent: "from-amber-500/25 via-slate-950 to-slate-950",
+    border: "hover:border-amber-400/70",
   },
   {
     href: "sbc",
-    badge: "SBC",
+    badge: "⚖️",
+    kicker: "Start Bench Cut",
     title: "Start Bench Cut",
-    desc: "Three players, three labels. Assign each player Start, Bench, or Cut, then see how everyone else voted.",
+    desc: "Rank three player seasons, lock your call, and see how the rest of the league voted.",
+    accent: "from-rose-500/25 via-slate-950 to-slate-950",
+    border: "hover:border-rose-400/70",
   },
 ];
 
@@ -43,29 +55,46 @@ export default function GamesPage({ params }: { params?: Promise<{ league?: stri
   const { status } = useSession();
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-lg overflow-hidden">
-      <div className="px-6 py-5 border-b border-slate-800 flex items-center justify-between flex-wrap gap-2">
-        <div>
-          <h2 className="text-2xl font-bold text-white">Games</h2>
-          <p className="text-slate-400 text-sm mt-0.5">Daily mini-games - Day #{day} - resets at 10 AM EST</p>
+    <div className="overflow-hidden rounded-2xl border border-slate-800 bg-[#070a10] shadow-2xl">
+      <div className="border-b border-slate-800 bg-gradient-to-r from-slate-950 via-slate-950 to-red-950/25 px-5 py-6 sm:px-7">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="grid h-14 w-14 place-items-center rounded-2xl border border-red-500/40 bg-red-950/35 text-3xl shadow-lg shadow-red-950/30">
+              🕹️
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-red-300">Minecraft Basketball Arcade</p>
+              <h2 className="mt-1 text-3xl font-black tracking-tight text-white">Games</h2>
+              <p className="mt-1 text-sm text-slate-400">Daily challenges · Day #{day} · resets at 10 AM EST</p>
+            </div>
+          </div>
+          {status !== "authenticated" && (
+            <span className="rounded-full border border-slate-700 bg-slate-950 px-4 py-2 text-xs font-bold text-slate-400">Sign in with Discord to play</span>
+          )}
         </div>
-        {status !== "authenticated" && (
-          <span className="text-xs text-slate-600 font-medium">Sign in with Discord to play</span>
-        )}
       </div>
-      <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 sm:p-6">
         {GAMES.map((game) => (
           <Link
             key={game.href}
             href={`/${slug}/games/${game.href}`}
-            className="block rounded-xl border border-slate-700 bg-slate-950 p-6 hover:border-zinc-500 hover:bg-slate-800/40 transition group"
+            className={`group relative min-h-52 overflow-hidden rounded-2xl border border-slate-800 bg-gradient-to-br ${game.accent} p-5 transition hover:-translate-y-0.5 hover:bg-slate-900 ${game.border}`}
           >
-            <div className="mb-4 inline-flex h-12 min-w-12 items-center justify-center rounded-xl border border-slate-700 bg-slate-900 px-3 text-lg font-black text-white">
-              {game.badge}
+            <div className="absolute right-4 top-4 text-6xl opacity-10 transition group-hover:scale-110 group-hover:opacity-20">{game.badge}</div>
+            <div className="relative z-10 flex h-full flex-col justify-between gap-5">
+              <div>
+                <div className="mb-5 inline-grid h-14 w-14 place-items-center rounded-2xl border border-white/10 bg-white/5 text-3xl shadow-inner">
+                  {game.badge}
+                </div>
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">{game.kicker}</p>
+                <h3 className="mt-1 text-2xl font-black tracking-tight text-white">{game.title}</h3>
+                <p className="mt-2 max-w-md text-sm leading-6 text-slate-400">{game.desc}</p>
+              </div>
+              <div className="flex items-center justify-between border-t border-slate-800 pt-4">
+                <span className="text-xs font-black uppercase tracking-widest text-slate-500">Daily mode</span>
+                <span className="rounded-full border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-black text-white transition group-hover:border-white/30">Play →</span>
+              </div>
             </div>
-            <h3 className="text-xl font-bold text-white mb-1">{game.title}</h3>
-            <p className="text-slate-400 text-sm">{game.desc}</p>
-            <p className="text-zinc-500 text-xs mt-3 font-semibold group-hover:text-zinc-300">Play -&gt;</p>
           </Link>
         ))}
       </div>
