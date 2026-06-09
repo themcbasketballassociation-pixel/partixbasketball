@@ -150,10 +150,7 @@ function calculateRecord(picks: Pick[]) {
     Math.max(0, 3.2 - avgVorp) * 2.2 +
     Math.max(0, 22 - benchProduction) * 1.8;
   const starPower = picks.reduce((sum, p) => sum + playerScore(p) * slotWeight(p.slot), 0) / totalWeight;
-  const ovr = Math.max(
-    0,
-    Math.min(
-      110,
+  const rawOvr =
       starPower * 0.5 +
         scoring * 0.85 +
         rebounding * 4.2 +
@@ -163,25 +160,24 @@ function calculateRecord(picks: Pick[]) {
         avgVorp * 1.3 +
         balanceBonus -
         weakLinkPenalty -
-        categoryPenalty
-    )
-  );
+        categoryPenalty;
+  const ovr = Math.max(0, Math.min(110, rawOvr));
   const recordTexture =
-    (scoring * 0.31 +
+    ((scoring * 0.31 +
       rebounding * 0.47 +
       playmaking * 0.53 +
       defense * 0.71 +
       efficiency * 0.29 +
       avgVorp * 0.37 +
-      benchProduction * 0.09) % 1;
-  const baseWins = Math.max(0, Math.min(82, 82 * Math.pow(ovr / 121, 3.35) + recordTexture));
+      benchProduction * 0.09) % 1) * 3 - 1.5;
+  const baseWins = Math.max(0, Math.min(82, 82 * Math.pow(clamp(rawOvr, 0, 118) / 118, 2.35) + recordTexture));
   const ceilings = [
     categoryCap(scoring, 24, 19, 0, 2.2),
     categoryCap(rebounding, 9, 7, 0, 5.8),
-    categoryCap(playmaking, 5.6, 2.6, 0, 1.35),
+    categoryCap(playmaking, 3.2, 1.4, 0, 0.7),
     categoryCap(defense, 4.1, 2.9, 0, 9.4),
-    categoryCap(efficiency, 3.8, 1.3, 0, 4.6),
-    categoryCap(avgVorp, 5.8, 3.4, 0, 4.3),
+    categoryCap(efficiency, 2.4, 0.8, 0, 2.1),
+    categoryCap(avgVorp, 3.7, 2.2, 0, 2.0),
     categoryCap(weakestStarter, 68, 52, 0, 1.05),
     categoryCap(benchProduction, 52, 32, 0, 1.2),
   ];
