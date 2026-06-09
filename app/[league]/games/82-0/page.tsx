@@ -109,6 +109,10 @@ function seasonLookupKeys(season: string) {
   return [...new Set([season, n, n ? `S${n}` : null].filter((s): s is string => !!s))];
 }
 
+function franchiseKey(team: Team) {
+  return `${team.name.trim().toLowerCase()}|${team.abbreviation.trim().toLowerCase()}`;
+}
+
 function calculateRecord(picks: Pick[]) {
   if (picks.length < SLOTS.length) return { wins: 0, losses: 0, ovr: 0, scoring: 0, rebounding: 0, playmaking: 0, defense: 0, efficiency: 0 };
 
@@ -340,7 +344,7 @@ export default function EightyTwoOhPage({ params }: { params?: Promise<{ league?
     return shuffle(poolPlayers.slice(0, 10), day * 1000 + round * 17).slice(0, 6);
   }, [currentPool, day, picks, round]);
   const canTeamReroll = !!currentPool && pools.some((pool) => pool.season === currentPool.season && pool.team.id !== currentPool.team.id);
-  const canEraReroll = !!currentPool && pools.some((pool) => pool.team.id === currentPool.team.id && pool.season !== currentPool.season);
+  const canEraReroll = !!currentPool && pools.some((pool) => franchiseKey(pool.team) === franchiseKey(currentPool.team) && pool.season !== currentPool.season);
 
   const start = () => {
     const fresh = shuffle(pools, Date.now() % 100000).slice(0, SLOTS.length);
@@ -389,8 +393,9 @@ export default function EightyTwoOhPage({ params }: { params?: Promise<{ league?
   const rerollEra = () => {
     if (!currentPool || eraRerollUsed) return;
     const usedKeys = new Set(roundPools.map((pool) => pool.key));
-    const candidates = pools.filter((pool) => pool.team.id === currentPool.team.id && pool.season !== currentPool.season && !usedKeys.has(pool.key));
-    const fallback = pools.filter((pool) => pool.team.id === currentPool.team.id && pool.season !== currentPool.season);
+    const currentFranchise = franchiseKey(currentPool.team);
+    const candidates = pools.filter((pool) => franchiseKey(pool.team) === currentFranchise && pool.season !== currentPool.season && !usedKeys.has(pool.key));
+    const fallback = pools.filter((pool) => franchiseKey(pool.team) === currentFranchise && pool.season !== currentPool.season);
     const next = shuffle(candidates.length ? candidates : fallback, Date.now() % 100000)[0];
     if (!next) return;
     replaceCurrentPool(next);
@@ -520,7 +525,7 @@ export default function EightyTwoOhPage({ params }: { params?: Promise<{ league?
                   onClick={rerollEra}
                   className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-3 text-xs font-black uppercase tracking-widest text-white transition hover:border-red-500 disabled:cursor-not-allowed disabled:border-slate-900 disabled:bg-slate-950 disabled:text-slate-700"
                 >
-                  Era {eraRerollUsed ? "Used" : "Reroll"}
+                  Era {eraRerollUsed ? "Used" : canEraReroll ? "Reroll" : "N/A"}
                 </button>
               </div>
 
