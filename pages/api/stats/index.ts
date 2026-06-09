@@ -225,13 +225,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (error) return res.status(500).json({ error: error.message });
     const manualRows = addManualVorp((manualData ?? []) as Record<string, unknown>[]);
 
-    // Set of players who have manual stats — these won't be overwritten
-    const manualUuids = new Set(manualRows.map((r) => r.mc_uuid as string));
+    // Manual player-season rows take priority over computed game-log rows.
+    const manualKeys = new Set(manualRows.map((r) => `${r.mc_uuid as string}:${String(r.season ?? seasonStr)}`));
 
     // ── 2. Compute stats from game_stats for this season ──────────────────
     let gamesQuery = supabase
       .from("games")
-      .select("id")
+      .select("id, season")
       .eq("league", league as string)
       .not("home_score", "is", null);
     if (querySeasons) {
@@ -243,22 +243,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     const { data: completedGames } = await gamesQuery;
     const gameIds = (completedGames ?? []).map((g) => g.id as string);
+    const gameSeasonById = new Map((completedGames ?? []).map((g) => [g.id as string, String(g.season ?? seasonStr)]));
 
-    // Aggregate game_stats per player (only for players WITHOUT manual stats)
+    // Aggregate game_stats per player-season, keeping each season's VORP comparison separate.
     const computedByUuid: Record<string, Record<string, unknown>> = {};
     if (gameIds.length > 0) {
       const { data: gameStatsRows } = await supabase
         .from("game_stats")
-        .select("mc_uuid, points, rebounds_off, rebounds_def, assists, steals, blocks, turnovers, minutes_played, fg_made, fg_attempted, three_pt_made, three_pt_attempted, pass_attempts, possession_time")
+        .select("game_id, mc_uuid, points, rebounds_off, rebounds_def, assists, steals, blocks, turnovers, minutes_played, fg_made, fg_attempted, three_pt_made, three_pt_attempted, pass_attempts, possession_time")
         .in("game_id", gameIds);
 
       for (const s of gameStatsRows ?? []) {
         const uuid = s.mc_uuid as string;
-        if (manualUuids.has(uuid)) continue; // manual entry takes priority
-        if (!computedByUuid[uuid]) {
-          computedByUuid[uuid] = { gp: 0, pts: 0, reb: 0, orb: 0, drb: 0, ast: 0, stl: 0, blk: 0, tov: 0, min: 0, fgm: 0, fga: 0, tpm: 0, tpa: 0, pass: 0, passGames: 0, poss: 0, possGames: 0 };
+        const rowSeason = gameSeasonById.get(s.game_id as string) ?? seasonStr;
+        const key = `${uuid}:${rowSeason}`;
+        if (manualKeys.has(key)) continue; // manual entry takes priority
+        if (!computedByUuid[key]) {
+          computedByUuid[key] = { mc_uuid: uuid, season: rowSeason, gp: 0, pts: 0, reb: 0, orb: 0, drb: 0, ast: 0, stl: 0, blk: 0, tov: 0, min: 0, fgm: 0, fga: 0, tpm: 0, tpa: 0, pass: 0, passGames: 0, poss: 0, possGames: 0 };
         }
-        const c = computedByUuid[uuid] as Record<string, number>;
+        const c = computedByUuid[key] as Record<string, number>;
         c.gp  += 1;
         c.pts += (s.points           ?? 0) as number;
         c.orb += (s.rebounds_off     ?? 0) as number;
@@ -283,13 +286,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // ── VORP multi-pass ───────────────────────────────────────────────────
     // Pass 1: collect league averages for TOV/pg, 3FG%, and possession time/pg
-    let leagueAvgBoxPg = 0;
+    const leagueAvgBoxPgBySeason: Record<string, number> = {};
     const playerBoxPg: Record<string, number> = {};
-    if (Object.keys(computedByUuid).length > 0) {
+    const computedEntriesBySeason: Record<string, [string, Record<string, unknown>][]> = {};
+    for (const entry of Object.entries(computedByUuid)) {
+      const rowSeason = String(entry[1].season ?? seasonStr);
+      if (!computedEntriesBySeason[rowSeason]) computedEntriesBySeason[rowSeason] = [];
+      computedEntriesBySeason[rowSeason].push(entry);
+    }
+    for (const [rowSeason, computedEntries] of Object.entries(computedEntriesBySeason)) {
       let topgSum = 0, topgN = 0;
       let tpctSum = 0, tpctN = 0;
       let possSum = 0, possN = 0;
-      for (const [, c] of Object.entries(computedByUuid)) {
+      for (const [, c] of computedEntries) {
         const cv = c as Record<string, number>;
         if (cv.gp === 0) continue;
         topgSum += cv.tov / cv.gp; topgN++;
@@ -303,7 +312,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // Pass 2: compute adjusted box impact per game for each player.
       // This is not meant to be NBA BPM. It is tuned for this league so MVP seasons
       // separate upward while inefficient / low-impact seasons can fall below zero.
-      for (const [uuid, c] of Object.entries(computedByUuid)) {
+      for (const [key, c] of computedEntries) {
         const cv = c as Record<string, number>;
         if (cv.gp === 0) continue;
         const gp    = cv.gp;
@@ -339,26 +348,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           Math.max(0, -tovOverExpected) * 0.25 -
           Math.max(0, tovOverExpected) * 0.85;
 
-        playerBoxPg[uuid] = boxPg + fgEff + threeEff + possBalance + playmakingBalance;
+        playerBoxPg[key] = boxPg + fgEff + threeEff + possBalance + playmakingBalance;
       }
 
-      const vals = Object.values(playerBoxPg);
-      if (vals.length > 0) leagueAvgBoxPg = vals.reduce((a, b) => a + b, 0) / vals.length;
+      const vals = computedEntries.map(([key]) => playerBoxPg[key]).filter((value): value is number => value != null);
+      if (vals.length > 0) leagueAvgBoxPgBySeason[rowSeason] = vals.reduce((a, b) => a + b, 0) / vals.length;
     }
 
     // Pass 3: compute VORP as plus/minus-style impact over league average.
-    const computedRows = Object.entries(computedByUuid).map(([uuid, c]) => {
+    const computedRows = Object.entries(computedByUuid).map(([key, c]) => {
       const cv = c as Record<string, number>;
+      const uuid = String(c.mc_uuid);
+      const rowSeason = String(c.season ?? seasonStr);
       const gp = cv.gp;
       const totalMin = cv.min / 60;
       const mpg = gp > 0 ? totalMin / gp : 0;
-      const impactDiff = (playerBoxPg[uuid] ?? 0) - leagueAvgBoxPg;
+      const impactDiff = (playerBoxPg[key] ?? 0) - (leagueAvgBoxPgBySeason[rowSeason] ?? 0);
       const vorp = (totalMin >= VORP_MIN_MINUTES && gp > 0)
         ? r2(clampVorp(impactDiff * VORP_SCALE * (mpg / GAME_MIN) * (gp / SEASON_GP_NORM)))
         : null;
       return {
         mc_uuid: uuid,
-        season: seasonStr,
+        season: rowSeason,
         gp,
         vorp,
         ppg:  gp > 0 ? r1(cv.pts / gp) : null,

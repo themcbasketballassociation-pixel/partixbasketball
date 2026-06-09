@@ -102,9 +102,8 @@ const playerImpactScore = (row: StatRow) => {
   return scoring + boards * 0.45 + playmaking * 0.9 + defense * 1.6 + shooting - Math.max(0, turnovers) * 1.25 + Math.max(0, -turnovers) * 0.25;
 };
 
-const recentWeightFor = (seasonNum: number, latestSeasonNum: number) => {
-  const age = Math.max(0, latestSeasonNum - seasonNum);
-  return Math.max(0.35, 1 - age * 0.15);
+const recentWeightFor = (_seasonNum: number, _latestSeasonNum: number) => {
+  return 1;
 };
 
 function PlayerCell({ row, league }: { row: Pick<SeasonRow, "mc_username" | "team">; league: string }) {
@@ -280,8 +279,7 @@ export default function AdvancedPlayerStatsPage({ params }: { params?: Promise<{
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-300">Player lab</p>
               <h1 className="mt-1 text-2xl font-black text-white">Advanced Player Stats</h1>
               <p className="mt-1 max-w-2xl text-sm text-slate-400">
-                VORP is now scaled like plus/minus: above-average seasons go positive,
-                weak seasons can go negative, and recent seasons carry more weight in the summary.
+                VORP is scaled by season: each player is compared to the league environment from that same season.
               </p>
             </div>
             <div className="grid grid-cols-3 gap-2 text-center">
@@ -318,7 +316,7 @@ export default function AdvancedPlayerStatsPage({ params }: { params?: Promise<{
                   </div>
                 </div>
                 <div className="flex gap-4 text-sm">
-                  <span className="text-slate-500">Recent VORP <b className={vorpColor(topPlayer.recentVorp)}>{signed(topPlayer.recentVorp)}</b></span>
+                  <span className="text-slate-500">Era VORP <b className={vorpColor(topPlayer.recentVorp)}>{signed(topPlayer.recentVorp)}</b></span>
                   <span className="text-slate-500">Peak <b className={vorpColor(topPlayer.peakVorp)}>{signed(topPlayer.peakVorp)}</b></span>
                   <span className="text-slate-500">Latest <b className="text-white">{topPlayer.latestSeason}</b></span>
                 </div>
@@ -377,7 +375,7 @@ export default function AdvancedPlayerStatsPage({ params }: { params?: Promise<{
                 <tr className="border-b border-slate-800">
                   <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-slate-500">Player</th>
                   {[
-                    ["recentVorp", "Recent VORP"],
+                    ["recentVorp", "Era VORP"],
                     ["vorpTotal", "Total VORP"],
                     ["peakVorp", "Peak"],
                     ["gp", "GP"],
