@@ -17,6 +17,7 @@ type StatRow = {
   bpg: number | null;
   fg_pct: number | null;
   three_pt_pct: number | null;
+  ts_pct: number | null;
   mpg: number | null;
   topg: number | null;
   tppg: number | null;
@@ -44,6 +45,7 @@ type PlayerSummary = {
   apg: number | null;
   rpg: number | null;
   mpg: number | null;
+  ts_pct: number | null;
   vorpTotal: number;
   recentVorp: number;
   peakVorp: number;
@@ -61,6 +63,7 @@ type SortKey =
   | "apg"
   | "rpg"
   | "mpg"
+  | "ts_pct"
   | "gp";
 
 const fmt = (value: number | null | undefined, decimals = 1) =>
@@ -98,7 +101,7 @@ const playerImpactScore = (row: StatRow) => {
   const defense = (row.spg ?? 0) + (row.bpg ?? 0);
   const turnovers = turnoverOverExpected(row.topg ?? 0, row.possession_time_pg);
   const shootingTrust = clamp(1 - Math.max(0, turnovers) * 0.24, 0.45, 1);
-  const shooting = row.fg_pct != null ? ((row.fg_pct - 45) / 4) * shootingTrust : 0;
+  const shooting = row.ts_pct != null ? ((row.ts_pct - 55) / 3.5) : row.fg_pct != null ? ((row.fg_pct - 45) / 4) * shootingTrust : 0;
   return scoring + boards * 0.45 + playmaking * 0.9 + defense * 1.6 + shooting - Math.max(0, turnovers) * 1.25 + Math.max(0, -turnovers) * 0.25;
 };
 
@@ -210,7 +213,7 @@ export default function AdvancedPlayerStatsPage({ params }: { params?: Promise<{
     return [...byPlayer.values()].map((playerRows) => {
       const sortedSeasons = [...playerRows].sort((a, b) => b.seasonNumber - a.seasonNumber);
       const weightedGp = playerRows.reduce((sum, row) => sum + (row.gp ?? 0), 0);
-      const weightedMean = (key: keyof Pick<StatRow, "ppg" | "apg" | "rpg" | "mpg">) => {
+      const weightedMean = (key: keyof Pick<StatRow, "ppg" | "apg" | "rpg" | "mpg" | "ts_pct">) => {
         let total = 0;
         let gp = 0;
         for (const row of playerRows) {
@@ -232,6 +235,7 @@ export default function AdvancedPlayerStatsPage({ params }: { params?: Promise<{
         apg: weightedMean("apg"),
         rpg: weightedMean("rpg"),
         mpg: weightedMean("mpg"),
+        ts_pct: weightedMean("ts_pct"),
         vorpTotal: vorps.reduce((sum, value) => sum + value, 0),
         recentVorp: playerRows.reduce((sum, row) => sum + (row.weightedVorp ?? 0), 0),
         peakVorp: vorps.length ? Math.max(...vorps) : 0,
@@ -382,6 +386,7 @@ export default function AdvancedPlayerStatsPage({ params }: { params?: Promise<{
                     ["ppg", "PPG"],
                     ["rpg", "RPG"],
                     ["apg", "APG"],
+                    ["ts_pct", "TS%"],
                     ["mpg", "MPG"],
                   ].map(([key, label]) => (
                     <th key={key} onClick={() => setSort(key as SortKey)} className="cursor-pointer px-3 py-3 text-center text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-cyan-200">
@@ -404,6 +409,7 @@ export default function AdvancedPlayerStatsPage({ params }: { params?: Promise<{
                     <td className="px-3 py-3 text-center text-slate-200">{fmt(row.ppg)}</td>
                     <td className="px-3 py-3 text-center text-slate-300">{fmt(row.rpg)}</td>
                     <td className="px-3 py-3 text-center text-slate-300">{fmt(row.apg)}</td>
+                    <td className="px-3 py-3 text-center font-mono text-cyan-300">{row.ts_pct == null ? "-" : `${row.ts_pct.toFixed(1)}%`}</td>
                     <td className="px-3 py-3 text-center text-slate-400">{fmt(row.mpg)}</td>
                     <td className="px-3 py-3 text-center text-slate-400">{row.seasons}</td>
                   </tr>
@@ -421,6 +427,7 @@ export default function AdvancedPlayerStatsPage({ params }: { params?: Promise<{
                     ["seasonNumber", "Season"],
                     ["vorp", "VORP"],
                     ["impactScore", "Impact"],
+                    ["ts_pct", "TS%"],
                     ["gp", "GP"],
                     ["mpg", "MPG"],
                     ["ppg", "PPG"],
@@ -442,6 +449,7 @@ export default function AdvancedPlayerStatsPage({ params }: { params?: Promise<{
                     <td className="px-3 py-3 text-center font-bold text-white">{row.season}</td>
                     <td className={`px-3 py-3 text-center font-mono font-black ${vorpColor(row.vorp)}`}>{signed(row.vorp)}</td>
                     <td className="px-3 py-3 text-center font-mono text-slate-300">{signed(row.impactScore)}</td>
+                    <td className="px-3 py-3 text-center font-mono text-cyan-300">{row.ts_pct == null ? "-" : `${row.ts_pct.toFixed(1)}%`}</td>
                     <td className="px-3 py-3 text-center text-slate-300">{row.gp}</td>
                     <td className="px-3 py-3 text-center text-slate-400">{fmt(row.mpg)}</td>
                     <td className="px-3 py-3 text-center text-slate-200">{fmt(row.ppg)}</td>

@@ -65,6 +65,7 @@ type StatRow = {
   ppg: number | null; rpg: number | null; orpg: number | null; drpg: number | null;
   apg: number | null;
   spg: number | null; bpg: number | null; fg_pct: number | null; three_pt_pct: number | null;
+  ts_pct: number | null;
   mpg: number | null; topg: number | null;
   tppg: number | null;
   pass_attempts_pg: number | null;
@@ -73,7 +74,7 @@ type StatRow = {
   team?: { id: string; name: string; abbreviation: string; logo_url?: string | null } | null;
 };
 
-type SortKey = "gp" | "ppg" | "rpg" | "orpg" | "drpg" | "apg" | "spg" | "bpg" | "fg_pct" | "three_pt_pct" | "mpg" | "topg" | "tppg" | "pass_attempts_pg" | "possession_time_pg" | "vorp";
+type SortKey = "gp" | "ppg" | "rpg" | "orpg" | "drpg" | "apg" | "spg" | "bpg" | "fg_pct" | "three_pt_pct" | "ts_pct" | "mpg" | "topg" | "tppg" | "pass_attempts_pg" | "possession_time_pg" | "vorp";
 type StatType = "regular" | "playoffs" | "total";
 
 type TeamStatRow = {
@@ -104,6 +105,7 @@ const COLS: { key: SortKey | "_rank" | "_player"; label: string; always?: boolea
   { key: "tppg",              label: "3PG",     always: true },
   { key: "fg_pct",            label: "FG%",     always: true },
   { key: "three_pt_pct",      label: "3FG%",    always: true },
+  { key: "ts_pct",            label: "TS%",     always: true },
   { key: "mpg",               label: "MPG",     always: false },
   { key: "pass_attempts_pg",  label: "PAPG",    always: true },
   { key: "possession_time_pg",label: "POSS",    always: true },
@@ -123,6 +125,7 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
   const [sortKey, setSortKey] = React.useState<SortKey>("ppg");
   const [sortAsc, setSortAsc] = React.useState(false);
   const [page, setPage] = React.useState(0);
+  const [lastGames, setLastGames] = React.useState(0);
 
   const [viewMode, setViewMode] = React.useState<"player" | "team" | "accolades">("player");
   const [teamStats, setTeamStats] = React.useState<TeamStatRow[]>([]);
@@ -173,10 +176,11 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
     } else {
       url = `/api/stats?league=${slug}&season=${s}`;
     }
+    if (lastGames > 0) url += `&lastGames=${lastGames}`;
     fetch(url)
       .then((r) => r.json())
       .then((data) => { setStats(Array.isArray(data) ? data : []); setLoading(false); });
-  }, [slug, season, statType]);
+  }, [slug, season, statType, lastGames]);
 
   // Fetch team stats for all stat types
   React.useEffect(() => {
@@ -325,6 +329,19 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
                 <option value="all">All Time</option>
                 {regularSeasons.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
+              {viewMode === "player" && (
+                <select
+                  className="rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs text-white focus:border-zinc-500 focus:outline-none"
+                  value={lastGames}
+                  onChange={(e) => setLastGames(parseInt(e.target.value, 10) || 0)}
+                >
+                  <option value={0}>Full sample</option>
+                  <option value={3}>Last 3 games</option>
+                  <option value={5}>Last 5 games</option>
+                  <option value={10}>Last 10 games</option>
+                  <option value={15}>Last 15 games</option>
+                </select>
+              )}
             </>
           )}
         </div>
@@ -388,6 +405,7 @@ export default function StatsPage({ params }: { params?: Promise<{ league?: stri
                     <td className={`px-3 py-2.5 text-center ${tdHighlight("tppg") || "text-slate-400"}`}>{s.tppg != null ? fmt(s.tppg) : <span className="text-slate-700">—</span>}</td>
                     <td className={`px-3 py-2.5 text-center ${tdHighlight("fg_pct") || "text-slate-300"}`}>{s.fg_pct != null ? `${s.fg_pct.toFixed(1)}%` : "—"}</td>
                     <td className={`px-3 py-2.5 text-center ${tdHighlight("three_pt_pct") || "text-slate-300"}`}>{s.three_pt_pct != null ? `${s.three_pt_pct.toFixed(1)}%` : "—"}</td>
+                    <td className={`px-3 py-2.5 text-center ${tdHighlight("ts_pct") || "text-cyan-300"}`}>{s.ts_pct != null ? `${s.ts_pct.toFixed(1)}%` : <span className="text-slate-700">-</span>}</td>
                     {showMpg && <td className={`px-3 py-2.5 text-center ${tdHighlight("mpg") || "text-slate-300"}`}>{fmt(s.mpg)}</td>}
                     <td className={`px-3 py-2.5 text-center ${tdHighlight("pass_attempts_pg") || "text-slate-400"}`}>{s.pass_attempts_pg != null ? fmt(s.pass_attempts_pg) : <span className="text-slate-700">—</span>}</td>
                     <td className={`px-3 py-2.5 text-center ${tdHighlight("possession_time_pg") || "text-slate-400"}`}>{s.possession_time_pg != null ? `${s.possession_time_pg}s` : <span className="text-slate-700">—</span>}</td>
