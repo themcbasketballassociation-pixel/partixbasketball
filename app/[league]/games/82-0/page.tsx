@@ -217,7 +217,7 @@ function calculateRecord(picks: Pick[]) {
       efficiency * 0.29 +
       avgVorp * 0.37 +
       benchProduction * 0.09) % 1) * 3 - 1.5;
-  const baseWins = Math.max(0, Math.min(82, 82 * Math.pow(clamp(rawOvr, 0, 118) / 118, 2.35) + recordTexture));
+  const baseWins = Math.max(0, Math.min(82, 82 * Math.pow(clamp(rawOvr, 0, 119) / 119, 2.45) + recordTexture));
   const ceilings = [
     categoryCap(scoring, 24, 19, 0, 2.2),
     categoryCap(rebounding, 9, 7, 0, 5.8),
