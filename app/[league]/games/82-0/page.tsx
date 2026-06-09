@@ -91,7 +91,7 @@ function playerScore(p: StatRow) {
   const turnovers = turnoverOverExpected(p.topg ?? 0, p.possession_time_pg);
   const vorp = p.vorp ?? 0;
   const trust = shootingTrust(p);
-  return scoring * 1.45 + boards * 2.55 + passing * 3.45 + steals * 7.25 + blocks * 6.4 + (shooting + three) * trust + vorp * 1.5 - Math.max(0, turnovers) * 4 + Math.max(0, -turnovers) * 0.45;
+  return scoring * 1.45 + boards * 2.55 + passing * 2.05 + steals * 7.25 + blocks * 6.4 + (shooting + three) * trust + vorp * 1.5 - Math.max(0, turnovers) * 4 + Math.max(0, -turnovers) * 0.45;
 }
 
 function slotWeight(slot: Slot) {
@@ -120,7 +120,10 @@ function calculateRecord(picks: Pick[]) {
   const avg = (fn: (pick: Pick) => number) => picks.reduce((sum, pick) => sum + fn(pick) * slotWeight(pick.slot), 0) / totalWeight;
   const scoring = avg((p) => p.ppg ?? 0);
   const rebounding = avg((p) => p.rpg ?? 0);
-  const playmaking = avg((p) => (p.apg ?? 0) - Math.max(0, turnoverOverExpected(p.topg ?? 0, p.possession_time_pg)) * 0.7 + Math.max(0, -turnoverOverExpected(p.topg ?? 0, p.possession_time_pg)) * 0.18);
+  const playmaking = avg((p) => {
+    const tovOver = turnoverOverExpected(p.topg ?? 0, p.possession_time_pg);
+    return Math.max(0, (p.apg ?? 0) - Math.max(0, tovOver) * 0.34 + Math.max(0, -tovOver) * 0.08);
+  });
   const defense = avg((p) => (p.spg ?? 0) * 1.35 + (p.bpg ?? 0) * 1.2);
   const efficiency = avg((p) => {
     const fg = p.fg_pct != null ? (p.fg_pct - 42) / 3.2 : 0;
@@ -135,13 +138,13 @@ function calculateRecord(picks: Pick[]) {
   const starterScores = picks.filter((p) => p.slot !== "Bench").map(playerScore);
   const bench = picks.find((p) => p.slot === "Bench");
   const benchScore = bench ? playerScore(bench) : 0;
-  const benchProduction = bench ? (bench.ppg ?? 0) + (bench.rpg ?? 0) * 1.4 + (bench.apg ?? 0) * 1.6 + (bench.spg ?? 0) * 4 + (bench.bpg ?? 0) * 3.5 + (bench.vorp ?? 0) * 2 : 0;
+  const benchProduction = bench ? (bench.ppg ?? 0) + (bench.rpg ?? 0) * 1.4 + (bench.apg ?? 0) * 0.9 + (bench.spg ?? 0) * 4 + (bench.bpg ?? 0) * 3.5 + (bench.vorp ?? 0) * 2 : 0;
   const weakestStarter = Math.min(...starterScores);
   const weakLinkPenalty = Math.max(0, 50 - weakestStarter) * 1.5 + Math.max(0, 30 - benchScore) * 1.15;
   const categoryPenalty =
     Math.max(0, 19 - scoring) * 1.9 +
     Math.max(0, 7.2 - rebounding) * 7.2 +
-    Math.max(0, 5.2 - playmaking) * 7.8 +
+    Math.max(0, 2.2 - playmaking) * 2.4 +
     Math.max(0, 3.0 - defense) * 12 +
     Math.max(0, 1.8 - efficiency) * 5.5 +
     Math.max(0, 3.2 - avgVorp) * 2.2 +
@@ -154,7 +157,7 @@ function calculateRecord(picks: Pick[]) {
       starPower * 0.5 +
         scoring * 0.85 +
         rebounding * 4.2 +
-        playmaking * 4.7 +
+        playmaking * 2.05 +
         defense * 9.8 +
         efficiency * 2.6 +
         avgVorp * 1.3 +
@@ -175,7 +178,7 @@ function calculateRecord(picks: Pick[]) {
   const ceilings = [
     categoryCap(scoring, 24, 19, 0, 2.2),
     categoryCap(rebounding, 9, 7, 0, 5.8),
-    categoryCap(playmaking, 7, 5, 0, 6.1),
+    categoryCap(playmaking, 5.6, 2.6, 0, 1.35),
     categoryCap(defense, 4.1, 2.9, 0, 9.4),
     categoryCap(efficiency, 3.8, 1.3, 0, 4.6),
     categoryCap(avgVorp, 5.8, 3.4, 0, 4.3),
@@ -185,7 +188,7 @@ function calculateRecord(picks: Pick[]) {
   const collapsePenalty =
     Math.max(0, 8 - scoring) * 1.7 +
     Math.max(0, 3 - rebounding) * 4.2 +
-    Math.max(0, 1.5 - playmaking) * 5 +
+    Math.max(0, 0.8 - playmaking) * 2.2 +
     Math.max(0, 0.8 - defense) * 8 +
     Math.max(0, -2.5 - efficiency) * 2.8 +
     Math.max(0, 0 - avgVorp) * 2.4 +
