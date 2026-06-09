@@ -37,7 +37,7 @@ function adjustedTrueShootingPct(points: number, fga: number, fta: number, gp: n
   const topg = turnovers / gp;
   const tovOverExpected = possessionAdjustedTurnovers(topg, possPg);
   const normalizedTs = 45 + (baseTs - 55) * 0.35;
-  const paceBonus = shotDensity > 0 ? clamp((shotDensity - 3.5) * 0.25, -1.2, 1.8) : 0;
+  const paceBonus = shotDensity > 0 ? clamp((shotDensity - 3.5) * 0.1, -0.6, 0.8) : 0;
   const turnoverBonus = clamp(-tovOverExpected * 0.35, -2, 1.5);
   return r1(clamp(normalizedTs + paceBonus + turnoverBonus, 10, 75));
 }
