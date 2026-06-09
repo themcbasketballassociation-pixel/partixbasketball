@@ -36,9 +36,9 @@ function adjustedTrueShootingPct(points: number, fga: number, fta: number, gp: n
   const shotDensity = possPg > 0 ? fgaPg / Math.max(possPg / 60, 0.75) : 0;
   const topg = turnovers / gp;
   const tovOverExpected = possessionAdjustedTurnovers(topg, possPg);
-  const paceBonus = shotDensity > 0 ? clamp((shotDensity - 3.2) * 1.15, -3.5, 6) : 0;
-  const turnoverBonus = clamp(-tovOverExpected * 1.35, -6, 5);
-  return r1(clamp(baseTs + paceBonus + turnoverBonus, 0, 100));
+  const paceBonus = shotDensity > 0 ? clamp((shotDensity - 3.5) * 0.35, -1.5, 2.5) : 0;
+  const turnoverBonus = clamp(-tovOverExpected * 0.45, -2.5, 2);
+  return r1(clamp(baseTs + paceBonus + turnoverBonus, 0, 72));
 }
 
 function possessionAdjustedTurnovers(topg: number, possPg: number, leagueAvgTopg = 1.4, leagueAvgPossPg = 220) {
